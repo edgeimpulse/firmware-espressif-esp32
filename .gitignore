@@ -38,3 +38,4 @@
 #/firmware-sdk
 
 /.vscode
+.DS_Store

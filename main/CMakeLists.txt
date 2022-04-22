@@ -10,16 +10,6 @@ add_definitions(-DEI_SENSOR_AQ_STREAM=FILE
                 -DEI_CLASSIFIER_TFLITE_ENABLE_ESP_NN=1) # enables ESP-NN optimizations by Espressif
 endif() 
 
-OPTION(DEFINE_DEBUG
-    "Build the project using debugging code"
-    OFF)
-IF(DEFINE_DEBUG)
-    MESSAGE("Adding Debug flag...")
-    ADD_DEFINITIONS(-DDEBUG)
-    SET(CMAKE_BUILD_TYPE Debug)
-    MESSAGE("Build type is " ${CMAKE_BUILD_TYPE})
-ENDIF(DEFINE_DEBUG)
-
 set(include_dirs 
     ${MODEL_FOLDER}
     ${MODEL_FOLDER}/tflite-model
