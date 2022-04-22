@@ -34,7 +34,6 @@
 /build
 /temp
 
-/edge-impulse-sdk
 #/firmware-sdk
 
 /.vscode
