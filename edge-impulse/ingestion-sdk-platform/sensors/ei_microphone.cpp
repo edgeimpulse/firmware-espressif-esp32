@@ -131,7 +131,7 @@ static void capture_samples(void* arg) {
   while (record_status) {
 
     /* read data at once from i2s */
-    i2s_read((i2s_port_t)1, (void*)sampleBuffer, i2s_bytes_to_read, &bytes_read, 100);
+    i2s_read(I2S_NUM_0, (void*)sampleBuffer, i2s_bytes_to_read, &bytes_read, 100);
 
     if (bytes_read <= 0) {
       ESP_LOGE(TAG, "Error in I2S read : %d", bytes_read);
@@ -518,45 +518,42 @@ bool ei_microphone_sample_start(void)
 static int i2s_init(uint32_t sampling_rate) {
   // Start listening for audio: MONO @ 8/16KHz
   i2s_config_t i2s_config = {
-      .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_TX),
+      .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM),
       .sample_rate = sampling_rate,
       .bits_per_sample = (i2s_bits_per_sample_t)16,
-      .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+      .channel_format = I2S_CHANNEL_FMT_ALL_RIGHT,
       .communication_format = I2S_COMM_FORMAT_I2S,
-      .intr_alloc_flags = 0,
+      .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
       .dma_buf_count = 8,
       .dma_buf_len = 512,
-      .use_apll = false,
-      .tx_desc_auto_clear = false,
-      .fixed_mclk = -1,
   };
   i2s_pin_config_t pin_config = {
-      .bck_io_num = 26,    // IIS_SCLK
-      .ws_io_num = 32,     // IIS_LCLK
-      .data_out_num = -1,  // IIS_DSIN
-      .data_in_num = 33,   // IIS_DOUT
+      .bck_io_num = I2S_PIN_NO_CHANGE,    // IIS_SCLK
+      .ws_io_num = 0,     // IIS_LCLK
+      .data_out_num = I2S_PIN_NO_CHANGE,  // IIS_DSIN
+      .data_in_num = 34,   // IIS_DOUT
   };
   esp_err_t ret = 0;
-
-  ret = i2s_driver_install((i2s_port_t)1, &i2s_config, 0, NULL);
+//AT+SAMPLESTART=Built-in microphone
+  ret = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Error in i2s_driver_install");
   }
 
-  ret = i2s_set_pin((i2s_port_t)1, &pin_config);
+  ret = i2s_set_pin(I2S_NUM_0, &pin_config);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Error in i2s_set_pin");
   }
 
-  ret = i2s_zero_dma_buffer((i2s_port_t)1);
+  ret = i2s_set_clk(I2S_NUM_0, sampling_rate, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
   if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Error in initializing dma buffer with 0");
+    ESP_LOGE(TAG, "Error in initializing clk");
   }
 
   return int(ret);
 }
 
 static int i2s_deinit(void) {
-    i2s_driver_uninstall((i2s_port_t)1); //stop & destroy i2s driver
+    i2s_driver_uninstall(I2S_NUM_0); //stop & destroy i2s driver
     return 0;
 }
