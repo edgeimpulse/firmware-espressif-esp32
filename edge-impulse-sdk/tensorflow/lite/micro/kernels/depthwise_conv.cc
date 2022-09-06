@@ -1352,7 +1352,6 @@ TfLiteRegistration Register_DEPTHWISE_CONV_2D() {
 }  // namespace tflite
 
 #elif EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN == 1
-
 /* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -1368,8 +1367,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "edge-impulse-sdk/tensorflow/lite/micro/kernels/depthwise_conv.h"
-
 #include "edge-impulse-sdk/tensorflow/lite/c/builtin_op_data.h"
 #include "edge-impulse-sdk/tensorflow/lite/c/common.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/internal/common.h"
@@ -1380,6 +1377,7 @@ limitations under the License.
 #include "edge-impulse-sdk/tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/kernel_util.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/padding.h"
+#include "edge-impulse-sdk/tensorflow/lite/micro/kernels/depthwise_conv.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/kernels/kernel_util.h"
 
 #include "freertos/FreeRTOS.h"
@@ -1463,19 +1461,33 @@ inline void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
     }
     esp_nn_set_depthwise_conv_scratch_buf(scratch_buf);
 
+    data_dims_t input_dims =  {
+                                .width = input_width, .height = input_height,
+                                .channels = input_depth, 1
+                              };
+    data_dims_t output_dims = {
+                                .width = output_width, .height = output_height,
+                                .channels = output_depth, 1
+                              };
+    data_dims_t filter_dims = {.width = filter_width, .height = filter_height, 0, 0};
+    dw_conv_params_t conv_params =  {
+                                      .in_offset = input_offset, .out_offset = output_offset,
+                                      .ch_mult = depth_multiplier,
+                                      .stride = {stride_width, stride_height},
+                                      .padding = {pad_width, pad_height}, .dilation = {0, 0},
+                                      .activation = {activation_min, activation_max}
+                                    };
+    quant_data_t quant_data = {
+                                .shift = data.op_data.per_channel_output_shift,
+                                .mult = data.op_data.per_channel_output_multiplier
+                              };
+
     for (int i_batch = 0; i_batch < batch_size; i_batch++) {
-      esp_nn_depthwise_conv_s8(input_data + i_batch * input_size, input_width,
-                               input_height, input_depth, input_offset,
-                               pad_width, pad_height,
-                               stride_width, stride_height, depth_multiplier,
-                               tflite::micro::GetTensorData<int8_t>(filter),
-                               filter_width, filter_height,
+      esp_nn_depthwise_conv_s8(&input_dims, input_data + i_batch * input_size,
+                               &filter_dims, tflite::micro::GetTensorData<int8_t>(filter),
                                tflite::micro::GetTensorData<int32_t>(bias),
-                               output_data + i_batch * output_size,
-                               output_width, output_height, output_offset,
-                               data.op_data.per_channel_output_shift,
-                               data.op_data.per_channel_output_multiplier,
-                               activation_min, activation_max);
+                               &output_dims, output_data + i_batch * output_size,
+                               &conv_params, &quant_data);
     }
   } else {
     reference_integer_ops::DepthwiseConvPerChannel(
@@ -1551,9 +1563,25 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
       filter_height, output_width, output_height, input->type, &data->op_data));
 
   if (input->type == kTfLiteInt8) {
+    data_dims_t input_dims =  {
+                                .width = input_width, .height = input_height,
+                                .channels = input->dims->data[3], 1
+                              };
+    data_dims_t output_dims = {
+                                .width = output_width, .height = output_height,
+                                .channels = output->dims->data[3], 1
+                              };
+    data_dims_t filter_dims = {.width = filter_width, .height = filter_height, 0, 0};
+    dw_conv_params_t conv_params =  {
+                                      .in_offset = 0, .out_offset = 0,
+                                      .ch_mult = params.depth_multiplier,
+                                      .stride = {params.stride_width, params.stride_height},
+                                      .padding = {data->op_data.padding.width, data->op_data.padding.height},
+                                      .dilation = {0, 0}, .activation = {-128, 127}
+                                    };
+
     int scratch_buf_size = esp_nn_get_depthwise_conv_scratch_size(
-        input_width, input_height, input->dims->data[3],
-        params.depth_multiplier, filter_width, filter_height);
+        &input_dims, &filter_dims, &output_dims, &conv_params);
     if (scratch_buf_size > 0) {
       TF_LITE_ENSURE_STATUS(context->RequestScratchBufferInArena(
         context, scratch_buf_size, &data->buffer_idx));
@@ -1625,7 +1653,11 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
                          TfLiteTypeGetName(input->type), input->type);
       return kTfLiteError;
   }
-  dc_total_time += esp_timer_get_time() - start_time;
+
+  long long time_this_instance = esp_timer_get_time() - start_time;
+  dc_total_time += time_this_instance;
+  // printf("time this instance: %llu\n", time_this_instance / 1000);
+
   return kTfLiteOk;
 }
 
@@ -1643,7 +1675,6 @@ TfLiteRegistration Register_DEPTHWISE_CONV_2D() {
 }
 
 }  // namespace tflite
-
 #else
 /* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 

@@ -27,8 +27,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
-
 /**
  * @brief Interface class for all memory type storages in Edge Impulse compatible devices.
  * The memory should be organized in a blocks, because all EI sensor drivers depends on block oranization.
@@ -92,13 +90,13 @@ public:
     /**
      * @brief size of the memory block in bytes
      */
-    const uint32_t block_size;
+    uint32_t block_size;
     /**
      * @brief Erase time of a single block/sector/page in ms (miliseconds).
      * For RAM it can be set to 0 or 1.
      * For Flash memories take this value from datasheet or measure.
      */
-    const uint32_t block_erase_time;
+    uint32_t block_erase_time;
 
     /**
      * @brief Construct a new Ei Device Memory object, make sure to pass all necessary data
@@ -144,6 +142,7 @@ public:
         if (write_data(config, 0, config_size) != config_size) {
             return false;
         }
+
         return true;
     }
 
@@ -177,6 +176,17 @@ public:
 
         return erase_data(offset + address, num_bytes);
     }
+
+
+    /**
+     * @brief Necessary for targets, such as RP2040, which have large Flash page size (256 bytes)
+     * For the targets, that don't require it, a default dummy implementation is provided
+     * to reduce boilerplate code in target flash implementation file.
+     */
+    virtual uint32_t flush_data(void)
+    {
+        return 0;
+    }
 };
 
 template <int BLOCK_SIZE = 512, int MEMORY_BLOCKS = 8> class EiDeviceRAM : public EiDeviceMemory {
@@ -184,7 +194,7 @@ template <int BLOCK_SIZE = 512, int MEMORY_BLOCKS = 8> class EiDeviceRAM : publi
 protected:
     uint8_t ram_memory[MEMORY_BLOCKS * BLOCK_SIZE];
 
-    uint32_t read_data(uint8_t *data, uint32_t address, uint32_t num_bytes)
+    uint32_t read_data(uint8_t *data, uint32_t address, uint32_t num_bytes) override
     {
         if (num_bytes > memory_size - address) {
             num_bytes = memory_size - address;
@@ -195,7 +205,7 @@ protected:
         return num_bytes;
     }
 
-    uint32_t write_data(const uint8_t *data, uint32_t address, uint32_t num_bytes)
+    uint32_t write_data(const uint8_t *data, uint32_t address, uint32_t num_bytes) override
     {
         if (num_bytes > memory_size - address) {
             num_bytes = memory_size - address;
@@ -206,7 +216,7 @@ protected:
         return num_bytes;
     }
 
-    uint32_t erase_data(uint32_t address, uint32_t num_bytes)
+    uint32_t erase_data(uint32_t address, uint32_t num_bytes) override
     {
         if (num_bytes > memory_size - address) {
             num_bytes = memory_size - address;

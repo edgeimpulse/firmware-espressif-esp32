@@ -153,31 +153,14 @@ void EiImageNN::run_nn(bool debug, int delay_ms, bool use_max_baudrate)
         // Print framebuffer as JPG during debugging
         if(debug) {
             ei_printf("Begin output\n");
+            ei_printf("Framebuffer: ");
 
-            size_t jpeg_buffer_size = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT >= 128 * 128 ?
-                8192 * 3 :
-                4096 * 4;
-            uint8_t *jpeg_buffer = NULL;
-            jpeg_buffer = (uint8_t*)ei_malloc(jpeg_buffer_size);
-            if (!jpeg_buffer) {
-                ei_printf("ERR: Failed to allocate JPG buffer\r\n");
-                return;
-            }
-
-            size_t out_size;
-            int x = encode_rgb888_signal_as_jpg(&signal, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, jpeg_buffer, jpeg_buffer_size, &out_size);
+            int x = encode_rgb888_signal_as_jpg_and_output_base64(&signal, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT);
             if (x != 0) {
                 ei_printf("Failed to encode frame as JPEG (%d)\n", x);
                 break;
             }
-
-            ei_printf("Framebuffer: ");
-            base64_encode((char*)jpeg_buffer, out_size, ei_putc);
             ei_printf("\r\n");
-
-            if (jpeg_buffer) {
-                ei_free(jpeg_buffer);
-            }
         }
 
         // print the predictions
@@ -185,7 +168,7 @@ void EiImageNN::run_nn(bool debug, int delay_ms, bool use_max_baudrate)
                   result.timing.dsp, result.timing.classification, result.timing.anomaly);
 #if EI_CLASSIFIER_OBJECT_DETECTION == 1
         bool bb_found = result.bounding_boxes[0].value > 0;
-        for (size_t ix = 0; ix < EI_CLASSIFIER_OBJECT_DETECTION_COUNT; ix++) {
+        for (size_t ix = 0; ix < result.bounding_boxes_count; ix++) {
             auto bb = result.bounding_boxes[ix];
             if (bb.value == 0) {
                 continue;

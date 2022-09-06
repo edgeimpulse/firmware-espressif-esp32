@@ -40,12 +40,6 @@
 
 using namespace std;
 
-/* Extern variables -------------------------------------------------------- */
-/** @todo Fix this when ei_config and ei_device .. modules moved to the firmware-sdk */
-extern ei_config_t *ei_config_get_config();
-extern EI_CONFIG_ERROR ei_config_set_sample_interval(float interval);
-extern EiDeviceInfo *EiDevInfo;
-
 /* Private variables ------------------------------------------------------- */
 static int payload_bytes; // counts bytes sensor fusion adds
 static sampler_callback fusion_cb_sampler;
@@ -111,7 +105,7 @@ bool ei_connect_fusion_list(const char *input_list, ei_fusion_list_format format
     num_fusion_axis = 0;
     fusion_sensors.clear();
 
-    for (int i = 0; i < fusable_sensor_list.size(); i++) {
+    for (unsigned int i = 0; i < fusable_sensor_list.size(); i++) {
         fusion_sensors.push_back(nullptr);
     } // clear fusion list
 
@@ -127,7 +121,7 @@ bool ei_connect_fusion_list(const char *input_list, ei_fusion_list_format format
 
     while (buff != NULL) { // Run through buffer
         is_fusion = false;
-        for (int i = 0; i < fusable_sensor_list.size();
+        for (unsigned int i = 0; i < fusable_sensor_list.size();
              i++) { // check for axis name in list of fusable sensors
 
             if (format == SENSOR_FORMAT) {
@@ -164,6 +158,7 @@ bool ei_connect_fusion_list(const char *input_list, ei_fusion_list_format format
  */
 void ei_fusion_read_axis_data(void)
 {
+    EiDeviceInfo* dev = EiDeviceInfo::get_device();
     fusion_sample_format_t *sensor_data;
     fusion_sample_format_t *data;
     uint32_t loc = 0;
@@ -200,7 +195,7 @@ void ei_fusion_read_axis_data(void)
     if (fusion_cb_sampler(
             (const void *)&data[0],
             (sizeof(fusion_sample_format_t) * num_fusion_axis))) // send fusion data to sampler
-        EiDevInfo->stop_sample_thread(); // if last sample detach
+        dev->stop_sample_thread(); // if last sample detach
 
     ei_free(data);
 }
@@ -215,13 +210,14 @@ void ei_fusion_read_axis_data(void)
  */
 bool ei_fusion_sample_start(sampler_callback callsampler, float sample_interval_ms)
 {
+    EiDeviceInfo* dev = EiDeviceInfo::get_device();
     fusion_cb_sampler = callsampler; // connect cb sampler (used in ei_fusion_read_data())
 
     if (fusion_cb_sampler == NULL) {
         return false;
     }
     else {
-        EiDevInfo->start_sample_thread(ei_fusion_read_axis_data, sample_interval_ms);
+        dev->start_sample_thread(ei_fusion_read_axis_data, sample_interval_ms);
         return true;
     }
 }
@@ -235,7 +231,7 @@ bool ei_fusion_setup_data_sampling(void)
     EiDeviceMemory* mem = dev->get_memory();
     payload_bytes = 0;
 
-    if (num_fusion_axis == 0) { /* ei_is_fusion should be called first */
+    if (num_fusion_axis == 0) {
         return false;
     }
 
@@ -245,7 +241,6 @@ bool ei_fusion_setup_data_sampling(void)
     uint32_t requested_bytes = ceil(
         (dev->get_sample_length_ms() / dev->get_sample_interval_ms()) *
         (sizeof(fusion_sample_format_t) * num_fusion_axis) * 2);
-
     if (requested_bytes > available_bytes) {
         ei_printf(
             "ERR: Sample length is too long. Maximum allowed is %ims at %.1fHz.\r\n",
@@ -263,8 +258,6 @@ bool ei_fusion_setup_data_sampling(void)
                                        dev->get_device_type().c_str(),
                                        dev->get_sample_interval_ms(),
                                        {} };
-
-    ei_printf("sample interval: %f\n", dev->get_sample_interval_ms());
     for (int i = 0; i < num_fusions; i++) {
         for (int j = 0; j < fusion_sensors[i]->num_axis; j++) {
             payload.sensors[index].name = fusion_sensors[i]->sensors[j].name;
@@ -316,7 +309,8 @@ void ei_built_sensor_fusion_list(void)
         ei_printf("Max sample length: %us, ", it->max_sample_length);
         ei_printf("Frequencies: [");
         for (auto freq = it->frequencies.begin(); freq != it->frequencies.end();) {
-            ei_printf("%.2fHz", *freq);
+            ei_printf_float(*freq);
+            ei_printf("Hz");
             freq++;
             if (freq != it->frequencies.end()) {
                 ei_printf(", ");
@@ -328,9 +322,10 @@ void ei_built_sensor_fusion_list(void)
 
 const vector<fused_sensors_t> &ei_get_sensor_fusion_list(void)
 {
-    /* Calculate number of bytes available on flash for sampling, reserve 1 block for header + overhead */
-    uint32_t available_bytes = (EiDevInfo->filesys_get_n_available_sample_blocks() - 1) *
-        EiDevInfo->filesys_get_block_size();
+    EiDeviceInfo* dev = EiDeviceInfo::get_device();
+    EiDeviceMemory* mem = dev->get_memory();
+    // Calculate number of bytes available on flash for sampling, reserve 1 block for header + overhead
+    uint32_t available_bytes = (mem->get_available_sample_blocks() - 1) * mem->block_size;
 
     fused_sensors.clear();
 
@@ -354,7 +349,7 @@ static void print_fusion_list(int r, uint32_t ingest_memory_size)
     int data[r];
     int arr[fusable_sensor_list.size()];
 
-    for (int i = 0; i < fusable_sensor_list.size(); i++) {
+    for (unsigned int i = 0; i < fusable_sensor_list.size(); i++) {
         arr[i] = i;
     }
 

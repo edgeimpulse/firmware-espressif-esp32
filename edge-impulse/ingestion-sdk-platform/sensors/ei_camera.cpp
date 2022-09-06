@@ -20,7 +20,6 @@
  * SOFTWARE.
  */
 
-//#include "jpegdec/jpegdec.h"
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 
 #include "firmware-sdk/ei_camera_interface.h"
@@ -60,7 +59,7 @@ static camera_config_t camera_config = {
     .pin_pclk = PCLK_GPIO_NUM,
 
     //XCLK 20MHz or 10MHz for OV2640 double FPS (Experimental)
-    .xclk_freq_hz = 10000000,
+    .xclk_freq_hz = 20000000,
     .ledc_timer = LEDC_TIMER_0,
     .ledc_channel = LEDC_CHANNEL_0,
 
@@ -68,7 +67,7 @@ static camera_config_t camera_config = {
     .frame_size = FRAMESIZE_QVGA,    //QQVGA-UXGA Do not use sizes above QVGA when not JPEG 
 
     .jpeg_quality = 20, //0-63 lower number means higher quality
-    .fb_count = 1,       //if more than one, i2s runs in continuous mode. Use only with JPEG
+    .fb_count = 4,       //if more than one, i2s runs in continuous mode. Use only with JPEG
     .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
 };
 
@@ -80,7 +79,6 @@ ei_device_snapshot_resolutions_t EiCameraESP32::resolutions[] = {
 
 EiCameraESP32::EiCameraESP32()
 {
-
 }
 
 
@@ -139,53 +137,61 @@ bool EiCameraESP32::set_resolution(const ei_device_snapshot_resolutions_t res) {
 // see README, need to close and re open for certain operations
 bool EiCameraESP32::init(uint16_t width, uint16_t height)
 {
-
     ei_device_snapshot_resolutions_t res = search_resolution(width, height);
     set_resolution(res);
 
     //initialize the camera
     esp_err_t err = esp_camera_init(&camera_config);
 
+    if (err != ESP_OK)
+    {
+        ei_printf("ERR: Camera init failed\n");
+        return false;
+    }
+
     sensor_t *s = esp_camera_sensor_get();
     s->set_vflip(s, 1);
     s->set_hmirror(s, 1);
     s->set_awb_gain(s, 1);
 
-    if (err != ESP_OK)
-    {
-        ei_printf("Camera init failed\n");
-        return false;
+    // camera warm-up to avoid wrong WB
+    ei_sleep(10);
+    for (uint8_t i = 0; i < 7; i++) {
+        camera_fb_t *fb = esp_camera_fb_get();
+
+        if (!fb) {
+            ei_printf("ERR: Camera capture failed during warm-up \n");
+            return false;
     }
 
-return true;
+    esp_camera_fb_return(fb);
+    }
 
+    return true;
 }
 
 bool EiCameraESP32::deinit()
 {
-
     //deinitialize the camera
     esp_err_t err = esp_camera_deinit();
 
     if (err != ESP_OK)
     {
-        ei_printf("Camera deinit failed\n");
+        ei_printf("ERR: Camera deinit failed\n");
         return false;
     }
 
     return true;
-
 }
 
 bool EiCameraESP32::ei_camera_capture_rgb888_packed_big_endian(
     uint8_t *image,
     uint32_t image_size)
 {
-
     camera_fb_t *fb = esp_camera_fb_get();
 
     if (!fb) {
-        ei_printf("Camera capture failed\n");
+        ei_printf("ERR: Camera capture failed\n");
         return false;
     }
 
@@ -195,7 +201,7 @@ bool EiCameraESP32::ei_camera_capture_rgb888_packed_big_endian(
     esp_camera_fb_return(fb);
 
     if(!converted){
-        ei_printf("Conversion failed\n");
+        ei_printf("ERR: Conversion failed\n");
         return false;
     }
     
@@ -205,11 +211,10 @@ bool EiCameraESP32::ei_camera_capture_rgb888_packed_big_endian(
 
 bool EiCameraESP32::ei_camera_capture_jpeg(uint8_t **image, uint32_t *image_size)
 {
-
     camera_fb_t *fb = esp_camera_fb_get();
 
     if (!fb) {
-        ESP_LOGE(TAG, "Camera Capture Failed");
+        ei_printf("ERR: Camera capture failed\n");
         return false;
     }
 
@@ -229,14 +234,12 @@ bool EiCameraESP32::ei_camera_capture_jpeg(uint8_t **image, uint32_t *image_size
 bool EiCameraESP32::ei_camera_jpeg_to_rgb888(uint8_t *jpeg_image, uint32_t jpeg_image_size,
                                              uint8_t *rgb88_image)
 {
-    
     bool converted = fmt2rgb888(jpeg_image, jpeg_image_size, PIXFORMAT_JPEG, rgb88_image);
 
     if(!converted){
-        ESP_LOGE(TAG, "Conversion failed");
+        ESP_LOGE(TAG, "ERR: Conversion failed");
         return false;
     }
-
     return true;
 }
 

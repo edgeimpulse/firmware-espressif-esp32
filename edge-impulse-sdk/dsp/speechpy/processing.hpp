@@ -394,34 +394,6 @@ namespace processing {
     }
 
     /**
-     * Power spectrum of a frame
-     * @param frame Row of a frame
-     * @param frame_size Size of the frame
-     * @param out_buffer Out buffer, size should be fft_points
-     * @param out_buffer_size Buffer size
-     * @param fft_points (int): The length of FFT. If fft_length is greater than frame_len, the frames will be zero-padded.
-     * @returns EIDSP_OK if OK
-     */
-    static int power_spectrum(float *frame, size_t frame_size, float *out_buffer, size_t out_buffer_size, uint16_t fft_points)
-    {
-        if (out_buffer_size != static_cast<size_t>(fft_points / 2 + 1)) {
-            EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
-        }
-
-        int r = numpy::rfft(frame, frame_size, out_buffer, out_buffer_size, fft_points);
-        if (r != EIDSP_OK) {
-            return r;
-        }
-
-        for (size_t ix = 0; ix < out_buffer_size; ix++) {
-            out_buffer[ix] = (1.0 / static_cast<float>(fft_points)) *
-                (out_buffer[ix] * out_buffer[ix]);
-        }
-
-        return EIDSP_OK;
-    }
-
-    /**
      * This function performs local cepstral mean and
      * variance normalization on a sliding window. The code assumes that
      * there is one observation per row.

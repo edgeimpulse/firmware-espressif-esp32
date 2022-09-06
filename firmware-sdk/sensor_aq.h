@@ -25,7 +25,7 @@
 
 
 /* Include ----------------------------------------------------------------- */
-#include "qcbor.h"
+#include "QCBOR/inc/qcbor.h"
 #include <stdio.h>
 
 // detect POSIX, and use FILE* in that case
@@ -33,7 +33,9 @@
 #include <time.h>
 #define EI_SENSOR_AQ_STREAM     FILE
 #elif !defined(EI_SENSOR_AQ_STREAM)
-#error "EI_SENSOR_AQ_STREAM not defined, and not on POSIX system. Please specify the EI_SENSOR_AQ_STREAM macro"
+// most targets don't need a file handle
+typedef void* nothing_t;
+#define EI_SENSOR_AQ_STREAM nothing_t
 #endif
 
 #ifdef __MBED__

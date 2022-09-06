@@ -19,18 +19,20 @@ set(include_dirs
     ${EI_SDK_FOLDER}/classifier
     ${EI_SDK_FOLDER}/dsp
     ${EI_SDK_FOLDER}/porting
+    ${EI_SDK_FOLDER}/porting/espressif/ESP-NN
+    ${EI_SDK_FOLDER}/porting/espressif/ESP-NN/include
     ${EI_SDK_FOLDER}/tensorflow
     ${EI_SDK_FOLDER}/third_party
     ${EI_SDK_FOLDER}/third_party/ruy
     ${EI_SDK_FOLDER}/third_party/gemmlowp
     ${EI_SDK_FOLDER}/third_party/flatbuffers/include
+    ${EI_PLATFORM_FOLDER}
     ${EI_PLATFORM_FOLDER}/ingestion-sdk-c
     ${EI_PLATFORM_FOLDER}/ingestion-sdk-platform/espressif_esp32
     ${EI_PLATFORM_FOLDER}/ingestion-sdk-platform/sensors
     ${EI_PLATFORM_FOLDER}/mbedtls_hmac_sha256_sw
     ${EI_PLATFORM_FOLDER}/inference
     ${EI_PLATFORM_FOLDER}/QCBOR/inc
-    ${EI_PLATFORM_FOLDER}/QCBOR/src
     ${FIRMWARE_SDK_FOLDER}
     ${FIRMWARE_SDK_FOLDER}/at-server
 )
@@ -41,6 +43,9 @@ RECURSIVE_FIND_FILE_EXCLUDE_DIR(SOURCE_FILES "../edge-impulse-sdk" "CMSIS" "*.cp
 RECURSIVE_FIND_FILE_EXCLUDE_DIR(CC_FILES "../edge-impulse-sdk" "CMSIS" "*.cc")
 RECURSIVE_FIND_FILE_EXCLUDE_DIR(S_FILES "../edge-impulse-sdk" "CMSIS" "*.s")
 RECURSIVE_FIND_FILE_EXCLUDE_DIR(C_FILES "../edge-impulse-sdk" "CMSIS" "*.c")
+
+# Manually handle needed C only files b/c of build errors
+list(APPEND C_FILES "../edge-impulse-sdk/CMSIS/DSP/Source/StatisticsFunctions/arm_rms_f32.c")
 
 RECURSIVE_FIND_FILE(PORTING_FILES "../edge-impulse-sdk/porting/espressif" "*.cpp")
 

@@ -213,7 +213,7 @@ bool at_read_buffer(const char **argv, const int argc)
     }
 
     if (use_max_baudrate) {
-        ei_printf("OK\r\n");
+        ei_printf("\r\nOK");
         ei_sleep(100);
         dev->set_max_data_output_baudrate();
         ei_sleep(100);
@@ -230,9 +230,6 @@ bool at_read_buffer(const char **argv, const int argc)
 
     if (!success) {
         ei_printf("Failed to read from buffer\n");
-    }
-    else {
-        ei_printf("\n");
     }
 
     return true;
@@ -251,14 +248,14 @@ bool at_read_raw(const char **argv, const int argc)
     uint8_t buffer[32];
 
     int count = 0;
-    int n_display_bytes = 4;
+    int n_display_bytes = 16;
 
     for (; start < length; start += n_display_bytes) {
         mem->read_sample_data(buffer, start, n_display_bytes);
 
         for (int i = 0; i < n_display_bytes; i++) {
-            ei_printf("%02x", buffer[i]);
-            if (i % 16 == 15)
+            ei_printf("%02X", buffer[i]);
+            if (i % n_display_bytes == n_display_bytes - 1)
                 ei_printf("\n");
             else
                 ei_printf(" ");

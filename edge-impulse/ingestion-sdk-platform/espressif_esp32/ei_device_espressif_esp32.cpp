@@ -259,11 +259,15 @@ uint32_t EiDeviceESP32::get_data_output_baudrate(void)
 
 void EiDeviceESP32::set_default_data_output_baudrate(void)
 {
+    fflush(stdout);
+    ei_sleep(10);
     esp_err_t ret = uart_set_baudrate(0, DEFAULT_BAUD);
 }
 
 void EiDeviceESP32::set_max_data_output_baudrate(void)
 {
+    fflush(stdout);
+    ei_sleep(10);
     esp_err_t ret = uart_set_baudrate(0, MAX_BAUD);
 }
 
@@ -352,7 +356,7 @@ bool ei_user_invoke_stop(void)
 char ei_get_serial_byte(void)
 {
 	char ch = getchar();
-    // for some reason ESP32 only gets 10 (\n)and AT server has 13 (\r) as terminator character...
+    // for some reason ESP32 only gets 10 (\n) and AT server has 13 (\r) as terminator character...
     if (ch == '\n') {
         ch = '\r';
     }

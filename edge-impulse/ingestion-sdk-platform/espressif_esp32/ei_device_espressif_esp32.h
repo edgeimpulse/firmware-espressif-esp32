@@ -32,7 +32,7 @@
 
 /** Baud rates */
 #define DEFAULT_BAUD 115200
-#define MAX_BAUD     1500000 //works well with 1000000, less stable at 2000000, setting to multiple of 115200 causes issues
+#define MAX_BAUD     1000000 //works well with 1000000, less stable at 2000000, setting to multiple of 115200 causes issues
 
 /** Number of sensors used */
 #define EI_DEVICE_N_SENSORS            1

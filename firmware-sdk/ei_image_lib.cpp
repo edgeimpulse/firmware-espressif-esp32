@@ -45,7 +45,7 @@ static void respond_and_change_to_max_baud()
 {
     auto device = EiDeviceInfo::get_device();
     // sleep a little to let the daemon attach on the new baud rate...
-    ei_printf("\r\nOK\r\n");
+    ei_printf("\r\nOK");
     ei_sleep(100);
     device->set_max_data_output_baudrate();
     ei_sleep(100);

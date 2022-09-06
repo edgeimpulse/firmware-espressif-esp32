@@ -24,6 +24,7 @@
 #define EI_DEVICE_LIB_H
 
 #include <cstdint>
+#include <cstddef>
 
 /**
  * @brief      Call this function periocally during inference to 

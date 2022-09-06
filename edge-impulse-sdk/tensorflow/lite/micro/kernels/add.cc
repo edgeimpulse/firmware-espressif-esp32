@@ -499,7 +499,6 @@ TfLiteRegistration Register_ADD() {
 }  // namespace tflite
 
 #elif EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN == 1
-
 /* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -515,18 +514,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "edge-impulse-sdk/tensorflow/lite/kernels/internal/reference/add.h"
-
 #include "edge-impulse-sdk/tensorflow/lite/c/builtin_op_data.h"
 #include "edge-impulse-sdk/tensorflow/lite/c/common.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/internal/quantization_util.h"
+#include "edge-impulse-sdk/tensorflow/lite/kernels/internal/reference/add.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/internal/reference/integer_ops/add.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/internal/reference/process_broadcast_shapes.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/kernel_util.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/op_macros.h"
-#include "edge-impulse-sdk/tensorflow/lite/micro/kernels/kernel_util.h"
-
 #include "edge-impulse-sdk/tensorflow/lite/micro/kernels/kernel_util.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/memory_helpers.h"
 

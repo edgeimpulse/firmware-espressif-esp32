@@ -68,5 +68,11 @@
 #endif // CPU_ARC
 #endif // EI_CLASSIFIER_TFLITE_ENABLE_ARC
 
+#ifndef EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN
+    #if defined(ESP32)
+        #define EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN      1
+    #endif // ESP32 check
+#endif
+
 // clang-format on
 #endif // _EI_CLASSIFIER_CONFIG_H_

@@ -81,7 +81,7 @@ public:
             return;
         }
 
-        for (int i = 0; i < this->_average_window_duration_samples * this->_n_labels; i++) {
+        for (uint32_t i = 0; i < this->_average_window_duration_samples * this->_n_labels; i++) {
             this->_score_array[i] = 0.f;
         }
         this->_score_idx = 0;
@@ -90,7 +90,7 @@ public:
         this->_running_sum = (float *)ei_malloc(this->_n_labels * sizeof(float));
 
         if (this->_running_sum != NULL) {
-            for (int i = 0; i < this->_n_labels; i++) {
+            for (uint32_t i = 0; i < this->_n_labels; i++) {
                 this->_running_sum[i] = 0.f;
             }
         }
@@ -125,7 +125,7 @@ public:
         }
 
         /* Update the score array and running sum */
-        for (int i = 0; i < this->_n_labels; i++) {
+        for (uint32_t i = 0; i < this->_n_labels; i++) {
             this->_running_sum[i] -= this->_score_array[(this->_score_idx * this->_n_labels) + i];
             this->_running_sum[i] += scores[i].value;
             this->_score_array[(this->_score_idx * this->_n_labels) + i] = scores[i].value;
@@ -141,12 +141,18 @@ public:
         }
 
         /* Average data and place in scores & determine top score */
-        for (int i = 0; i < this->_n_labels; i++) {
+        for (uint32_t i = 0; i < this->_n_labels; i++) {
             scores[i].value = this->_running_sum[i] / this->_n_scores_in_array;
 
             if (scores[i].value > current_top_score) {
-                current_top_score = scores[i].value;
-                current_top_index = i;
+                if(this->_suppression_flags == 0) {
+                    current_top_score = scores[i].value;
+                    current_top_index = i;
+                }
+                else if(this->_suppression_flags & (1 << i)) {
+                    current_top_score = scores[i].value;
+                    current_top_index = i;
+                }
             }
         }
 
@@ -184,7 +190,6 @@ private:
     uint32_t _suppression_samples;
     uint32_t _suppression_count;
     uint32_t _suppression_flags;
-    uint32_t _minimum_count;
     uint32_t _n_labels;
     float *_score_array;
     uint32_t _score_idx;

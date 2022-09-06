@@ -51,108 +51,39 @@ static float *ei_dsp_cont_current_frame = nullptr;
 static size_t ei_dsp_cont_current_frame_size = 0;
 static int ei_dsp_cont_current_frame_ix = 0;
 
-__attribute__((unused)) int extract_spectral_analysis_features(signal_t *signal, matrix_t *output_matrix, void *config_ptr, const float frequency) {
-    ei_dsp_config_spectral_analysis_t config = *((ei_dsp_config_spectral_analysis_t*)config_ptr);
-
-    int ret;
-
-    const float sampling_freq = frequency;
+__attribute__((unused)) int extract_spectral_analysis_features(
+    signal_t *signal,
+    matrix_t *output_matrix,
+    void *config_ptr,
+    const float frequency)
+{
+    ei_dsp_config_spectral_analysis_t *config = (ei_dsp_config_spectral_analysis_t *)config_ptr;
 
     // input matrix from the raw signal
-    matrix_t input_matrix(signal->total_length / config.axes, config.axes);
+    matrix_t input_matrix(signal->total_length / config->axes, config->axes);
     if (!input_matrix.buffer) {
         EIDSP_ERR(EIDSP_OUT_OF_MEM);
     }
 
     signal->get_data(0, signal->total_length, input_matrix.buffer);
 
-    // scale the signal
-    ret = numpy::scale(&input_matrix, config.scale_axes);
-    if (ret != EIDSP_OK) {
-        ei_printf("ERR: Failed to scale signal (%d)\n", ret);
-        EIDSP_ERR(ret);
+    if (config->implementation_version == 1) {
+        return spectral::feature::extract_spectral_analysis_features_v1(
+            &input_matrix,
+            output_matrix,
+            config,
+            frequency);
+    }
+    if (config->implementation_version == 2) {
+        return spectral::feature::extract_spectral_analysis_features_v2(
+            &input_matrix,
+            output_matrix,
+            config,
+            frequency);
     }
 
-    // transpose the matrix so we have one row per axis (nifty!)
-    ret = numpy::transpose(&input_matrix);
-    if (ret != EIDSP_OK) {
-        ei_printf("ERR: Failed to transpose matrix (%d)\n", ret);
-        EIDSP_ERR(ret);
-    }
-
-    // the spectral edges that we want to calculate
-    matrix_t edges_matrix_in(64, 1);
-    size_t edge_matrix_ix = 0;
-
-    char spectral_str[128] = { 0 };
-    if (strlen(config.spectral_power_edges) > sizeof(spectral_str) - 1) {
-        EIDSP_ERR(EIDSP_PARAMETER_INVALID);
-    }
-    memcpy(spectral_str, config.spectral_power_edges, strlen(config.spectral_power_edges));
-
-    // convert spectral_power_edges (string) into float array
-    char *spectral_ptr = spectral_str;
-    while (spectral_ptr != NULL) {
-        while((*spectral_ptr) == ' ') {
-            spectral_ptr++;
-        }
-
-        edges_matrix_in.buffer[edge_matrix_ix++] = atof(spectral_ptr);
-
-        // find next (spectral) delimiter (or '\0' character)
-        while((*spectral_ptr != ',')) {
-            spectral_ptr++;
-            if (*spectral_ptr == '\0') break;
-        }
-
-        if (*spectral_ptr == '\0') {
-            spectral_ptr = NULL;
-        }
-        else  {
-            spectral_ptr++;
-        }
-    }
-    edges_matrix_in.rows = edge_matrix_ix;
-
-    // calculate how much room we need for the output matrix
-    size_t output_matrix_cols = spectral::feature::calculate_spectral_buffer_size(
-        true, config.spectral_peaks_count, edges_matrix_in.rows
-    );
-    // ei_printf("output_matrix_size %hux%zu\n", input_matrix.rows, output_matrix_cols);
-    if (output_matrix->cols * output_matrix->rows != static_cast<uint32_t>(output_matrix_cols * config.axes)) {
-        EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
-    }
-
-    output_matrix->cols = output_matrix_cols;
-    output_matrix->rows = config.axes;
-
-    spectral::filter_t filter_type;
-    if (strcmp(config.filter_type, "low") == 0) {
-        filter_type = spectral::filter_lowpass;
-    }
-    else if (strcmp(config.filter_type, "high") == 0) {
-        filter_type = spectral::filter_highpass;
-    }
-    else {
-        filter_type = spectral::filter_none;
-    }
-
-    ret = spectral::feature::spectral_analysis(output_matrix, &input_matrix,
-        sampling_freq, filter_type, config.filter_cutoff, config.filter_order,
-        config.fft_length, config.spectral_peaks_count, config.spectral_peaks_threshold, &edges_matrix_in);
-    if (ret != EIDSP_OK) {
-        ei_printf("ERR: Failed to calculate spectral features (%d)\n", ret);
-        EIDSP_ERR(ret);
-    }
-
-    // flatten again
-    output_matrix->cols = config.axes * output_matrix_cols;
-    output_matrix->rows = 1;
-
-    return EIDSP_OK;
+    return EIDSP_NOT_SUPPORTED;
 }
-
-
 
 __attribute__((unused)) int extract_raw_features(signal_t *signal, matrix_t *output_matrix, void *config_ptr, const float frequency) {
     ei_dsp_config_raw_t config = *((ei_dsp_config_raw_t*)config_ptr);
@@ -1251,7 +1182,67 @@ __attribute__((unused)) int extract_image_features(signal_t *signal, matrix_t *o
     return EIDSP_OK;
 }
 
-#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1
+#if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
+
+__attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, matrix_i8_t *output_matrix, void *config_ptr, const float frequency) {
+    ei_dsp_config_image_t config = *((ei_dsp_config_image_t*)config_ptr);
+
+    int16_t channel_count = strcmp(config.channels, "Grayscale") == 0 ? 1 : 3;
+
+    if (output_matrix->rows * output_matrix->cols != static_cast<uint32_t>(EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * channel_count)) {
+        ei_printf("out_matrix = %d items\n", static_cast<int>(output_matrix->rows * output_matrix->cols));
+        ei_printf("calculated size = %d items\n", static_cast<int>(EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * channel_count));
+        EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
+    }
+
+    size_t output_ix = 0;
+
+#if defined(EI_DSP_IMAGE_BUFFER_STATIC_SIZE)
+    const size_t page_size = EI_DSP_IMAGE_BUFFER_STATIC_SIZE;
+#else
+    const size_t page_size = 1024;
+#endif
+
+    // buffered read from the signal
+    size_t bytes_left = signal->total_length;
+    for (size_t ix = 0; ix < signal->total_length; ix += page_size) {
+        size_t elements_to_read = bytes_left > page_size ? page_size : bytes_left;
+
+#if defined(EI_DSP_IMAGE_BUFFER_STATIC_SIZE)
+        matrix_t input_matrix(elements_to_read, config.axes, ei_dsp_image_buffer);
+#else
+        matrix_t input_matrix(elements_to_read, config.axes);
+#endif
+        if (!input_matrix.buffer) {
+            EIDSP_ERR(EIDSP_OUT_OF_MEM);
+        }
+        signal->get_data(ix, elements_to_read, input_matrix.buffer);
+
+        for (size_t jx = 0; jx < elements_to_read; jx++) {
+            uint32_t pixel = static_cast<uint32_t>(input_matrix.buffer[jx]);
+
+            if (channel_count == 3) {
+                int32_t r = static_cast<int32_t>(pixel >> 16 & 0xff);
+                int32_t g = static_cast<int32_t>(pixel >> 8 & 0xff);
+                int32_t b = static_cast<int32_t>(pixel & 0xff);
+
+                output_matrix->buffer[output_ix++] = static_cast<int8_t>(r);
+                output_matrix->buffer[output_ix++] = static_cast<int8_t>(g);
+                output_matrix->buffer[output_ix++] = static_cast<int8_t>(b);
+            }
+            else {
+                //NOTE: not implementing greyscale yet
+            }
+        }
+        bytes_left -= elements_to_read;
+    }
+
+    return EIDSP_OK;
+}
+
+#endif //(EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
+
+#if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
 
 __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, matrix_i8_t *output_matrix, void *config_ptr, const float frequency) {
     ei_dsp_config_image_t config = *((ei_dsp_config_image_t*)config_ptr);
@@ -1351,7 +1342,7 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
 
     return EIDSP_OK;
 }
-#endif // EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1
+#endif // (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
 
 /**
  * Clear all state regarding continuous audio. Invoke this function after continuous audio loop ends.

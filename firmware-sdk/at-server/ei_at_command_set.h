@@ -1,11 +1,6 @@
 #ifndef AT_COMMAND_SET_H
 #define AT_COMMAND_SET_H
 
-/**
- * @brief Default list of AT commands
- * VERSION: 1.6.0
- */
-
 #define AT_COMMAND_VERSION "1.7.0"
 
 /*************************************************************************************************/

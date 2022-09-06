@@ -78,11 +78,6 @@ namespace processing {
     } freq_peak_t;
 
     typedef struct {
-        EIDSP_i16 freq;
-        EIDSP_i16 amplitude;
-    } freq_peak_i16_t;
-
-    typedef struct {
         EIDSP_i32 freq;
         EIDSP_i32 amplitude;
     } freq_peak_i32_t;

@@ -111,7 +111,6 @@ void ei_run_impulse(void)
 
     if(camera->ei_camera_capture_jpeg(&jpeg_image, &jpeg_image_size) == false) {
         ei_printf("ERR: Failed to take a snapshot!\n");
-        ei_free(jpeg_image);
         return;
     }
 
@@ -182,7 +181,7 @@ void ei_run_impulse(void)
                 result.timing.dsp, result.timing.classification, result.timing.anomaly);
 #if EI_CLASSIFIER_OBJECT_DETECTION == 1
     bool bb_found = result.bounding_boxes[0].value > 0;
-    for (size_t ix = 0; ix < EI_CLASSIFIER_OBJECT_DETECTION_COUNT; ix++) {
+    for (size_t ix = 0; ix < result.bounding_boxes_count; ix++) {
         auto bb = result.bounding_boxes[ix];
         if (bb.value == 0) {
             continue;

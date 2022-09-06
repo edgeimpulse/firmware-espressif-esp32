@@ -161,6 +161,13 @@ public:
         }
     }
 
+    /**
+     * @brief This method should init device_id field
+     * to any unique ID available on the MCU.
+     * It may be MAC address, CPU ID or similar value.
+     */
+    virtual void init_device_id(void) = 0;
+
     EiDeviceMemory *get_memory(void)
     {
         return memory;
@@ -176,11 +183,13 @@ public:
         return device_id;
     }
 
-    virtual void set_device_id(std::string id)
+    virtual void set_device_id(std::string id, bool save = true)
     {
         device_id = id;
 
-        save_config();
+        if(save) {
+            save_config();
+        }
     }
 
     virtual const std::string& get_management_url(void)
@@ -188,11 +197,13 @@ public:
         return management_url;
     }
 
-    virtual void set_management_url(std::string mgmt_url)
+    virtual void set_management_url(std::string mgmt_url, bool save = true)
     {
         management_url = mgmt_url;
 
-        save_config();
+        if(save) {
+            save_config();
+        }
     }
 
     virtual const std::string& get_sample_hmac_key(void)
@@ -200,11 +211,13 @@ public:
         return sample_hmac_key;
     }
 
-    virtual void set_sample_hmac_key(std::string hmac_key)
+    virtual void set_sample_hmac_key(std::string hmac_key, bool save = true)
     {
         sample_hmac_key = hmac_key;
 
-        save_config();
+        if(save) {
+            save_config();
+        }
     }
 
     virtual const std::string& get_sample_label(void)
@@ -212,11 +225,13 @@ public:
         return sample_label;
     }
 
-    virtual void set_sample_label(std::string label)
+    virtual void set_sample_label(std::string label, bool save = true)
     {
         sample_label = label;
 
-        save_config();
+        if(save) {
+            save_config();
+        }
     }
 
     virtual float get_sample_interval_ms(void)
@@ -224,11 +239,13 @@ public:
         return sample_interval_ms;
     }
 
-    virtual void set_sample_interval_ms(float interval_ms)
+    virtual void set_sample_interval_ms(float interval_ms, bool save = true)
     {
         sample_interval_ms = interval_ms;
 
-        save_config();
+        if(save) {
+            save_config();
+        }
     }
 
     virtual uint32_t get_sample_length_ms(void)
@@ -236,11 +253,13 @@ public:
         return sample_length_ms;
     }
 
-    virtual void set_sample_length_ms(uint32_t length_ms)
+    virtual void set_sample_length_ms(uint32_t length_ms, bool save = true)
     {
         sample_length_ms = length_ms;
 
-        save_config();
+        if(save) {
+            save_config();
+        }
     }
 
     virtual const std::string& get_upload_host(void)
@@ -248,11 +267,13 @@ public:
         return upload_host;
     }
 
-    virtual void set_upload_host(std::string host)
+    virtual void set_upload_host(std::string host, bool save = true)
     {
         upload_host = host;
 
-        save_config();
+        if(save) {
+            save_config();
+        }
     }
 
     virtual const std::string& get_upload_path(void)
@@ -260,11 +281,13 @@ public:
         return upload_path;
     }
 
-    virtual void set_upload_path(std::string path)
+    virtual void set_upload_path(std::string path, bool save = true)
     {
         upload_path = path;
 
-        save_config();
+        if(save) {
+            save_config();
+        }
     }
 
     virtual const std::string& get_upload_api_key(void)
@@ -272,11 +295,13 @@ public:
         return upload_api_key;
     }
 
-    virtual void set_upload_api_key(std::string upload_api_key)
+    virtual void set_upload_api_key(std::string upload_api_key, bool save = true)
     {
         this->upload_api_key = upload_api_key;
 
-        save_config();
+        if(save) {
+            save_config();
+        }
     }
 
     virtual bool get_wifi_connection_status(void)
@@ -286,7 +311,7 @@ public:
 
     virtual void clear_config(void)
     {
-        device_id = "";
+        device_id = "11:22:33:44:55:66";
         management_url = "";
         sample_hmac_key = "";
         sample_label = "";
@@ -295,6 +320,8 @@ public:
         upload_host = "";
         upload_path = "";
         upload_api_key = "";
+
+        this->init_device_id();
     }
 
     virtual bool get_wifi_present_status(void)
@@ -356,7 +383,9 @@ public:
         return false;
     }
 
-    virtual void set_state(EiState) {};
+    virtual void set_state(EiState)
+    {
+    }
 
     // ******* DEPRECATED BELOW HERE *********
     /**

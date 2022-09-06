@@ -25,8 +25,6 @@
 
 #include <cstdint>
 
-#include <cstdint>
-
 /** ei sampler callback function, call with sample data */
 typedef bool (*sampler_callback)(const void *sample_buf, uint32_t byteLenght);
 typedef bool (*starter_callback)(sampler_callback callback, float sample_interval_ms);
