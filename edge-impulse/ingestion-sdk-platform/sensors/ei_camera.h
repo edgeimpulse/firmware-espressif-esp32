@@ -26,7 +26,7 @@
 /* Include ----------------------------------------------------------------- */
 #include "firmware-sdk/ei_camera_interface.h"
 
-#define CAMERA_MODEL_M5STACK_PSRAM
+#define CAMERA_MODEL_TIMERCAM
 
 /*
  *   Pin definitions for some common ESP-CAM modules
