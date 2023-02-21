@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_biquad_cascade_df1_init_f16.c
@@ -158,3 +160,4 @@ void arm_biquad_cascade_df1_mve_init_f16(arm_biquad_casd_df1_inst_f16 * S,
   @} end of BiquadCascadeDF1 group
  */
 #endif /* #if defined(ARM_FLOAT16_SUPPORTED) */
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

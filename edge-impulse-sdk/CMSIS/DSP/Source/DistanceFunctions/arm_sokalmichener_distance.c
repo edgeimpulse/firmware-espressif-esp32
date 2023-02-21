@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
@@ -72,3 +74,5 @@ float32_t arm_sokalmichener_distance(const uint32_t *pA, const uint32_t *pB, uin
 /**
  * @} end of BoolDist group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

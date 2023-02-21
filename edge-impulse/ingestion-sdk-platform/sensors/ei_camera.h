@@ -26,7 +26,7 @@
 /* Include ----------------------------------------------------------------- */
 #include "firmware-sdk/ei_camera_interface.h"
 
-#define CAMERA_MODEL_TIMERCAM
+#define CAMERA_MODEL_M5STACK_PSRAM
 
 /*
  *   Pin definitions for some common ESP-CAM modules
@@ -114,27 +114,50 @@
   //
   // ESP32 M5STACK
   //
-  #define PWDN_GPIO_NUM     -1
-  #define RESET_GPIO_NUM    15
-  #define XCLK_GPIO_NUM     27
-  #define SIOD_GPIO_NUM     25
-  #define SIOC_GPIO_NUM     23
-  #define Y9_GPIO_NUM       19
-  #define Y8_GPIO_NUM       36
-  #define Y7_GPIO_NUM       18
-  #define Y6_GPIO_NUM       39
-  #define Y5_GPIO_NUM        5
-  #define Y4_GPIO_NUM       34
-  #define Y3_GPIO_NUM       35
-  #define Y2_GPIO_NUM       32
-  #define VSYNC_GPIO_NUM    22
-  #define HREF_GPIO_NUM     26
-  #define PCLK_GPIO_NUM     21
-  // M5 Stack status/illumination LED details unknown/unclear
-  // #define LED_PIN            x // Status led
-  // #define LED_ON          HIGH //
-  // #define LED_OFF          LOW //
-  // #define LAMP_PIN          x  // LED FloodLamp.
+  #define PWDN_GPIO_NUM  -1
+  #define RESET_GPIO_NUM 15
+  #define XCLK_GPIO_NUM  27
+  #define SIOD_GPIO_NUM  25
+  #define SIOC_GPIO_NUM  23
+  #define Y9_GPIO_NUM    19
+  #define Y8_GPIO_NUM    36
+  #define Y7_GPIO_NUM    18
+  #define Y6_GPIO_NUM    39
+  #define Y5_GPIO_NUM    5
+  #define Y4_GPIO_NUM    34
+  #define Y3_GPIO_NUM    35
+  #define Y2_GPIO_NUM    32
+  #define VSYNC_GPIO_NUM 22
+  #define HREF_GPIO_NUM  26
+  #define PCLK_GPIO_NUM  21
+  #define CAMERA_LED_GPIO 2
+  #define BAT_OUTPUT_HOLD_PIN 33
+  #define BAT_ADC_PIN         38
+  #define Ext_PIN_1 4
+  #define Ext_PIN_2 13
+
+
+    #elif defined(CAMERA_MODEL_TIMERCAM2)
+  //
+  // s
+  //
+ #define CAM_PIN_PWDN -1  //power down is not used
+#define CAM_PIN_RESET 15 //software reset will be performed
+#define CAM_PIN_XCLK 27
+#ifdef CONFIG_TIMER_CAMERA_X_F
+#define CAM_PIN_SIOD 25
+#else
+#define CAM_PIN_SIOD 22
+#endif
+#define CAM_PIN_SIOC 23
+#define CAM_PIN_D7 19
+#define CAM_PIN_D6 36
+#define CAM_PIN_D5 18
+#define CAM_PIN_D4 39
+#define CAM_PIN_D3 5
+#define CAM_PIN_D2 34
+#define CAM_PIN_D1 35
+#define CAM_PIN_D0 32
 
 #elif defined(CAMERA_MODEL_M5STACK_V2_PSRAM)
   //

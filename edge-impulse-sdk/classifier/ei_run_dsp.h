@@ -1,32 +1,30 @@
-/* Edge Impulse inferencing library
- * Copyright (c) 2021 EdgeImpulse Inc.
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _EDGE_IMPULSE_RUN_DSP_H_
 #define _EDGE_IMPULSE_RUN_DSP_H_
 
-#include "model-parameters/model_metadata.h"
+#include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "edge-impulse-sdk/dsp/spectral/spectral.hpp"
 #include "edge-impulse-sdk/dsp/speechpy/speechpy.hpp"
 #include "edge-impulse-sdk/classifier/ei_signal_with_range.h"
+#ifdef EI_CLASSIFIER_HAS_MODEL_VARIABLES
+#include "model-parameters/model_variables.h"
+#endif
 
 #if defined(__cplusplus) && EI_C_LINKAGE == 1
 extern "C" {
@@ -67,6 +65,31 @@ __attribute__((unused)) int extract_spectral_analysis_features(
 
     signal->get_data(0, signal->total_length, input_matrix.buffer);
 
+#if EI_DSP_PARAMS_SPECTRAL_ANALYSIS_ANALYSIS_TYPE_WAVELET || EI_DSP_PARAMS_ALL
+    if (strcmp(config->analysis_type, "Wavelet") == 0) {
+        return spectral::wavelet::extract_wavelet_features(&input_matrix, output_matrix, config, frequency);
+    }
+#endif
+
+#if EI_DSP_PARAMS_SPECTRAL_ANALYSIS_ANALYSIS_TYPE_FFT || EI_DSP_PARAMS_ALL
+    if (strcmp(config->analysis_type, "FFT") == 0) {
+        if (config->implementation_version == 1) {
+            return spectral::feature::extract_spectral_analysis_features_v1(
+                &input_matrix,
+                output_matrix,
+                config,
+                frequency);
+        } else {
+            return spectral::feature::extract_spectral_analysis_features_v2(
+                &input_matrix,
+                output_matrix,
+                config,
+                frequency);
+        }
+    }
+#endif
+
+#if !EI_DSP_PARAMS_GENERATED || EI_DSP_PARAMS_ALL || !(EI_DSP_PARAMS_SPECTRAL_ANALYSIS_ANALYSIS_TYPE_FFT || EI_DSP_PARAMS_SPECTRAL_ANALYSIS_ANALYSIS_TYPE_WAVELET)
     if (config->implementation_version == 1) {
         return spectral::feature::extract_spectral_analysis_features_v1(
             &input_matrix,
@@ -81,7 +104,7 @@ __attribute__((unused)) int extract_spectral_analysis_features(
             config,
             frequency);
     }
-
+#endif
     return EIDSP_NOT_SUPPORTED;
 }
 
@@ -114,7 +137,6 @@ __attribute__((unused)) int extract_raw_features(signal_t *signal, matrix_t *out
 
     return EIDSP_OK;
 }
-
 
 __attribute__((unused)) int extract_flatten_features(signal_t *signal, matrix_t *output_matrix, void *config_ptr, const float frequency) {
     ei_dsp_config_flatten_t config = *((ei_dsp_config_flatten_t*)config_ptr);
@@ -362,8 +384,11 @@ __attribute__((unused)) int extract_mfcc_per_slice_features(signal_t *signal, ma
     const int frame_overlap_values = static_cast<int>(frame_length_values) - static_cast<int>(frame_stride_values);
 
     if (frame_overlap_values < 0) {
-        ei_printf("ERR: frame_length (%f) cannot be lower than frame_stride (%f) for continuous classification\n",
-            config.frame_length, config.frame_stride);
+        ei_printf("ERR: frame_length (");
+        ei_printf_float(config.frame_length);
+        ei_printf(") cannot be lower than frame_stride (");
+        ei_printf_float(config.frame_stride);
+        ei_printf(") for continuous classification\n");
         EIDSP_ERR(EIDSP_PARAMETER_INVALID);
     }
 
@@ -638,8 +663,11 @@ __attribute__((unused)) int extract_spectrogram_per_slice_features(signal_t *sig
     const int frame_overlap_values = static_cast<int>(frame_length_values) - static_cast<int>(frame_stride_values);
 
     if (frame_overlap_values < 0) {
-        ei_printf("ERR: frame_length (%f) cannot be lower than frame_stride (%f) for continuous classification\n",
-            config.frame_length, config.frame_stride);
+        ei_printf("ERR: frame_length (");
+        ei_printf_float(config.frame_length);
+        ei_printf(") cannot be lower than frame_stride (");
+        ei_printf_float(config.frame_stride);
+        ei_printf(") for continuous classification\n");
         EIDSP_ERR(EIDSP_PARAMETER_INVALID);
     }
 
@@ -961,8 +989,12 @@ __attribute__((unused)) int extract_mfe_per_slice_features(signal_t *signal, mat
     const int frame_overlap_values = static_cast<int>(frame_length_values) - static_cast<int>(frame_stride_values);
 
     if (frame_overlap_values < 0) {
-        ei_printf("ERR: frame_length (%f) cannot be lower than frame_stride (%f) for continuous classification\n",
-            config.frame_length, config.frame_stride);
+        ei_printf("ERR: frame_length (");
+            ei_printf_float(config.frame_length);
+            ei_printf(") cannot be lower than frame_stride (");
+            ei_printf_float(config.frame_stride);
+            ei_printf(") for continuous classification\n");
+
         if (preemphasis) {
             delete preemphasis;
         }
@@ -1126,12 +1158,6 @@ __attribute__((unused)) int extract_image_features(signal_t *signal, matrix_t *o
 
     int16_t channel_count = strcmp(config.channels, "Grayscale") == 0 ? 1 : 3;
 
-    if (output_matrix->rows * output_matrix->cols != static_cast<uint32_t>(EI_CLASSIFIER_INPUT_FRAMES * EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * channel_count)) {
-        ei_printf("out_matrix = %d items\n", static_cast<int>(output_matrix->rows * output_matrix->cols));
-        ei_printf("calculated size = %d items\n", static_cast<int>(EI_CLASSIFIER_INPUT_FRAMES * EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * channel_count));
-        EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
-    }
-
     size_t output_ix = 0;
 
 #if defined(EI_DSP_IMAGE_BUFFER_STATIC_SIZE)
@@ -1184,16 +1210,10 @@ __attribute__((unused)) int extract_image_features(signal_t *signal, matrix_t *o
 
 #if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
 
-__attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, matrix_i8_t *output_matrix, void *config_ptr, const float frequency) {
+__attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, matrix_u8_t *output_matrix, void *config_ptr, const float frequency) {
     ei_dsp_config_image_t config = *((ei_dsp_config_image_t*)config_ptr);
 
     int16_t channel_count = strcmp(config.channels, "Grayscale") == 0 ? 1 : 3;
-
-    if (output_matrix->rows * output_matrix->cols != static_cast<uint32_t>(EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * channel_count)) {
-        ei_printf("out_matrix = %d items\n", static_cast<int>(output_matrix->rows * output_matrix->cols));
-        ei_printf("calculated size = %d items\n", static_cast<int>(EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * channel_count));
-        EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
-    }
 
     size_t output_ix = 0;
 
@@ -1222,13 +1242,13 @@ __attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, m
             uint32_t pixel = static_cast<uint32_t>(input_matrix.buffer[jx]);
 
             if (channel_count == 3) {
-                int32_t r = static_cast<int32_t>(pixel >> 16 & 0xff);
-                int32_t g = static_cast<int32_t>(pixel >> 8 & 0xff);
-                int32_t b = static_cast<int32_t>(pixel & 0xff);
+                uint8_t r = static_cast<uint8_t>(pixel >> 16 & 0xff);
+                uint8_t g = static_cast<uint8_t>(pixel >> 8 & 0xff);
+                uint8_t b = static_cast<uint8_t>(pixel & 0xff);
 
-                output_matrix->buffer[output_ix++] = static_cast<int8_t>(r);
-                output_matrix->buffer[output_ix++] = static_cast<int8_t>(g);
-                output_matrix->buffer[output_ix++] = static_cast<int8_t>(b);
+                output_matrix->buffer[output_ix++] = r;
+                output_matrix->buffer[output_ix++] = g;
+                output_matrix->buffer[output_ix++] = b;
             }
             else {
                 //NOTE: not implementing greyscale yet
@@ -1243,17 +1263,10 @@ __attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, m
 #endif //(EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
 
 #if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
-
-__attribute__((unused)) int extract_image_features_quantized(signal_t *signal, matrix_i8_t *output_matrix, void *config_ptr, const float frequency) {
+__attribute__((unused)) int extract_image_features_quantized(const ei_impulse_t *impulse, signal_t *signal, matrix_i8_t *output_matrix, void *config_ptr, const float frequency) {
     ei_dsp_config_image_t config = *((ei_dsp_config_image_t*)config_ptr);
 
     int16_t channel_count = strcmp(config.channels, "Grayscale") == 0 ? 1 : 3;
-
-    if (output_matrix->rows * output_matrix->cols != static_cast<uint32_t>(EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * channel_count)) {
-        ei_printf("out_matrix = %d items\n", static_cast<int>(output_matrix->rows * output_matrix->cols));
-        ei_printf("calculated size = %d items\n", static_cast<int>(EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * channel_count));
-        EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
-    }
 
     size_t output_ix = 0;
 
@@ -1287,14 +1300,14 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
 
             if (channel_count == 3) {
                 // fast code path
-                if (EI_CLASSIFIER_TFLITE_INPUT_SCALE == 0.003921568859368563f && EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT == -128) {
+                if (impulse->tflite_input_scale == 0.003921568859368563f && impulse->tflite_input_zeropoint == -128) {
                     int32_t r = static_cast<int32_t>(pixel >> 16 & 0xff);
                     int32_t g = static_cast<int32_t>(pixel >> 8 & 0xff);
                     int32_t b = static_cast<int32_t>(pixel & 0xff);
 
-                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(r + EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT);
-                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(g + EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT);
-                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(b + EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT);
+                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(r + impulse->tflite_input_zeropoint);
+                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(g + impulse->tflite_input_zeropoint);
+                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(b + impulse->tflite_input_zeropoint);
                 }
                 // slow code path
                 else {
@@ -1302,14 +1315,14 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
                     float g = static_cast<float>(pixel >> 8 & 0xff) / 255.0f;
                     float b = static_cast<float>(pixel & 0xff) / 255.0f;
 
-                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(r / EI_CLASSIFIER_TFLITE_INPUT_SCALE) + EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT);
-                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(g / EI_CLASSIFIER_TFLITE_INPUT_SCALE) + EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT);
-                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(b / EI_CLASSIFIER_TFLITE_INPUT_SCALE) + EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT);
+                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(r / impulse->tflite_input_scale) + impulse->tflite_input_zeropoint);
+                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(g / impulse->tflite_input_scale) + impulse->tflite_input_zeropoint);
+                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(b / impulse->tflite_input_scale) + impulse->tflite_input_zeropoint);
                 }
             }
             else {
                 // fast code path
-                if (EI_CLASSIFIER_TFLITE_INPUT_SCALE == 0.003921568859368563f && EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT == -128) {
+                if (impulse->tflite_input_scale == 0.003921568859368563f && impulse->tflite_input_zeropoint == -128) {
                     int32_t r = static_cast<int32_t>(pixel >> 16 & 0xff);
                     int32_t g = static_cast<int32_t>(pixel >> 8 & 0xff);
                     int32_t b = static_cast<int32_t>(pixel & 0xff);
@@ -1318,7 +1331,7 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
                     // see: https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.convert
                     int32_t gray = (iRedToGray * r) + (iGreenToGray * g) + (iBlueToGray * b);
                     gray >>= 16; // scale down to int8_t
-                    gray += EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT;
+                    gray += impulse->tflite_input_zeropoint;
                     if (gray < - 128) gray = -128;
                     else if (gray > 127) gray = 127;
                     output_matrix->buffer[output_ix++] = static_cast<int8_t>(gray);
@@ -1332,7 +1345,7 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
                     // ITU-R 601-2 luma transform
                     // see: https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.convert
                     float v = (0.299f * r) + (0.587f * g) + (0.114f * b);
-                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(v / EI_CLASSIFIER_TFLITE_INPUT_SCALE) + EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT);
+                    output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(v / impulse->tflite_input_scale) + impulse->tflite_input_zeropoint);
                 }
             }
         }
@@ -1357,6 +1370,109 @@ __attribute__((unused)) int ei_dsp_clear_continuous_audio_state() {
     ei_dsp_cont_current_frame_ix = 0;
 
     return EIDSP_OK;
+}
+
+/**
+ * @brief      Calculates the cepstral mean and variable normalization.
+ *
+ * @param      matrix      Source and destination matrix
+ * @param      config_ptr  ei_dsp_config_mfcc_t struct pointer
+ */
+__attribute__((unused)) void calc_cepstral_mean_and_var_normalization_mfcc(ei_matrix *matrix, void *config_ptr)
+{
+    ei_dsp_config_mfcc_t *config = (ei_dsp_config_mfcc_t *)config_ptr;
+
+    uint32_t original_matrix_size = matrix->rows * matrix->cols;
+
+    /* Modify rows and colums ration for matrix normalization */
+    matrix->rows = original_matrix_size / config->num_cepstral;
+    matrix->cols = config->num_cepstral;
+
+    // cepstral mean and variance normalization
+    int ret = speechpy::processing::cmvnw(matrix, config->win_size, true, false);
+    if (ret != EIDSP_OK) {
+        ei_printf("ERR: cmvnw failed (%d)\n", ret);
+        return;
+    }
+
+    /* Reset rows and columns ratio */
+    matrix->rows = 1;
+    matrix->cols = original_matrix_size;
+}
+
+/**
+ * @brief      Calculates the cepstral mean and variable normalization.
+ *
+ * @param      matrix      Source and destination matrix
+ * @param      config_ptr  ei_dsp_config_mfe_t struct pointer
+ */
+__attribute__((unused)) void calc_cepstral_mean_and_var_normalization_mfe(ei_matrix *matrix, void *config_ptr)
+{
+    ei_dsp_config_mfe_t *config = (ei_dsp_config_mfe_t *)config_ptr;
+
+    uint32_t original_matrix_size = matrix->rows * matrix->cols;
+
+    /* Modify rows and colums ration for matrix normalization */
+    matrix->rows = (original_matrix_size) / config->num_filters;
+    matrix->cols = config->num_filters;
+
+    if (config->implementation_version < 3) {
+        // cepstral mean and variance normalization
+        int ret = speechpy::processing::cmvnw(matrix, config->win_size, false, true);
+        if (ret != EIDSP_OK) {
+            ei_printf("ERR: cmvnw failed (%d)\n", ret);
+            return;
+        }
+    }
+    else {
+        // normalization
+        int ret = speechpy::processing::mfe_normalization(matrix, config->noise_floor_db);
+        if (ret != EIDSP_OK) {
+            ei_printf("ERR: normalization failed (%d)\n", ret);
+            return;
+        }
+    }
+
+    /* Reset rows and columns ratio */
+    matrix->rows = 1;
+    matrix->cols = (original_matrix_size);
+}
+
+/**
+ * @brief      Calculates the cepstral mean and variable normalization.
+ *
+ * @param      matrix      Source and destination matrix
+ * @param      config_ptr  ei_dsp_config_spectrogram_t struct pointer
+ */
+__attribute__((unused)) void calc_cepstral_mean_and_var_normalization_spectrogram(ei_matrix *matrix, void *config_ptr)
+{
+    ei_dsp_config_spectrogram_t *config = (ei_dsp_config_spectrogram_t *)config_ptr;
+
+    uint32_t original_matrix_size = matrix->rows * matrix->cols;
+
+    /* Modify rows and colums ration for matrix normalization */
+    matrix->cols = config->fft_length / 2 + 1;
+    matrix->rows = (original_matrix_size) / matrix->cols;
+
+    if (config->implementation_version < 3) {
+        int ret = numpy::normalize(matrix);
+        if (ret != EIDSP_OK) {
+            ei_printf("ERR: normalization failed (%d)\n", ret);
+            return;
+        }
+    }
+    else {
+        // normalization
+        int ret = speechpy::processing::spectrogram_normalization(matrix, config->noise_floor_db);
+        if (ret != EIDSP_OK) {
+            ei_printf("ERR: normalization failed (%d)\n", ret);
+            return;
+        }
+    }
+
+    /* Reset rows and columns ratio */
+    matrix->rows = 1;
+    matrix->cols = (original_matrix_size);
 }
 
 #ifdef __cplusplus

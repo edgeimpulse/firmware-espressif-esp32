@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_mat_mult_q7.c
@@ -674,3 +676,5 @@ arm_status arm_mat_mult_q7(const arm_matrix_instance_q7 *pSrcA, const arm_matrix
 /**
   @} end of MatrixMult group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

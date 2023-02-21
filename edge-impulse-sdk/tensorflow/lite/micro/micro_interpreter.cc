@@ -178,7 +178,7 @@ void MicroInterpreter::Init(MicroProfiler* profiler) {
   initialization_status_ = kTfLiteOk;
 }
 
-TfLiteStatus MicroInterpreter::AllocateTensors() {
+TfLiteStatus MicroInterpreter::AllocateTensors(bool run_all_prep_ops) {
   if (allocator_.StartModelAllocation(model_, op_resolver_,
                                       &node_and_registrations_,
                                       &eval_tensors_) != kTfLiteOk) {
@@ -218,6 +218,8 @@ TfLiteStatus MicroInterpreter::AllocateTensors() {
     }
   }
 
+  bool all_prep_ops_ok = true;
+
   // Both AllocatePersistentBuffer and RequestScratchBufferInArena is
   // available in Prepare stage.
   context_.RequestScratchBufferInArena =
@@ -232,10 +234,19 @@ TfLiteStatus MicroInterpreter::AllocateTensors() {
             error_reporter_,
             "Node %s (number %df) failed to prepare with status %d",
             OpNameFromRegistration(registration), i, prepare_status);
-        return kTfLiteError;
+
+        all_prep_ops_ok = false;
+
+        if (!run_all_prep_ops) {
+          return kTfLiteError;
+        }
       }
     }
     allocator_.FinishPrepareNodeAllocations(/*node_id=*/i);
+  }
+
+  if (!all_prep_ops_ok) {
+    return kTfLiteError;
   }
 
   // Prepare is done, we're ready for Invoke. Memory allocation is no longer

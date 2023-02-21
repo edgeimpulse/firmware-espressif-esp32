@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/classifier/ei_classifier_config.h"
+#if EI_CLASSIFIER_TFLITE_LOAD_CMSIS_NN_SOURCES
 /*
  * Copyright (C) 2010-2019 Arm Limited or its affiliates. All rights reserved.
  *
@@ -54,3 +56,4 @@ void arm_reshape_s8(const int8_t *input, int8_t *output, const uint32_t total_si
 /**
  * @} end of Reshape group
  */
+#endif // EI_CLASSIFIER_TFLITE_LOAD_CMSIS_NN_SOURCES

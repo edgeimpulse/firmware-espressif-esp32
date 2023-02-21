@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_biquad_cascade_stereo_df2T_f32.c
@@ -418,3 +420,5 @@ LOW_OPTIMIZATION_EXIT
 /**
   @} end of BiquadCascadeDF2T group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

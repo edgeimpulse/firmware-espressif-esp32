@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_mat_ldl_f64.c
@@ -205,3 +207,5 @@ arm_status arm_mat_ldlt_f64(
 /**
   @} end of MatrixChol group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

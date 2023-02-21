@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_logsumexp_f32.c
@@ -64,3 +66,5 @@ float32_t arm_logsumexp_dot_prod_f32(const float32_t * pSrcA,
 /**
  * @} end of LogSumExp group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

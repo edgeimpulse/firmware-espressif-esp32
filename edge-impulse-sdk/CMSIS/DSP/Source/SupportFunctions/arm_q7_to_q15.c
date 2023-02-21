@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_q7_to_q15.c
@@ -186,3 +188,5 @@ void arm_q7_to_q15(
 /**
   @} end of q7_to_x group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

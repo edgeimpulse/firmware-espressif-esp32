@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_common_tables_f16.c
@@ -12584,3 +12586,5 @@ const float16_t __logf_lut_f16[8] = {
 /**
   @} end of CFFT_CIFFT group
 */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

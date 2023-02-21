@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/classifier/ei_classifier_config.h"
+#if EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN
 // Copyright 2020-2021 Espressif Systems (Shanghai) PTE LTD
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,11 +13,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#ifdef EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN
-#include <stdio.h>
-#include <esp_nn_defs.h>
 
-#include <src/common/common_functions.h>
+#include <stdio.h>
+#include <edge-impulse-sdk/porting/espressif/ESP-NN/include/esp_nn_defs.h>
+
+#include <edge-impulse-sdk/porting/espressif/ESP-NN/src/common/common_functions.h>
 
 static int16_t *scratch_buffer = NULL;
 
@@ -541,4 +543,5 @@ void esp_nn_depthwise_conv_s8_esp32s3(const data_dims_t *input_dims,
                                           out_mult, activation_min, activation_max);
     }
 }
-#endif
+
+#endif // EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN

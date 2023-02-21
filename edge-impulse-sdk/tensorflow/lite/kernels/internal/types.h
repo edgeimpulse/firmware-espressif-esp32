@@ -1141,6 +1141,8 @@ struct TanhParams {
   int input_left_shift;
 };
 
+constexpr int kTransposeMaxDimensions = 6;
+
 struct TransposeParams {
   int8_t perm_count;
   int32_t perm[5];

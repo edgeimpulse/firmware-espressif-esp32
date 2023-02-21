@@ -1,23 +1,18 @@
-/* Edge Impulse inferencing library
- * Copyright (c) 2021 EdgeImpulse Inc.
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _EIDSP_SPEECHPY_PROCESSING_H_
@@ -31,15 +26,8 @@ namespace speechpy {
 // one stack frame returned by stack_frames
 typedef struct ei_stack_frames_info {
     signal_t *signal;
-    std::vector<uint32_t> *frame_ixs;
+    std::vector<uint32_t> frame_ixs;
     int frame_length;
-
-    // start_ixs is owned by us
-    ~ei_stack_frames_info() {
-        if (frame_ixs) {
-            delete frame_ixs;
-        }
-    }
 } stack_frames_info_t;
 
 namespace processing {
@@ -326,18 +314,16 @@ namespace processing {
             info->signal->total_length = static_cast<size_t>(len_sig);
         }
 
-        // alloc the vector on the heap, will be owned by the info struct
-        std::vector<uint32_t> *frame_indices = new std::vector<uint32_t>();
-
+        info->frame_ixs.clear();
+        
         int frame_count = 0;
 
         for (size_t ix = 0; ix < static_cast<uint32_t>(len_sig); ix += static_cast<size_t>(frame_stride)) {
             if (++frame_count > numframes) break;
 
-            frame_indices->push_back(ix);
+            info->frame_ixs.push_back(ix);
         }
 
-        info->frame_ixs = frame_indices;
         info->frame_length = frame_sample_length;
 
         return EIDSP_OK;

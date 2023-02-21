@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_offset_q7.c
@@ -160,3 +162,5 @@ void arm_offset_q7(
 /**
   @} end of BasicOffset group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

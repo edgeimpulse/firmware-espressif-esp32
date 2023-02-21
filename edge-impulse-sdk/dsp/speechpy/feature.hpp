@@ -1,29 +1,23 @@
-/* Edge Impulse inferencing library
- * Copyright (c) 2021 EdgeImpulse Inc.
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _EIDSP_SPEECHPY_FEATURE_H_
 #define _EIDSP_SPEECHPY_FEATURE_H_
 
-#include <vector>
 #include <stdint.h>
 #include "functions.hpp"
 #include "processing.hpp"
@@ -222,7 +216,7 @@ public:
             EIDSP_ERR(ret);
         }
 
-        if (stack_frame_info.frame_ixs->size() != out_features->rows) {
+        if (stack_frame_info.frame_ixs.size() != out_features->rows) {
             EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
         }
 
@@ -230,7 +224,7 @@ public:
             EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
         }
 
-        if (stack_frame_info.frame_ixs->size() != out_energies->rows || out_energies->cols != 1) {
+        if (stack_frame_info.frame_ixs.size() != out_energies->rows || out_energies->cols != 1) {
             EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
         }
 
@@ -256,7 +250,7 @@ public:
         if (ret != 0) {
             EIDSP_ERR(ret);
         }
-        for (size_t ix = 0; ix < stack_frame_info.frame_ixs->size(); ix++) {
+        for (size_t ix = 0; ix < stack_frame_info.frame_ixs.size(); ix++) {
             size_t power_spectrum_frame_size = (fft_length / 2 + 1);
 
             EI_DSP_MATRIX(power_spectrum_frame, 1, power_spectrum_frame_size);
@@ -268,7 +262,7 @@ public:
             EI_DSP_MATRIX(signal_frame, 1, stack_frame_info.frame_length);
 
             // don't read outside of the audio buffer... we'll automatically zero pad then
-            size_t signal_offset = stack_frame_info.frame_ixs->at(ix);
+            size_t signal_offset = stack_frame_info.frame_ixs.at(ix);
             size_t signal_length = stack_frame_info.frame_length;
             if (signal_offset + signal_length > stack_frame_info.signal->total_length) {
                 signal_length = signal_length -
@@ -358,7 +352,7 @@ public:
             EIDSP_ERR(ret);
         }
 
-        if (stack_frame_info.frame_ixs->size() != out_features->rows) {
+        if (stack_frame_info.frame_ixs.size() != out_features->rows) {
             EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
         }
 
@@ -372,12 +366,12 @@ public:
             *(out_features->buffer + i) = 0;
         }
 
-        for (size_t ix = 0; ix < stack_frame_info.frame_ixs->size(); ix++) {
+        for (size_t ix = 0; ix < stack_frame_info.frame_ixs.size(); ix++) {
             // get signal data from the audio file
             EI_DSP_MATRIX(signal_frame, 1, stack_frame_info.frame_length);
 
             // don't read outside of the audio buffer... we'll automatically zero pad then
-            size_t signal_offset = stack_frame_info.frame_ixs->at(ix);
+            size_t signal_offset = stack_frame_info.frame_ixs.at(ix);
             size_t signal_length = stack_frame_info.frame_length;
             if (signal_offset + signal_length > stack_frame_info.signal->total_length) {
                 signal_length = signal_length -

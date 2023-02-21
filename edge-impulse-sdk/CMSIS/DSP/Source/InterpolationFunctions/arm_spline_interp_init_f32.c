@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_spline_interp_init_f32.c
@@ -173,3 +175,5 @@ void arm_spline_init_f32(
   @} end of SplineInterpolate group
  */
 
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

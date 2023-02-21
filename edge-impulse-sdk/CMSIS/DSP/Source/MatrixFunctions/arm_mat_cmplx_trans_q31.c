@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_mat_cmplx_trans_q31.c
@@ -127,3 +129,5 @@ arm_status arm_mat_cmplx_trans_q31(
 /**
  * @} end of MatrixTrans group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

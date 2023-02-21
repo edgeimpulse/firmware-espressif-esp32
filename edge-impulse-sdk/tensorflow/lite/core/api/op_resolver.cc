@@ -44,8 +44,7 @@ TfLiteStatus GetRegistrationFromOpCode(
       TF_LITE_REPORT_ERROR(
           error_reporter,
           "Didn't find op for builtin opcode '%s' version '%d'. "
-          "An older version of this builtin might be supported. "
-          "Are you using an old TFLite binary with a newer model?\n",
+          "This model is not supported by EON Compiler of TensorFlow Lite Micro, but is in full TFLite (e.g. on Linux).\n",
           EnumNameBuiltinOperator(builtin_code), version);
       status = kTfLiteError;
     }

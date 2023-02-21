@@ -72,6 +72,10 @@ bool HaveSameShapes(const TfLiteEvalTensor* input1,
 
 PaddingType RuntimePaddingType(TfLitePadding padding);
 
+TfLiteStatus CreateWritableTensorDimsWithCopy(TfLiteContext* context,
+                                              TfLiteTensor* tensor,
+                                              TfLiteEvalTensor* eval_tensor);
+
 }  // namespace micro
 }  // namespace tflite
 

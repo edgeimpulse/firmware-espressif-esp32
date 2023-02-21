@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_rfft_q15.c
@@ -524,3 +526,5 @@ void arm_split_rifft_q15(
 
 }
 #endif /* defined(ARM_MATH_MVEI) */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

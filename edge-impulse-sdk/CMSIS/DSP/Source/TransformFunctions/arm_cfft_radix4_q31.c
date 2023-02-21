@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_cfft_radix4_q31.c
@@ -825,3 +827,5 @@ void arm_radix4_butterfly_inverse_q31(
 
   /* End of last stage process */
 }
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

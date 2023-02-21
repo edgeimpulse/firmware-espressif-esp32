@@ -1,76 +1,77 @@
-/* Edge Impulse inferencing library
- * Copyright (c) 2021 EdgeImpulse Inc.
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _EDGE_IMPULSE_RUN_CLASSIFIER_H_
 #define _EDGE_IMPULSE_RUN_CLASSIFIER_H_
 
 #include "model-parameters/model_metadata.h"
+
+#include "ei_run_dsp.h"
+#include "ei_classifier_types.h"
+#include "ei_signal_with_axes.h"
+#include "ei_performance_calibration.h"
+
+#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
+
+// for the release we'll put an actual studio version here
+#ifndef EI_CLASSIFIER_STUDIO_VERSION
+#define EI_CLASSIFIER_STUDIO_VERSION 2
+#endif
+
+#if EI_CLASSIFIER_STUDIO_VERSION < 3
+#include "model-parameters/dsp_blocks.h"
+#endif
+
 #if EI_CLASSIFIER_HAS_MODEL_VARIABLES == 1
 #include "model-parameters/model_variables.h"
 #endif
 
 #if EI_CLASSIFIER_HAS_ANOMALY == 1
 #include "model-parameters/anomaly_clusters.h"
+#include "inferencing_engines/anomaly.h"
 #endif
-#include "ei_run_dsp.h"
-#include "ei_classifier_types.h"
-#include "ei_classifier_smooth.h"
-#include "ei_signal_with_axes.h"
+
 #if defined(EI_CLASSIFIER_HAS_SAMPLER) && EI_CLASSIFIER_HAS_SAMPLER == 1
 #include "ei_sampler.h"
 #endif
-#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
-#include "model-parameters/dsp_blocks.h"
-#include "ei_performance_calibration.h"
-#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 
 #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE) && (EI_CLASSIFIER_COMPILED != 1)
-
+#include "tflite-model/tflite-trained.h"
 #include "edge-impulse-sdk/classifier/inferencing_engines/tflite_micro.h"
-
 #elif EI_CLASSIFIER_COMPILED == 1
-
 #include "edge-impulse-sdk/classifier/inferencing_engines/tflite_eon.h"
-
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE_FULL
-
 #include "edge-impulse-sdk/classifier/inferencing_engines/tflite_full.h"
-
+#include "tflite-model/tflite-trained.h"
+#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE_TIDL
+#include "edge-impulse-sdk/classifier/inferencing_engines/tflite_tidl.h"
 #elif (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSORRT)
-#include <stdlib.h>
+#include "edge-impulse-sdk/classifier/inferencing_engines/tensorrt.h"
 #include "tflite-model/onnx-trained.h"
-#include "tflite/linux-jetson-nano/libeitrt.h"
-EiTrt* ei_trt_handle = NULL;
-
-#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_NONE
-// noop
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW
-#include "mcu.h"
-extern "C" void infer(uint32_t* time, uint32_t* cycles);
-int8_t *processed_features;
-int8_t infer_result[EI_CLASSIFIER_LABEL_COUNT];
-
+#include "edge-impulse-sdk/classifier/inferencing_engines/tensaiflow.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI
 #include "edge-impulse-sdk/classifier/inferencing_engines/drpai.h"
+#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_AKIDA
+#include "edge-impulse-sdk/classifier/inferencing_engines/akida.h"
+#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL
+#include "edge-impulse-sdk/classifier/inferencing_engines/onnx_tidl.h"
+#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_NONE
+// noop
 #else
 #error "Unknown inferencing engine"
 #endif
@@ -79,74 +80,182 @@ int8_t infer_result[EI_CLASSIFIER_LABEL_COUNT];
 void*   __dso_handle = (void*) &__dso_handle;
 #endif
 
+// EI_CLASSIFIER_CALIBRATION_ENABLED needs to be added to new
+// model metadata, since we are getting rid of macro for sensors
+// (multiple impulses means we can have multiple sensors)
+// for now we just enable it if EI_CLASSIFIER_SENSOR is present and
+// is microphone (performance calibration only works for mic).
+#if defined(EI_CLASSIFIER_SENSOR) && (EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_MICROPHONE)
+#define EI_CLASSIFIER_CALIBRATION_ENABLED 1
+#else
+#define EI_CLASSIFIER_CALIBRATION_ENABLED 0
+#endif
+
 #ifdef __cplusplus
 namespace {
 #endif // __cplusplus
 
-#define EI_CLASSIFIER_OBJDET_HAS_SCORE_TENSOR   (EI_CLASSIFIER_OBJECT_DETECTION && !(EI_CLASSIFIER_OBJECT_DETECTION_CONSTRAINED))
-
 /* Function prototypes ----------------------------------------------------- */
-extern "C" EI_IMPULSE_ERROR run_inference(ei::matrix_t *fmatrix, ei_impulse_result_t *result, bool debug);
-extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(signal_t *signal, ei_impulse_result_t *result, bool debug);
-static EI_IMPULSE_ERROR can_run_classifier_image_quantized();
-static void calc_cepstral_mean_and_var_normalization_mfcc(ei_matrix *matrix, void *config_ptr);
-static void calc_cepstral_mean_and_var_normalization_mfe(ei_matrix *matrix, void *config_ptr);
-static void calc_cepstral_mean_and_var_normalization_spectrogram(ei_matrix *matrix, void *config_ptr);
+extern "C" EI_IMPULSE_ERROR run_inference(const ei_impulse_t *impulse, ei::matrix_t *fmatrix, ei_impulse_result_t *result, bool debug);
+extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(const ei_impulse_t *impulse, signal_t *signal, ei_impulse_result_t *result, bool debug);
+static EI_IMPULSE_ERROR can_run_classifier_image_quantized(const ei_impulse_t *impulse);
 
 /* Private variables ------------------------------------------------------- */
 
 static uint64_t classifier_continuous_features_written = 0;
-
-#if (EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_MICROPHONE)
 static RecognizeEvents *avg_scores = NULL;
-#endif
 
 /* Private functions ------------------------------------------------------- */
 
-/**
- * @brief      Init static vars
- */
-extern "C" void run_classifier_init(void)
-{
-    classifier_continuous_features_written = 0;
-    ei_dsp_clear_continuous_audio_state();
-
-#if (EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_MICROPHONE)
-    const ei_model_performance_calibration_t *calibration = &ei_calibration;
-
-    if(calibration != NULL) {
-        avg_scores = new RecognizeEvents(calibration,
-            EI_CLASSIFIER_LABEL_COUNT, EI_CLASSIFIER_SLICE_SIZE, EI_CLASSIFIER_INTERVAL_MS);
-    }
-#endif
-}
-
-extern "C" void run_classifier_deinit(void)
-{
-#if (EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_MICROPHONE)
-    if((void *)avg_scores != NULL) {
-        delete avg_scores;
-    }
-#endif
-}
+/* These functions (up to Public functions section) are not exposed to end-user,
+therefore changes are allowed. */
 
 /**
- * @brief      Fill the complete matrix with sample slices. From there, run inference
- *             on the matrix.
+ * @brief      Do inferencing over the processed feature matrix
  *
- * @param      signal  Sample data
- * @param      result  Classification output
- * @param[in]  debug   Debug output enable boot
+ * @param      impulse  struct with information about model and DSP
+ * @param      fmatrix  Processed matrix
+ * @param      result   Output classifier results
+ * @param[in]  debug    Debug output enable
  *
  * @return     The ei impulse error.
  */
-extern "C" EI_IMPULSE_ERROR run_classifier_continuous(signal_t *signal, ei_impulse_result_t *result,
-                                                      bool debug = false, bool enable_maf = true)
+extern "C" EI_IMPULSE_ERROR run_inference(
+    const ei_impulse_t *impulse,
+    ei::matrix_t *fmatrix,
+    ei_impulse_result_t *result,
+    bool debug = false)
 {
-    static ei::matrix_t static_features_matrix(1, EI_CLASSIFIER_NN_INPUT_FRAME_SIZE);
+#if (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_NONE && EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
+    EI_IMPULSE_ERROR nn_res = run_nn_inference(impulse, fmatrix, result, debug);
+    if (nn_res != EI_IMPULSE_OK) {
+        return nn_res;
+    }
+#endif
+
+#if EI_CLASSIFIER_HAS_ANOMALY == 1
+    if (impulse->has_anomaly) {
+        EI_IMPULSE_ERROR anomaly_res = inference_anomaly_invoke(impulse, fmatrix, result, debug);
+        if (anomaly_res != EI_IMPULSE_OK) {
+            return anomaly_res;
+        }
+    }
+#endif
+
+    if (ei_run_impulse_check_canceled() == EI_IMPULSE_CANCELED) {
+        return EI_IMPULSE_CANCELED;
+    }
+
+    return EI_IMPULSE_OK;
+}
+
+/**
+ * @brief      Process a complete impulse
+ *
+ * @param      impulse  struct with information about model and DSP
+ * @param      signal   Sample data
+ * @param      result   Output classifier results
+ * @param[in]  debug    Debug output enable
+ *
+ * @return     The ei impulse error.
+ */
+extern "C" EI_IMPULSE_ERROR process_impulse(const ei_impulse_t *impulse,
+                                            signal_t *signal,
+                                            ei_impulse_result_t *result,
+                                            bool debug = false)
+{
+
+#if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL)) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI
+    // Shortcut for quantized image models
+    if (can_run_classifier_image_quantized(impulse) == EI_IMPULSE_OK) {
+        return run_classifier_image_quantized(impulse, signal, result, debug);
+    }
+#endif
+
+    memset(result, 0, sizeof(ei_impulse_result_t));
+
+    ei::matrix_t features_matrix(1, impulse->nn_input_frame_size);
+
+    uint64_t dsp_start_us = ei_read_timer_us();
+
+    size_t out_features_index = 0;
+
+    for (size_t ix = 0; ix < impulse->dsp_blocks_size; ix++) {
+        ei_model_dsp_t block = impulse->dsp_blocks[ix];
+
+        if (out_features_index + block.n_output_features > impulse->nn_input_frame_size) {
+            ei_printf("ERR: Would write outside feature buffer\n");
+            return EI_IMPULSE_DSP_ERROR;
+        }
+
+        ei::matrix_t fm(1, block.n_output_features, features_matrix.buffer + out_features_index);
+
+#if EIDSP_SIGNAL_C_FN_POINTER
+        if (block.axes_size != impulse->raw_samples_per_frame) {
+            ei_printf("ERR: EIDSP_SIGNAL_C_FN_POINTER can only be used when all axes are selected for DSP blocks\n");
+            return EI_IMPULSE_DSP_ERROR;
+        }
+        int ret = block.extract_fn(signal, &fm, block.config, impulse->frequency);
+#else
+        SignalWithAxes swa(signal, block.axes, block.axes_size, impulse);
+        int ret = block.extract_fn(swa.get_signal(), &fm, block.config, impulse->frequency);
+#endif
+
+        if (ret != EIDSP_OK) {
+            ei_printf("ERR: Failed to run DSP process (%d)\n", ret);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+
+        if (ei_run_impulse_check_canceled() == EI_IMPULSE_CANCELED) {
+            return EI_IMPULSE_CANCELED;
+        }
+
+        out_features_index += block.n_output_features;
+    }
+
+    result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
+    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
+
+    if (debug) {
+        ei_printf("Features (%d ms.): ", result->timing.dsp);
+        for (size_t ix = 0; ix < features_matrix.cols; ix++) {
+            ei_printf_float(features_matrix.buffer[ix]);
+            ei_printf(" ");
+        }
+        ei_printf("\n");
+    }
+
+    if (debug) {
+        ei_printf("Running impulse...\n");
+    }
+
+    return run_inference(impulse, &features_matrix, result, debug);
+
+}
+
+/**
+ * @brief      Process a complete impulse for continuous inference
+ *
+ * @param      impulse  struct with information about model and DSP
+ * @param      signal   Sample data
+ * @param      result   Output classifier results
+ * @param[in]  debug    Debug output enable
+ *
+ * @return     The ei impulse error.
+ */
+extern "C" EI_IMPULSE_ERROR process_impulse_continuous(const ei_impulse_t *impulse,
+                                            signal_t *signal,
+                                            ei_impulse_result_t *result,
+                                            bool debug,
+                                            bool enable_maf)
+{
+
+    static ei::matrix_t static_features_matrix(1, impulse->nn_input_frame_size);
     if (!static_features_matrix.buffer) {
         return EI_IMPULSE_ALLOC_FAILED;
     }
+
+    memset(result, 0, sizeof(ei_impulse_result_t));
 
     EI_IMPULSE_ERROR ei_impulse_error = EI_IMPULSE_OK;
 
@@ -157,10 +266,10 @@ extern "C" EI_IMPULSE_ERROR run_classifier_continuous(signal_t *signal, ei_impul
     bool is_mfe = false;
     bool is_spectrogram = false;
 
-    for (size_t ix = 0; ix < ei_dsp_blocks_size; ix++) {
-        ei_model_dsp_t block = ei_dsp_blocks[ix];
+    for (size_t ix = 0; ix < impulse->dsp_blocks_size; ix++) {
+        ei_model_dsp_t block = impulse->dsp_blocks[ix];
 
-        if (out_features_index + block.n_output_features > EI_CLASSIFIER_NN_INPUT_FRAME_SIZE) {
+        if (out_features_index + block.n_output_features > impulse->nn_input_frame_size) {
             ei_printf("ERR: Would write outside feature buffer\n");
             return EI_IMPULSE_DSP_ERROR;
         }
@@ -191,14 +300,14 @@ extern "C" EI_IMPULSE_ERROR run_classifier_continuous(signal_t *signal, ei_impul
         matrix_size_t features_written;
 
 #if EIDSP_SIGNAL_C_FN_POINTER
-        if (block.axes_size != EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME) {
+        if (block.axes_size != impulse->raw_samples_per_frame) {
             ei_printf("ERR: EIDSP_SIGNAL_C_FN_POINTER can only be used when all axes are selected for DSP blocks\n");
             return EI_IMPULSE_DSP_ERROR;
         }
-        int ret = extract_fn_slice(signal, &fm, block.config, EI_CLASSIFIER_FREQUENCY, &features_written);
+        int ret = extract_fn_slice(signal, &fm, block.config, impulse->frequency, &features_written);
 #else
-        SignalWithAxes swa(signal, block.axes, block.axes_size);
-        int ret = extract_fn_slice(swa.get_signal(), &fm, block.config, EI_CLASSIFIER_FREQUENCY, &features_written);
+        SignalWithAxes swa(signal, block.axes, block.axes_size, impulse);
+        int ret = extract_fn_slice(swa.get_signal(), &fm, block.config, impulse->frequency, &features_written);
 #endif
 
         if (ret != EIDSP_OK) {
@@ -227,179 +336,374 @@ extern "C" EI_IMPULSE_ERROR run_classifier_continuous(signal_t *signal, ei_impul
         ei_printf("\n");
     }
 
-    if (classifier_continuous_features_written >= EI_CLASSIFIER_NN_INPUT_FRAME_SIZE) {
+    if (classifier_continuous_features_written >= impulse->nn_input_frame_size) {
         dsp_start_us = ei_read_timer_us();
-        ei::matrix_t classify_matrix(1, EI_CLASSIFIER_NN_INPUT_FRAME_SIZE);
+        ei::matrix_t classify_matrix(1, impulse->nn_input_frame_size);
 
         /* Create a copy of the matrix for normalization */
-        for (size_t m_ix = 0; m_ix < EI_CLASSIFIER_NN_INPUT_FRAME_SIZE; m_ix++) {
+        for (size_t m_ix = 0; m_ix < impulse->nn_input_frame_size; m_ix++) {
             classify_matrix.buffer[m_ix] = static_features_matrix.buffer[m_ix];
         }
 
         if (is_mfcc) {
-            calc_cepstral_mean_and_var_normalization_mfcc(&classify_matrix, ei_dsp_blocks[0].config);
+            calc_cepstral_mean_and_var_normalization_mfcc(&classify_matrix, impulse->dsp_blocks[0].config);
         }
         else if (is_spectrogram) {
-            calc_cepstral_mean_and_var_normalization_spectrogram(&classify_matrix, ei_dsp_blocks[0].config);
+            calc_cepstral_mean_and_var_normalization_spectrogram(&classify_matrix, impulse->dsp_blocks[0].config);
         }
         else if (is_mfe) {
-            calc_cepstral_mean_and_var_normalization_mfe(&classify_matrix, ei_dsp_blocks[0].config);
+            calc_cepstral_mean_and_var_normalization_mfe(&classify_matrix, impulse->dsp_blocks[0].config);
         }
         result->timing.dsp_us += ei_read_timer_us() - dsp_start_us;
         result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
-#if EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_NONE
         if (debug) {
-            ei_printf("Running neural network...\n");
+            ei_printf("Running impulse...\n");
         }
-#endif
-        ei_impulse_error = run_inference(&classify_matrix, result, debug);
 
-#if (EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_MICROPHONE)
-        if((void *)avg_scores  != NULL && enable_maf == true) {
-            result->label_detected = avg_scores->trigger(result->classification);
+        ei_impulse_error = run_inference(impulse, &classify_matrix, result, debug);
+
+#if EI_CLASSIFIER_CALIBRATION_ENABLED
+        if (impulse->sensor == EI_CLASSIFIER_SENSOR_MICROPHONE) {
+            if((void *)avg_scores != NULL && enable_maf == true) {
+                if (enable_maf && !ei_calibration.is_configured) {
+                    // perfcal is not configured, print msg first time
+                    static bool has_printed_msg = false;
+
+                    if (!has_printed_msg) {
+                        ei_printf("WARN: run_classifier_continuous, enable_maf is true, but performance calibration is not configured.\n");
+                        ei_printf("       Previously we'd run a moving-average filter over your outputs in this case, but this is now disabled.\n");
+                        ei_printf("       Go to 'Performance calibration' in your Edge Impulse project to configure post-processing parameters.\n");
+                        ei_printf("       (You can enable this from 'Dashboard' if it's not visible in your project)\n");
+                        ei_printf("\n");
+
+                        has_printed_msg = true;
+                    }
+                }
+                else {
+                    // perfcal is configured
+                    static bool has_printed_msg = false;
+
+                    if (!has_printed_msg) {
+                        ei_printf("\nPerformance calibration is configured for your project. If no event is detected, all values are 0.\r\n\n");
+                        has_printed_msg = true;
+                    }
+
+                    int label_detected = avg_scores->trigger(result->classification);
+
+                    if (avg_scores->should_boost()) {
+                        for (int i = 0; i < impulse->label_count; i++) {
+                            if (i == label_detected) {
+                                result->classification[i].value = 1.0f;
+                            }
+                            else {
+                                result->classification[i].value = 0.0f;
+                            }
+                        }
+                    }
+                }
+            }
         }
 #endif
     }
+    else {
+        if (!impulse->object_detection) {
+            for (int i = 0; i < impulse->label_count; i++) {
+                // set label correctly in the result struct if we have no results (otherwise is nullptr)
+                result->classification[i].label = impulse->categories[(uint32_t)i];
+            }
+        }
+    }
+
     return ei_impulse_error;
+
+
 }
 
+#if EI_CLASSIFIER_STUDIO_VERSION < 3
 /**
- * @brief      Do inferencing over the processed feature matrix
- *
- * @param      fmatrix  Processed matrix
- * @param      result   Output classifier results
- * @param[in]  debug    Debug output enable
- *
- * @return     The ei impulse error.
+ * @brief      Construct impulse from macros - for run_classifer compatibility
  */
-extern "C" EI_IMPULSE_ERROR run_inference(
-    ei::matrix_t *fmatrix,
-    ei_impulse_result_t *result,
-    bool debug = false)
+extern "C" const ei_impulse_t ei_construct_impulse()
 {
-#if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE_FULL)
 
-    EI_IMPULSE_ERROR run_res = run_nn_inference(fmatrix, result, debug);
-    if (run_res != EI_IMPULSE_OK) {
-        return run_res;
-    }
-
-#elif (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW)
+const ei_impulse_t impulse =
     {
-        uint64_t ctx_start_us = ei_read_timer_us();
-        uint32_t time, cycles;
+    .project_id = EI_CLASSIFIER_PROJECT_ID,
+    .project_owner = EI_CLASSIFIER_PROJECT_OWNER,
+    .project_name = EI_CLASSIFIER_PROJECT_NAME,
 
-        /* Run tensaiflow inference */
-        infer(&time, &cycles);
+    .deploy_version = EI_CLASSIFIER_PROJECT_DEPLOY_VERSION,
+    .nn_input_frame_size = EI_CLASSIFIER_NN_INPUT_FRAME_SIZE,
+    .raw_sample_count = EI_CLASSIFIER_RAW_SAMPLE_COUNT,
+    .raw_samples_per_frame = EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME,
+    .dsp_input_frame_size = (EI_CLASSIFIER_RAW_SAMPLE_COUNT * EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME),
 
-        // Inference results returned by post_process() and copied into infer_results
+    .input_width = EI_CLASSIFIER_INPUT_WIDTH,
+    .input_height = EI_CLASSIFIER_INPUT_HEIGHT,
+    .input_frames = EI_CLASSIFIER_INPUT_FRAMES,
 
-        result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
-        result->timing.classification = (int)(result->timing.classification_us / 1000);
+    .interval_ms = EI_CLASSIFIER_INTERVAL_MS,
+    .label_count = EI_CLASSIFIER_LABEL_COUNT,
+    .has_anomaly = EI_CLASSIFIER_HAS_ANOMALY,
+    .frequency = EI_CLASSIFIER_FREQUENCY,
+    .dsp_blocks_size = ei_dsp_blocks_size,
+    .dsp_blocks = ei_dsp_blocks,
 
-        for (uint32_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-            float value;
-            // Dequantize the output if it is int8
-            value = static_cast<float>(infer_result[ix] - EI_CLASSIFIER_TFLITE_OUTPUT_ZEROPOINT) *
-                EI_CLASSIFIER_TFLITE_OUTPUT_SCALE;
+#if EI_CLASSIFIER_OBJECT_DETECTION == 1
+    .object_detection = true,
+    .object_detection_count = EI_CLASSIFIER_OBJECT_DETECTION_COUNT,
+    .object_detection_threshold = EI_CLASSIFIER_OBJECT_DETECTION_THRESHOLD,
+    .object_detection_last_layer = EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER,
+    .tflite_output_labels_tensor = EI_CLASSIFIER_TFLITE_OUTPUT_LABELS_TENSOR,
+    .tflite_output_score_tensor = EI_CLASSIFIER_TFLITE_OUTPUT_SCORE_TENSOR,
+    .tflite_output_data_tensor = EI_CLASSIFIER_TFLITE_OUTPUT_DATA_TENSOR,
+#else
+    .object_detection = false,
+    .object_detection_count = 0,
+    .object_detection_threshold = 0.0,
+    .object_detection_last_layer = EI_CLASSIFIER_LAST_LAYER_UNKNOWN,
+    .tflite_output_labels_tensor = 0,
+    .tflite_output_score_tensor = 0,
+    .tflite_output_data_tensor = 0,
+#endif
 
-            if (debug) {
-                ei_printf("%s:\t", ei_classifier_inferencing_categories[ix]);
-                ei_printf_float(value);
-                ei_printf("\n");
-            }
-            result->classification[ix].label = ei_classifier_inferencing_categories[ix];
-            result->classification[ix].value = value;
-        }
-    }
+#ifdef EI_CLASSIFIER_NN_OUTPUT_COUNT
+    .tflite_output_features_count = EI_CLASSIFIER_NN_OUTPUT_COUNT,
+    .fomo_output_size = static_cast<uint32_t>(sqrt(EI_CLASSIFIER_NN_OUTPUT_COUNT / (EI_CLASSIFIER_LABEL_COUNT + 1 /* background */))),
+#else
+    .tflite_output_features_count = 0,
+    .fomo_output_size = 0,
+#endif
 
+#if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE) && (EI_CLASSIFIER_COMPILED != 1)
+    .tflite_arena_size = EI_CLASSIFIER_TFLITE_ARENA_SIZE,
+#else
+    .tflite_arena_size = 0,
+#endif
+
+#if ((EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE) || (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE_FULL)) && (EI_CLASSIFIER_COMPILED != 1)
+    .model_arr = trained_tflite,
+    .model_arr_size = trained_tflite_len,
 #elif (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSORRT)
-    {
-        #if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1
-        #error "TensorRT requires an unquantized network"
-        #endif
+    .model_arr = trained_onnx,
+    .model_arr_size = trained_onnx_len,
+#else
+    .model_arr = 0,
+    .model_arr_size = 0,
+#endif
 
-        static bool first_run = true;
-        static char model_file_name[128];
+#if (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_NONE)
+    .tflite_input_datatype = EI_CLASSIFIER_TFLITE_INPUT_DATATYPE,
+    .tflite_input_quantized = EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED,
+    .tflite_input_scale = EI_CLASSIFIER_TFLITE_INPUT_SCALE,
+    .tflite_input_zeropoint = EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT,
+    .tflite_output_datatype = EI_CLASSIFIER_TFLITE_OUTPUT_DATATYPE,
+    .tflite_output_quantized = EI_CLASSIFIER_TFLITE_OUTPUT_QUANTIZED,
+    .tflite_output_scale = EI_CLASSIFIER_TFLITE_OUTPUT_SCALE,
+    .tflite_output_zeropoint = EI_CLASSIFIER_TFLITE_OUTPUT_ZEROPOINT,
+    .inferencing_engine = EI_CLASSIFIER_INFERENCING_ENGINE,
+    .compiled = EI_CLASSIFIER_COMPILED,
+    .has_tflite_ops_resolver = EI_CLASSIFIER_HAS_TFLITE_OPS_RESOLVER,
+#else
+    .tflite_input_datatype = 0,
+    .tflite_input_quantized = 0,
+    .tflite_input_scale = 0,
+    .tflite_input_zeropoint = 0,
+    .tflite_output_datatype = 0,
+    .tflite_output_quantized = 0,
+    .tflite_output_scale = 0,
+    .tflite_output_zeropoint = 0,
+    .inferencing_engine = 0,
+    .compiled = 0,
+    .has_tflite_ops_resolver = 0,
+#endif
 
-        if (first_run) {
-            snprintf(model_file_name, 128, "/tmp/ei-%s", trained_onnx_hash);
+    .sensor = EI_CLASSIFIER_SENSOR,
+#ifdef EI_CLASSIFIER_FUSION_AXES_STRING
+    .fusion_string = EI_CLASSIFIER_FUSION_AXES_STRING,
+#else
+    .fusion_string = "null",
+#endif
 
-            FILE *file = fopen(model_file_name, "w");
-            if (!file) {
-                ei_printf("ERR: TensorRT init failed to open '%s'\n", model_file_name);
-                return EI_IMPULSE_TENSORRT_INIT_FAILED;
-            }
+    .slice_size = (EI_CLASSIFIER_RAW_SAMPLE_COUNT / EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW),
+    .slices_per_model_window = EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW,
 
-            if (fwrite(trained_onnx, trained_onnx_len, 1, file) != 1) {
-                ei_printf("ERR: TensorRT init fwrite failed\n");
-                return EI_IMPULSE_TENSORRT_INIT_FAILED;
-            }
-
-            if (fclose(file) != 0) {
-                ei_printf("ERR: TensorRT init fclose failed\n");
-                return EI_IMPULSE_TENSORRT_INIT_FAILED;
-            }
-        }
-
-        float tensorrt_output[EI_CLASSIFIER_LABEL_COUNT];
-
-        // lazy initialize tensorRT context
-        if( ei_trt_handle == nullptr ) {
-            ei_trt_handle = libeitrt::create_EiTrt(model_file_name, debug);
-        }
-
-        uint64_t ctx_start_us = ei_read_timer_us();
-
-        libeitrt::infer(ei_trt_handle, fmatrix->buffer, tensorrt_output, EI_CLASSIFIER_LABEL_COUNT);
-
-        uint64_t ctx_end_us = ei_read_timer_us();
-
-        result->timing.classification_us = ctx_end_us - ctx_start_us;
-        result->timing.classification = (int)(result->timing.classification_us / 1000);
-
-        for( int i = 0; i < EI_CLASSIFIER_LABEL_COUNT; ++i) {
-            result->classification[i].label = ei_classifier_inferencing_categories[i];
-            result->classification[i].value = tensorrt_output[i];
-        }
-    }
-#endif // EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE
-
-#if EI_CLASSIFIER_HAS_ANOMALY == 1
-
-    // Anomaly detection
-    {
-        uint64_t anomaly_start_us = ei_read_timer_us();
-
-        float input[EI_CLASSIFIER_ANOM_AXIS_SIZE];
-        for (size_t ix = 0; ix < EI_CLASSIFIER_ANOM_AXIS_SIZE; ix++) {
-            input[ix] = fmatrix->buffer[EI_CLASSIFIER_ANOM_AXIS[ix]];
-        }
-        standard_scaler(input, ei_classifier_anom_scale, ei_classifier_anom_mean, EI_CLASSIFIER_ANOM_AXIS_SIZE);
-        float anomaly = get_min_distance_to_cluster(
-            input, EI_CLASSIFIER_ANOM_AXIS_SIZE, ei_classifier_anom_clusters, EI_CLASSIFIER_ANOM_CLUSTER_COUNT);
-
-        uint64_t anomaly_end_us = ei_read_timer_us();
-
-        result->timing.anomaly_us = anomaly_end_us - anomaly_start_us;
-        result->timing.anomaly = (int)(result->timing.anomaly_us / 1000);
-        result->anomaly = anomaly;
-
-        if (debug) {
-            ei_printf("Anomaly score (time: %d ms.): ", result->timing.anomaly);
-            ei_printf_float(anomaly);
-            ei_printf("\n");
-        }
-    }
+#if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE) && (EI_CLASSIFIER_COMPILED == 1)
+    .model_input = &trained_model_input,
+    .model_output = &trained_model_output,
+    .model_init = &trained_model_init,
+    .model_invoke = &trained_model_invoke,
+    .model_reset = &trained_model_reset,
+#else
+    .model_input = NULL,
+    .model_output = NULL,
+    .model_init =  NULL,
+    .model_invoke = NULL,
+    .model_reset = NULL,
+#endif
+    .categories = ei_classifier_inferencing_categories
+    };
+    return impulse;
+}
 
 #endif
 
-    if (ei_run_impulse_check_canceled() == EI_IMPULSE_CANCELED) {
-        return EI_IMPULSE_CANCELED;
+/**
+ * Check if the current impulse could be used by 'run_classifier_image_quantized'
+ */
+__attribute__((unused)) static EI_IMPULSE_ERROR can_run_classifier_image_quantized(const ei_impulse_t *impulse) {
+
+    if (impulse->inferencing_engine != EI_CLASSIFIER_TFLITE
+        && impulse->inferencing_engine != EI_CLASSIFIER_TENSAIFLOW
+        && impulse->inferencing_engine != EI_CLASSIFIER_DRPAI
+        && impulse->inferencing_engine != EI_CLASSIFIER_ONNX_TIDL) // check later
+    {
+        return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+    }
+
+    if (impulse->has_anomaly == 1){
+        return EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES;
+    }
+
+        // Check if we have a quantized NN Input layer (input is always quantized for DRP-AI)
+    if (impulse->tflite_input_quantized != 1) {
+        return EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES;
+    }
+
+    // And if we have one DSP block which operates on images...
+    if (impulse->dsp_blocks_size != 1 || impulse->dsp_blocks[0].extract_fn != extract_image_features) {
+        return EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES;
     }
 
     return EI_IMPULSE_OK;
+}
+
+#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL)
+
+/**
+ * Special function to run the classifier on images, only works on TFLite models (either interpreter, EON, tensaiflow, drpai or tidl)
+ * that allocates a lot less memory by quantizing in place. This only works if 'can_run_classifier_image_quantized'
+ * returns EI_IMPULSE_OK.
+ */
+extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(
+    const ei_impulse_t *impulse,
+    signal_t *signal,
+    ei_impulse_result_t *result,
+    bool debug = false)
+{
+    EI_IMPULSE_ERROR verify_res = can_run_classifier_image_quantized(impulse);
+    if (verify_res != EI_IMPULSE_OK) {
+        return verify_res;
+    }
+
+    memset(result, 0, sizeof(ei_impulse_result_t));
+
+    return run_nn_inference_image_quantized(impulse, signal, result, debug);
+
+}
+
+#endif // #if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
+
+/* Public functions ------------------------------------------------------- */
+
+/* Thread carefully: public functions are not to be changed
+to preserve backwards compatibility. */
+
+/**
+ * @brief      Init static vars
+ */
+extern "C" void run_classifier_init()
+{
+
+    classifier_continuous_features_written = 0;
+    ei_dsp_clear_continuous_audio_state();
+
+#if EI_CLASSIFIER_CALIBRATION_ENABLED
+
+#if EI_CLASSIFIER_STUDIO_VERSION < 3
+        const ei_impulse_t impulse = ei_construct_impulse();
+#else
+       const ei_impulse_t impulse = ei_default_impulse;
+#endif
+
+    const ei_model_performance_calibration_t *calibration = &ei_calibration;
+
+    if(calibration != NULL) {
+        avg_scores = new RecognizeEvents(calibration,
+            impulse.label_count, impulse.slice_size, impulse.interval_ms);
+    }
+#endif
+}
+
+/**
+ * @brief      Init static vars, for multi-model support
+ */
+__attribute__((unused)) void run_classifier_init(const ei_impulse_t *impulse)
+{
+    classifier_continuous_features_written = 0;
+    ei_dsp_clear_continuous_audio_state();
+
+#if EI_CLASSIFIER_CALIBRATION_ENABLED
+    const ei_model_performance_calibration_t *calibration = &ei_calibration;
+
+    if(calibration != NULL) {
+        avg_scores = new RecognizeEvents(calibration,
+            impulse->label_count, impulse->slice_size, impulse->interval_ms);
+    }
+#endif
+}
+
+extern "C" void run_classifier_deinit(void)
+{
+    if((void *)avg_scores != NULL) {
+        delete avg_scores;
+    }
+}
+
+/**
+ * @brief      Fill the complete matrix with sample slices. From there, run inference
+ *             on the matrix.
+ *
+ * @param      signal  Sample data
+ * @param      result  Classification output
+ * @param[in]  debug   Debug output enable boot
+ *
+ * @return     The ei impulse error.
+ */
+extern "C" EI_IMPULSE_ERROR run_classifier_continuous(
+    signal_t *signal,
+    ei_impulse_result_t *result,
+    bool debug = false,
+    bool enable_maf = true)
+{
+#if EI_CLASSIFIER_STUDIO_VERSION < 3
+        const ei_impulse_t impulse = ei_construct_impulse();
+#else
+       const ei_impulse_t impulse = ei_default_impulse;
+#endif
+    return process_impulse_continuous(&impulse, signal, result, debug, enable_maf);
+}
+
+/**
+ * @brief      Fill the complete matrix with sample slices. From there, run impulse
+ *             on the matrix.
+ *
+ * @param      impulse struct with information about model and DSP
+ * @param      signal  Sample data
+ * @param      result  Classification output
+ * @param[in]  debug   Debug output enable boot
+ *
+ * @return     The ei impulse error.
+ */
+__attribute__((unused)) EI_IMPULSE_ERROR run_classifier_continuous(
+    const ei_impulse_t *impulse,
+    signal_t *signal,
+    ei_impulse_result_t *result,
+    bool debug = false,
+    bool enable_maf = true)
+{
+    return process_impulse_continuous(impulse, signal, result, debug, enable_maf);
 }
 
 /**
@@ -414,430 +718,36 @@ extern "C" EI_IMPULSE_ERROR run_classifier(
     ei_impulse_result_t *result,
     bool debug = false)
 {
-#if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW)) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI
-
-    // Shortcut for quantized image models
-    if (can_run_classifier_image_quantized() == EI_IMPULSE_OK) {
-        return run_classifier_image_quantized(signal, result, debug);
-    }
-#endif
-
-    // if (debug) {
-    // static float buf[1000];
-    // printf("Raw data: ");
-    // for (size_t ix = 0; ix < 16000; ix += 1000) {
-    //     int r = signal->get_data(ix, 1000, buf);
-    //     for (size_t jx = 0; jx < 1000; jx++) {
-    //         printf("%.0f, ", buf[jx]);
-    //     }
-    // }
-    // printf("\n");
-    // }
-
-    memset(result, 0, sizeof(ei_impulse_result_t));
-
-    ei::matrix_t features_matrix(1, EI_CLASSIFIER_NN_INPUT_FRAME_SIZE);
-
-    uint64_t dsp_start_us = ei_read_timer_us();
-
-    size_t out_features_index = 0;
-
-    for (size_t ix = 0; ix < ei_dsp_blocks_size; ix++) {
-        ei_model_dsp_t block = ei_dsp_blocks[ix];
-
-        if (out_features_index + block.n_output_features > EI_CLASSIFIER_NN_INPUT_FRAME_SIZE) {
-            ei_printf("ERR: Would write outside feature buffer\n");
-            return EI_IMPULSE_DSP_ERROR;
-        }
-
-        ei::matrix_t fm(1, block.n_output_features, features_matrix.buffer + out_features_index);
-
-#if EIDSP_SIGNAL_C_FN_POINTER
-        if (block.axes_size != EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME) {
-            ei_printf("ERR: EIDSP_SIGNAL_C_FN_POINTER can only be used when all axes are selected for DSP blocks\n");
-            return EI_IMPULSE_DSP_ERROR;
-        }
-        int ret = block.extract_fn(signal, &fm, block.config, EI_CLASSIFIER_FREQUENCY);
+#if EI_CLASSIFIER_STUDIO_VERSION < 3
+        const ei_impulse_t impulse = ei_construct_impulse();
 #else
-        SignalWithAxes swa(signal, block.axes, block.axes_size);
-        int ret = block.extract_fn(swa.get_signal(), &fm, block.config, EI_CLASSIFIER_FREQUENCY);
+       const ei_impulse_t impulse = ei_default_impulse;
 #endif
-
-        if (ret != EIDSP_OK) {
-            ei_printf("ERR: Failed to run DSP process (%d)\n", ret);
-            return EI_IMPULSE_DSP_ERROR;
-        }
-
-        if (ei_run_impulse_check_canceled() == EI_IMPULSE_CANCELED) {
-            return EI_IMPULSE_CANCELED;
-        }
-
-        out_features_index += block.n_output_features;
-    }
-
-    result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
-    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
-
-    if (debug) {
-        ei_printf("Features (%d ms.): ", result->timing.dsp);
-        for (size_t ix = 0; ix < features_matrix.cols; ix++) {
-            ei_printf_float(features_matrix.buffer[ix]);
-            ei_printf(" ");
-        }
-        ei_printf("\n");
-    }
-
-#if EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_NONE
-    if (debug) {
-        ei_printf("Running neural network...\n");
-    }
-#endif
-
-    return run_inference(&features_matrix, result, debug);
-}
-
-
-
-/**
- * @brief      Calculates the cepstral mean and variable normalization.
- *
- * @param      matrix      Source and destination matrix
- * @param      config_ptr  ei_dsp_config_mfcc_t struct pointer
- */
-static void calc_cepstral_mean_and_var_normalization_mfcc(ei_matrix *matrix, void *config_ptr)
-{
-    ei_dsp_config_mfcc_t *config = (ei_dsp_config_mfcc_t *)config_ptr;
-
-    uint32_t original_matrix_size = matrix->rows * matrix->cols;
-
-    /* Modify rows and colums ration for matrix normalization */
-    matrix->rows = original_matrix_size / config->num_cepstral;
-    matrix->cols = config->num_cepstral;
-
-    // cepstral mean and variance normalization
-    int ret = speechpy::processing::cmvnw(matrix, config->win_size, true, false);
-    if (ret != EIDSP_OK) {
-        ei_printf("ERR: cmvnw failed (%d)\n", ret);
-        return;
-    }
-
-    /* Reset rows and columns ratio */
-    matrix->rows = 1;
-    matrix->cols = original_matrix_size;
+    return process_impulse(&impulse, signal, result, debug);
 }
 
 /**
- * @brief      Calculates the cepstral mean and variable normalization.
- *
- * @param      matrix      Source and destination matrix
- * @param      config_ptr  ei_dsp_config_mfe_t struct pointer
+ * Run the impulse over a raw features array
+ * @param impulse struct with information about model and DSP
+ * @param raw_features Raw features array
+ * @param raw_features_size Size of the features array
+ * @param result Object to store the results in
+ * @param debug Whether to show debug messages (default: false)
  */
-static void calc_cepstral_mean_and_var_normalization_mfe(ei_matrix *matrix, void *config_ptr)
-{
-    ei_dsp_config_mfe_t *config = (ei_dsp_config_mfe_t *)config_ptr;
-
-    uint32_t original_matrix_size = matrix->rows * matrix->cols;
-
-    /* Modify rows and colums ration for matrix normalization */
-    matrix->rows = (original_matrix_size) / config->num_filters;
-    matrix->cols = config->num_filters;
-
-    if (config->implementation_version < 3) {
-        // cepstral mean and variance normalization
-        int ret = speechpy::processing::cmvnw(matrix, config->win_size, false, true);
-        if (ret != EIDSP_OK) {
-            ei_printf("ERR: cmvnw failed (%d)\n", ret);
-            return;
-        }
-    }
-    else {
-        // normalization
-        int ret = speechpy::processing::mfe_normalization(matrix, config->noise_floor_db);
-        if (ret != EIDSP_OK) {
-            ei_printf("ERR: normalization failed (%d)\n", ret);
-            return;
-        }
-    }
-
-    /* Reset rows and columns ratio */
-    matrix->rows = 1;
-    matrix->cols = (original_matrix_size);
-}
-
-/**
- * @brief      Calculates the cepstral mean and variable normalization.
- *
- * @param      matrix      Source and destination matrix
- * @param      config_ptr  ei_dsp_config_spectrogram_t struct pointer
- */
-static void calc_cepstral_mean_and_var_normalization_spectrogram(ei_matrix *matrix, void *config_ptr)
-{
-    ei_dsp_config_spectrogram_t *config = (ei_dsp_config_spectrogram_t *)config_ptr;
-
-    uint32_t original_matrix_size = matrix->rows * matrix->cols;
-
-    /* Modify rows and colums ration for matrix normalization */
-    matrix->cols = config->fft_length / 2 + 1;
-    matrix->rows = (original_matrix_size) / matrix->cols;
-
-    if (config->implementation_version < 3) {
-        int ret = numpy::normalize(matrix);
-        if (ret != EIDSP_OK) {
-            ei_printf("ERR: normalization failed (%d)\n", ret);
-            return;
-        }
-    }
-    else {
-        // normalization
-        int ret = speechpy::processing::spectrogram_normalization(matrix, config->noise_floor_db);
-        if (ret != EIDSP_OK) {
-            ei_printf("ERR: normalization failed (%d)\n", ret);
-            return;
-        }
-    }
-
-    /* Reset rows and columns ratio */
-    matrix->rows = 1;
-    matrix->cols = (original_matrix_size);
-}
-
-/**
- * Check if the current impulse could be used by 'run_classifier_image_quantized'
- */
-__attribute__((unused)) static EI_IMPULSE_ERROR can_run_classifier_image_quantized() {
-#if (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_TFLITE) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_TENSAIFLOW) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
-    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-#endif
-
-#if EI_CLASSIFIER_HAS_ANOMALY == 1
-    return EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES;
-#endif
-
-    // Check if we have a quantized NN Input layer (input is always quantized for DRP-AI)
-#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED != 1
-    return EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES;
-#endif
-
-    // And if we have one DSP block which operates on images...
-    if (ei_dsp_blocks_size != 1 || ei_dsp_blocks[0].extract_fn != extract_image_features) {
-        return EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES;
-    }
-
-    return EI_IMPULSE_OK;
-}
-
-#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW
-
-int8_t infer_result[EI_CLASSIFIER_LABEL_COUNT];
-
-extern "C" void get_data(int8_t *in_buf_0, uint16_t in_buf_0_dim_0, uint16_t in_buf_0_dim_1, uint16_t in_buf_0_dim_2)
-{
-#if EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_CAMERA
-
-    if (ei_dsp_blocks_size == 1 || ei_dsp_blocks[0].extract_fn == extract_image_features) {
-        memcpy(in_buf_0, processed_features, EI_CLASSIFIER_NN_INPUT_FRAME_SIZE);
-    }
-
-#endif
-}
-
-extern "C" void post_process(int8_t *out_buf_0, int8_t *out_buf_1)
-{
-    memcpy(infer_result, out_buf_0, EI_CLASSIFIER_LABEL_COUNT);
-}
-
-#endif // #if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW
-
-#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
-/**
- * Special function to run the classifier on images, only works on TFLite models (either interpreter or EON or for tensaiflow)
- * that allocates a lot less memory by quantizing in place. This only works if 'can_run_classifier_image_quantized'
- * returns EI_IMPULSE_OK.
- */
-extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(
+__attribute__((unused)) EI_IMPULSE_ERROR run_classifier(
+    const ei_impulse_t *impulse,
     signal_t *signal,
     ei_impulse_result_t *result,
     bool debug = false)
 {
-    EI_IMPULSE_ERROR verify_res = can_run_classifier_image_quantized();
-    if (verify_res != EI_IMPULSE_OK) {
-        return verify_res;
-    }
-
-    memset(result, 0, sizeof(ei_impulse_result_t));
-
-#if ((EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_TENSAIFLOW) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI))
-
-#if (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_TFLITE)
-    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-#else
-
-    return run_nn_inference_image_quantized(signal, result, debug);
-
-#endif // EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_TFLITE
-
-#elif (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW)
-
-    uint64_t ctx_start_us;
-    uint64_t dsp_start_us = ei_read_timer_us();
-
-    ei::matrix_i8_t features_matrix(1, EI_CLASSIFIER_NN_INPUT_FRAME_SIZE);
-    processed_features = (int8_t *) features_matrix.buffer;
-
-    // run DSP process and quantize automatically
-    int ret = extract_image_features_quantized(signal, &features_matrix, ei_dsp_blocks[0].config, EI_CLASSIFIER_FREQUENCY);
-    if (ret != EIDSP_OK) {
-        ei_printf("ERR: Failed to run DSP process (%d)\n", ret);
-        return EI_IMPULSE_DSP_ERROR;
-    }
-
-    if (ei_run_impulse_check_canceled() == EI_IMPULSE_CANCELED) {
-        return EI_IMPULSE_CANCELED;
-    }
-
-    result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
-    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
-
-    if (debug) {
-        ei_printf("Features (%d ms.): ", result->timing.dsp);
-        for (size_t ix = 0; ix < features_matrix.cols; ix++) {
-            ei_printf_float((features_matrix.buffer[ix] - EI_CLASSIFIER_TFLITE_INPUT_ZEROPOINT) * EI_CLASSIFIER_TFLITE_INPUT_SCALE);
-            ei_printf(" ");
-        }
-        ei_printf("\n");
-    }
-
-    uint32_t time, cycles;
-    ctx_start_us = ei_read_timer_us();
-
-    /* Run tensaiflow inference */
-    infer(&time, &cycles);
-
-    // Inference results returned by post_process() and copied into infer_results
-
-    result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
-
-    for (uint32_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-        float value;
-        // Dequantize the output if it is int8
-        value = static_cast<float>(infer_result[ix] - EI_CLASSIFIER_TFLITE_OUTPUT_ZEROPOINT) *
-            EI_CLASSIFIER_TFLITE_OUTPUT_SCALE;
-
-        if (debug) {
-            ei_printf("%s:\t", ei_classifier_inferencing_categories[ix]);
-            ei_printf_float(value);
-            ei_printf("\n");
-        }
-        result->classification[ix].label = ei_classifier_inferencing_categories[ix];
-        result->classification[ix].value = value;
-    }
-
-    return EI_IMPULSE_OK;
-
-#elif (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
-    static bool first_run = true;
-    uint64_t ctx_start_us;
-    uint64_t dsp_start_us = ei_read_timer_us();
-
-    if (first_run) {
-        // map memory regions to the DRP-AI UDMA. This is required for passing data
-        // to and from DRP-AI
-        int t = drpai_init_mem();
-        if (t != 0) {
-            return EI_IMPULSE_DRPAI_INIT_FAILED;
-        }
-
-        EI_IMPULSE_ERROR ret = drpai_init_classifier(debug);
-        if (ret != EI_IMPULSE_OK) {
-            drpai_close(debug);
-            return EI_IMPULSE_DRPAI_INIT_FAILED;
-        }
-    }
-
-    if (debug) {
-        ei_printf("starting DSP...\n");
-    }
-
-    // Creates a features matrix mapped to the DRP-AI UDMA input region
-    ei::matrix_i8_t features_matrix(1, proc[DRPAI_INDEX_INPUT].size, (int8_t *)drpai_input_buf);
-
-    // Grabs the raw image buffer from the signal, DRP-AI will automatically
-    // extract features
-    int ret = extract_drpai_features_quantized(
-        signal,
-        &features_matrix,
-        ei_dsp_blocks[0].config,
-        EI_CLASSIFIER_FREQUENCY);
-    if (ret != EIDSP_OK) {
-        ei_printf("ERR: Failed to run DSP process (%d)\n", ret);
-        return EI_IMPULSE_DSP_ERROR;
-    }
-
-    if (ei_run_impulse_check_canceled() == EI_IMPULSE_CANCELED) {
-        return EI_IMPULSE_CANCELED;
-    }
-
-    result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
-    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
-
-    //if (debug) {
-    //    ei_printf("DSP was assigned address: 0x%lx\n", drpai_input_buf);
-    //    ei_printf("Features (%d ms.): ", result->timing.dsp);
-    //    for (size_t ix = 0; ix < EI_CLASSIFIER_NN_INPUT_FRAME_SIZE; ix++) {
-    //        ei_printf("0x%hhx, ", drpai_input_buf[ix]);
-    //    }
-    //    ei_printf("\n");
-    //}
-
-    ctx_start_us = ei_read_timer_us();
-
-    // Run DRP-AI inference, a static buffer is used to store the raw output
-    // results
-    ret = drpai_run_classifier_image_quantized(debug);
-
-    // close driver to reset memory, file pointer
-    if (ret != EI_IMPULSE_OK) {
-        drpai_close(debug);
-        first_run = true;
-    }
-    else {
-        // drpai_reset();
-        first_run = false;
-    }
-
-#if EI_CLASSIFIER_OBJECT_DETECTION_CONSTRAINED == 1
-    if (debug) {
-        ei_printf("DEBUG: raw drpai output");
-        ei_printf("\n[");
-        for (uint32_t i = 0; i < 12 * 12 * 2; i++) {
-            ei_printf_float(drpai_output_buf[i]);
-            ei_printf(" ");
-        }
-        ei_printf("]\n");
-    }
-
-    fill_result_struct_f32(
-        result,
-        drpai_output_buf,
-        EI_CLASSIFIER_INPUT_WIDTH / 8,
-        EI_CLASSIFIER_INPUT_HEIGHT / 8);
-#elif EI_CLASSIFIER_OBJECT_DETECTION == 1
-    if (debug) {
-        ei_printf("ERR: Output tensor formatting not yet implemented for DRP-AI");
-    }
-    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-#else
-    fill_result_struct_f32(result, drpai_output_buf, debug);
-#endif
-
-    result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
-    return EI_IMPULSE_OK;
-#endif // (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
+    ei_printf("%s\n", impulse->project_name);
+    return process_impulse(impulse, signal, result, debug);
 }
 
-#endif // #if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
+/* Deprecated functions ------------------------------------------------------- */
+
+/* These functions are being deprecated and possibly will be removed or moved in future.
+Do not use these - if possible, change your code to reflect the upcoming changes. */
 
 #if EIDSP_SIGNAL_C_FN_POINTER == 0
 
@@ -860,7 +770,13 @@ __attribute__((unused)) EI_IMPULSE_ERROR run_impulse(
 #endif
         bool debug = false) {
 
-    float *x = (float*)calloc(EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, sizeof(float));
+#if EI_CLASSIFIER_STUDIO_VERSION < 3
+        const ei_impulse_t impulse = ei_construct_impulse();
+#else
+       const ei_impulse_t impulse = ei_default_impulse;
+#endif
+
+    float *x = (float*)calloc(impulse.dsp_input_frame_size, sizeof(float));
     if (!x) {
         return EI_IMPULSE_OUT_OF_MEMORY;
     }
@@ -870,15 +786,15 @@ __attribute__((unused)) EI_IMPULSE_ERROR run_impulse(
     uint64_t sampling_us_start = ei_read_timer_us();
 
     // grab some data
-    for (int i = 0; i < EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; i += EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME) {
+    for (int i = 0; i < (int)impulse.dsp_input_frame_size; i += impulse.raw_samples_per_frame) {
         uint64_t curr_us = ei_read_timer_us() - sampling_us_start;
 
-        next_tick = curr_us + (EI_CLASSIFIER_INTERVAL_MS * 1000);
+        next_tick = curr_us + (impulse.interval_ms * 1000);
 
-        data_fn(x + i, EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME);
+        data_fn(x + i, impulse.raw_samples_per_frame);
 #if defined(EI_CLASSIFIER_HAS_SAMPLER) && EI_CLASSIFIER_HAS_SAMPLER == 1
         if (sampler != NULL) {
-            sampler->write_sensor_data(x + i, EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME);
+            sampler->write_sensor_data(x + i, impulse.raw_samples_per_frame);
         }
 #endif
 
@@ -893,7 +809,7 @@ __attribute__((unused)) EI_IMPULSE_ERROR run_impulse(
     result->timing.sampling = (ei_read_timer_us() - sampling_us_start) / 1000;
 
     signal_t signal;
-    int err = numpy::signal_from_buffer(x, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
+    int err = numpy::signal_from_buffer(x, impulse.dsp_input_frame_size, &signal);
     if (err != 0) {
         free(x);
         ei_printf("ERR: signal_from_buffer failed (%d)\n", err);

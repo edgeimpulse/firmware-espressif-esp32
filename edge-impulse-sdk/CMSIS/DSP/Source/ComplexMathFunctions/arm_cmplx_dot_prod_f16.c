@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_cmplx_dot_prod_f16.c
@@ -284,3 +286,4 @@ void arm_cmplx_dot_prod_f16(
  */
 
 #endif /* #if defined(ARM_FLOAT16_SUPPORTED) */
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

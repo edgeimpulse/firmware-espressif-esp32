@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_var_q31.c
@@ -212,3 +214,5 @@ void arm_var_q31(
 /**
   @} end of variance group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

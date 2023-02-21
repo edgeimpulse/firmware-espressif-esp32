@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /*
  * Copyright (C) 2010-2020 ARM Limited or its affiliates. All rights reserved.
  *
@@ -157,3 +159,5 @@ void arm_add_q7(
 /**
   @} end of BasicAdd group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_logsumexp_f64.c
@@ -71,3 +73,5 @@ float64_t arm_kullback_leibler_f64(const float64_t * pSrcA, const float64_t * pS
 /**
  * @} end of Kullback-Leibler group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

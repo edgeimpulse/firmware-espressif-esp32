@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_xor_u8.c
@@ -127,3 +129,5 @@ void arm_xor_u8(
 /**
   @} end of Xor group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

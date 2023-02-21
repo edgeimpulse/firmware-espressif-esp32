@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_correlate_fast_opt_q15.c
@@ -343,3 +345,5 @@ void arm_correlate_fast_opt_q15(
 /**
   @} end of Corr group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES
