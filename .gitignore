@@ -38,3 +38,4 @@
 
 /.vscode
 .DS_Store
+/copy-sdk.sh
