@@ -1,23 +1,18 @@
-/* Edge Impulse firmware SDK
+/*
  * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef EI_DEVICE_INFO_LIB
@@ -27,10 +22,12 @@
 #include "ei_camera_interface.h"
 #include "ei_config_types.h"
 #include "ei_device_memory.h"
+#include "ei_fusion.h"
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 // Available sensors to sample from on this board
 typedef struct {
@@ -107,6 +104,11 @@ protected:
     std::string upload_host = "host";
     std::string upload_path = "path";
     std::string upload_api_key = "0123456789abcdef";
+    
+#if MULTI_FREQ_ENABLED == 1
+    uint8_t fusioning;
+    uint32_t sample_interval;    
+#endif
 
     EiDeviceMemory *memory;
 
@@ -382,6 +384,54 @@ public:
     {
         return false;
     }
+
+#if MULTI_FREQ_ENABLED == 1
+	uint32_t actual_timer;
+    std::vector<float> multi_sample_interval;
+    void (*sample_multi_read_callback)(uint8_t);
+    
+    virtual bool start_multi_sample_thread(void (*sample_multi_read_cb)(uint8_t), float* fusion_sample_interval_ms, uint8_t num_fusioned)
+    {
+        uint8_t i;
+        uint8_t flag = 0;
+
+        this->sample_multi_read_callback = sample_multi_read_cb;
+        this->fusioning = num_fusioned;
+        this->multi_sample_interval.clear();
+
+        for (i = 0; i < num_fusioned; i++){
+            this->multi_sample_interval.push_back(fusion_sample_interval_ms[i]);
+        }
+
+        /* to improve, we consider just a 2 sensors case for now */
+        this->sample_interval = ei_fusion_calc_multi_gcd(this->multi_sample_interval.data(), this->fusioning);
+
+        /* force first reading */
+        for (i = 0; i < this->fusioning; i++){
+                flag |= (1<<i);
+        }
+        this->sample_multi_read_callback(flag);
+
+        this->actual_timer = 0;
+        /*
+        * TODO
+        * start timer/thread
+        */
+       
+        return false;
+    }
+
+    virtual uint8_t get_fusioning(void)
+    {
+        return fusioning;
+    }
+
+    virtual uint32_t get_sample_interval(void)
+    {
+        return sample_interval;
+    }
+
+#endif 
 
     virtual void set_state(EiState)
     {

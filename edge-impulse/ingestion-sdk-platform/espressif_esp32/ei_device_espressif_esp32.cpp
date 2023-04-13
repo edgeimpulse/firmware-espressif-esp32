@@ -364,17 +364,6 @@ char ei_get_serial_byte(void)
     return ch;
 }
 
-/**
- * @brief      Write character to serial
- *
- * @param      cChar     Char addr to write
- */
-void ei_putc(char cChar)
-{
-    putchar(cChar);
-}
-
-
 char ei_getchar()
 {
 	char ch = getchar();

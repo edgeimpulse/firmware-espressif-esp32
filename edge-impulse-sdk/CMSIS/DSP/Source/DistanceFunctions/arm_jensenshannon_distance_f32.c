@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
@@ -243,3 +245,5 @@ float32_t arm_jensenshannon_distance_f32(const float32_t *pA,const float32_t *pB
 /**
  * @} end of JensenShannon group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

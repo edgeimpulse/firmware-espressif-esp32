@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_naive_gaussian_bayes_predict_f32
@@ -395,3 +397,5 @@ uint32_t arm_gaussian_naive_bayes_predict_f32(const arm_gaussian_naive_bayes_ins
 /**
  * @} end of groupBayes group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

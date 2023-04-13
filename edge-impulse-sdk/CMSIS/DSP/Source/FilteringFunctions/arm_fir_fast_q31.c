@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_fir_fast_q31.c
@@ -322,3 +324,5 @@ IAR_ONLY_LOW_OPTIMIZATION_EXIT
 /**
   @} end of FIR group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

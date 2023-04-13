@@ -47,10 +47,6 @@ typedef struct {
     uint32_t n_samples;
 } inference_t;
 
-/* Extern declared --------------------------------------------------------- */
-//extern EiDeviceESP32* dev;
-//extern EiDeviceMemory* mem;
-
 /* Dummy functions for sensor_aq_ctx type */
 static size_t ei_write(const void*, size_t size, size_t count, EI_SENSOR_AQ_STREAM*)
 {

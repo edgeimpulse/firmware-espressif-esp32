@@ -27,6 +27,7 @@
 #include "ei_inertial_sensor.h"
 
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
+#include "edge-impulse-sdk/porting/ei_logging.h"
 
 #include "LIS3DHTR.h"
 
@@ -42,7 +43,7 @@ bool ei_inertial_init(void) {
     lis.begin(LIS3DHTR_DEFAULT_ADDRESS);
 
     if(lis.isConnection() == false) {
-        ei_printf("ERR: failed to connect to inertial sensor!\n");
+        EI_LOGW("Failed to connect to Inertial sensor!\n");
         return false;
     }
 
@@ -51,7 +52,7 @@ bool ei_inertial_init(void) {
     lis.setOutputDataRate(LIS3DHTR_DATARATE_100HZ);
 
     if(ei_add_sensor_to_fusion_list(inertial_sensor) == false) {
-        ei_printf("ERR: failed to register Inertial sensor!\n");
+        EI_LOGE("Failed to register Inertial sensor!\n");
         return false;
     }
 

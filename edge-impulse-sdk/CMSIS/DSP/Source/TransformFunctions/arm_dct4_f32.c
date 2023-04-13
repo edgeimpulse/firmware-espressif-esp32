@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_dct4_f32.c
@@ -446,3 +448,5 @@ void arm_dct4_f32(
 /**
   @} end of DCT4_IDCT4 group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

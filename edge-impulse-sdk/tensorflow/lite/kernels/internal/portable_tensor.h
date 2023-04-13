@@ -42,7 +42,7 @@ class VectorOfTensors {
     all_shape_ptr_.reserve(num_tensors);
 
     for (int i = 0; i < num_tensors; ++i) {
-      TfLiteTensor* t = &context.tensors[tensor_list.data[i]];
+      TfLiteTensor* t = context.GetTensor(&context, tensor_list.data[i]);
       all_data_.push_back(GetTensorData<T>(t));
       all_shape_.push_back(GetTensorShape(t));
     }
@@ -81,7 +81,7 @@ class VectorOfQuantizedTensors : public VectorOfTensors<uint8_t> {
                            const TfLiteIntArray& tensor_list)
       : VectorOfTensors<uint8_t>(context, tensor_list) {
     for (int i = 0; i < tensor_list.size; ++i) {
-      TfLiteTensor* t = &context.tensors[tensor_list.data[i]];
+      TfLiteTensor* t = context.GetTensor(&context, tensor_list.data[i]);
       zero_point_.push_back(t->params.zero_point);
       scale_.push_back(t->params.scale);
     }

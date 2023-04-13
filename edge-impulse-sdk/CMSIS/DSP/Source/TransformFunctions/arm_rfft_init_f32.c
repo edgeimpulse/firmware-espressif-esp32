@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_rfft_init_f32.c
@@ -145,3 +147,5 @@ arm_status arm_rfft_init_f32(
 /**
   @} end of RealFFT group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

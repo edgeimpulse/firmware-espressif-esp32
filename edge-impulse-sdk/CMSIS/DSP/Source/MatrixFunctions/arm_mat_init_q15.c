@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_mat_init_q15.c
@@ -65,3 +67,5 @@ void arm_mat_init_q15(
 /**
   @} end of MatrixInit group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

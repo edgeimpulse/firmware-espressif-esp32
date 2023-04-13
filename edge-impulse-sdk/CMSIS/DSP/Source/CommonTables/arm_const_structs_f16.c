@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_const_structs_f16.c
@@ -118,3 +120,5 @@ const arm_cfft_instance_f16 arm_cfft_sR_f16_len4096 = {
 #endif
 
 #endif
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

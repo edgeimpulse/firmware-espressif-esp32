@@ -1,23 +1,18 @@
-/* Edge Impulse firmware SDK
- * Copyright (c) 2020 EdgeImpulse Inc.
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "at_base64_lib.h"
@@ -25,10 +20,20 @@
 #include "ei_device_info_lib.h"
 #include "ei_device_memory.h"
 #include "ei_device_interface.h"
-#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
+
+#include "edge-impulse-sdk/classifier/ei_classifier_types.h"
+#include "edge-impulse-sdk/classifier/ei_signal_with_axes.h"
+
+extern "C" EI_IMPULSE_ERROR run_classifier(
+    signal_t *signal,
+    ei_impulse_result_t *result,
+    bool debug = false);
+
+float *features;
+extern char* ei_classifier_inferencing_categories[];
 
 /**
- * @brief      Call this function periocally during inference to 
+ * @brief      Call this function periocally during inference to
  *             detect a user stop command
  *
  * @return     true if user requested stop
@@ -36,7 +41,7 @@
 extern bool ei_user_invoke_stop_lib(void)
 {
     char ch;
-    while(1) { 
+    while(1) {
         ch = ei_getchar();
         if(ch == 0) { return false; }
         if(ch == 'b') { return true; }
@@ -46,13 +51,13 @@ extern bool ei_user_invoke_stop_lib(void)
 /**
  * @brief Helper function for sending a data from memory over the
  * serial port. Data are encoded into base64 on the fly.
- * 
+ *
  * @param address address of samples
  * @param length number of samples (bytes)
  * @return true if eferything went fin
  * @return false if some error occured (error during samples read)
  */
-bool read_encode_send_sample_buffer(size_t address, size_t length)
+__attribute__((weak)) bool read_encode_send_sample_buffer(size_t address, size_t length)
 {
     EiDeviceInfo *dev = EiDeviceInfo::get_device();
     EiDeviceMemory *memory = dev->get_memory();
@@ -84,4 +89,138 @@ bool read_encode_send_sample_buffer(size_t address, size_t length)
     }
 
     return true;
+}
+
+bool run_impulse_static_data(bool debug, size_t length, size_t buf_len)
+{
+    size_t cur_pos = 0;
+    uint32_t buf_pos = 0;
+    uint64_t start_time = 0;
+
+    static float *data_pt = NULL;
+    static uint8_t *temp_buf = NULL;
+
+    data_pt = (float*)ei_malloc(length*sizeof(float));
+    if (data_pt == NULL) {
+        ei_printf("ERR: Memory allocation for data buffer failed\r\n");
+        return false;
+    }
+
+    temp_buf = (uint8_t*)ei_calloc(buf_len + 1, sizeof(uint8_t));
+    if (temp_buf == NULL) {
+        ei_printf("ERR: Memory allocation for serial read buffer failed\r\n");
+        ei_free(data_pt);
+        data_pt = NULL;
+        return false;
+    }
+
+    ei_printf("OK CHUNK=%d\r\n", buf_len);
+
+    while (cur_pos < length) {
+
+        start_time = ei_read_timer_ms();
+        while (buf_pos < buf_len) {
+            if (ei_read_timer_ms() - start_time > 100) {
+                ei_printf("TIMEOUT\r\n");
+                ei_free(data_pt);
+                ei_free(temp_buf);
+                data_pt = NULL;
+                temp_buf = NULL;
+                ei_printf("END OUTPUT\r\n");
+                return false;
+            }
+            uint8_t rec = ei_getchar();
+            if (rec != 0) {
+                temp_buf[buf_pos++] = rec;
+            }
+        }
+
+        std::vector<unsigned char> decoded = base64_decode((const char*)temp_buf);
+        memcpy((void*)(data_pt + cur_pos), decoded.data(), decoded.size());
+
+        cur_pos = cur_pos + decoded.size()/sizeof(float);
+        buf_pos = 0;
+        ei_printf("OK %d \r\n", cur_pos);
+    }
+
+    ei_printf("TRANSFER COMPLETED %d\r\n", cur_pos);
+    uint32_t res = (uint32_t)ei_start_impulse_static_data(debug, data_pt, cur_pos);
+    cur_pos = 0;
+    ei_free(data_pt);
+    ei_free(temp_buf);
+    data_pt = NULL;
+    temp_buf = NULL;
+    ei_printf("RESULT %d\r\n", res);
+    ei_printf("END OUTPUT\r\n");
+
+    return true;
+}
+
+int raw_feature_get_data(size_t offset, size_t length, float *out_ptr)
+{
+    memcpy(out_ptr, features + offset, length * sizeof(float));
+    return 0;
+}
+
+EI_IMPULSE_ERROR ei_start_impulse_static_data(bool debug, float* data, size_t size) {
+
+    features = data;
+
+    signal_t signal;            // Wrapper for raw input buffer
+    ei_impulse_result_t result; // Used to store inference output
+    EI_IMPULSE_ERROR res;       // Return code from inference
+
+    // Make sure that the length of the buffer matches expected input length
+    if (size != EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE) {
+        ei_printf("ERROR: The size of the input buffer is not correct.\r\n");
+        ei_printf("Expected %d items, but got %d\r\n",
+                EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE,
+                (int)size);
+        return EI_IMPULSE_ERROR_SHAPES_DONT_MATCH;
+    }
+
+    // Assign callback function to fill buffer used for preprocessing/inference
+    signal.total_length = EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE;
+    signal.get_data = &raw_feature_get_data;
+
+    // Perform DSP pre-processing and inference
+    res = run_classifier(&signal, &result, debug);
+
+    // Print return code and how long it took to perform inference
+    ei_printf("Timing: DSP %d ms, inference %d ms, anomaly %d ms\r\n",
+            result.timing.dsp,
+            result.timing.classification,
+            result.timing.anomaly);
+
+    // Print the prediction results (object detection)
+#if EI_CLASSIFIER_OBJECT_DETECTION == 1
+    ei_printf("Object detection bounding boxes:\r\n");
+    for (uint32_t i = 0; i < EI_CLASSIFIER_OBJECT_DETECTION_COUNT; i++) {
+        ei_impulse_result_bounding_box_t bb = result.bounding_boxes[i];
+        if (bb.value == 0) {
+            continue;
+        }
+        ei_printf("  %s (%f) [ x: %u, y: %u, width: %u, height: %u ]\r\n",
+                bb.label,
+                bb.value,
+                bb.x,
+                bb.y,
+                bb.width,
+                bb.height);
+    }
+
+    // Print the prediction results (classification)
+#else
+    ei_printf("Predictions:\r\n");
+    for (uint16_t i = 0; i < EI_CLASSIFIER_LABEL_COUNT; i++) {
+        ei_printf("  %s: ", ei_classifier_inferencing_categories[i]);
+        ei_printf("%.5f\r\n", result.classification[i].value);
+    }
+#endif
+
+    // Print anomaly result (if it exists)
+#if EI_CLASSIFIER_HAS_ANOMALY == 1
+    ei_printf("Anomaly prediction: %.3f\r\n", result.anomaly);
+#endif
+    return res;
 }

@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_mat_solve_upper_triangular_f64.c
@@ -116,3 +118,5 @@ arm_status status;                             /* status of matrix inverse */
 /**
   @} end of MatrixInv group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

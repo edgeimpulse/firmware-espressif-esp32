@@ -1,23 +1,18 @@
-/* Edge Impulse firmware SDK
+/*
  * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef EI_DEVICE_LIB_H
@@ -25,9 +20,10 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 
 /**
- * @brief      Call this function periocally during inference to 
+ * @brief      Call this function periocally during inference to
  *             detect a user stop command
  *
  * @return     true if user requested stop
@@ -37,11 +33,16 @@ bool ei_user_invoke_stop_lib(void);
 /**
  * @brief Helper function for sending a data from memory over the
  * serial port. Data are encoded into base64 on the fly.
- * 
+ *
  * @param address address of samples
  * @param length number of samples (bytes)
  * @return true if eferything went fin
  * @return false if some error occured (error during samples read)
  */
 bool read_encode_send_sample_buffer(size_t address, size_t length);
+
+bool run_impulse_static_data(bool debug, size_t length, size_t buf_len);
+
+EI_IMPULSE_ERROR ei_start_impulse_static_data(bool debug, float* data, size_t size);
+
 #endif /* EI_DEVICE_LIB_H */

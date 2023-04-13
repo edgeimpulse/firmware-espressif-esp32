@@ -49,11 +49,7 @@ namespace {
 // Assumes tensor_index is a valid index (in bounds)
 inline TfLiteTensor* GetTensorAtIndex(const TfLiteContext* context,
                                       int tensor_index) {
-  if (context->tensors != nullptr) {
-    return &context->tensors[tensor_index];
-  } else {
-    return context->GetTensor(context, tensor_index);
-  }
+  return context->GetTensor(context, tensor_index);
 }
 
 // Validate in a single place to reduce binary size

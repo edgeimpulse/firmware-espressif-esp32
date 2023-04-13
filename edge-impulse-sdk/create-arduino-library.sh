@@ -49,15 +49,5 @@ find $SCRIPTPATH/ -name 'compatibility.h' -exec bash -c "$SEDCMD 's/#include <cs
 find $SCRIPTPATH/ -name 'micro_utils.h' -exec bash -c "$SEDCMD 's/#include <cstdint>/#include <cstdint>\\
 #include \"edge-impulse-sdk\/tensorflow\/lite\/portable_type_to_tflitetype.h\"/' {}" {} \;
 
-# wrap all CMSIS-DSP .c files in a guard (defined in config.hpp)
-find $SCRIPTPATH/CMSIS/DSP/Source -name "*.c" -print0 | while read -d $'\0' file; do
-    $SEDCMD '1i\
-#include \"edge-impulse-sdk/dsp/config.hpp\"\
-#if EIDSP_LOAD_CMSIS_DSP_SOURCES
-' "$file"
-
-    $ECHOCMD '\n#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES' >> "$file"
-done
-
 # remove all the -e files
 find $SCRIPTPATH/ -name "*-e" -exec rm -f {} \;

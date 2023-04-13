@@ -1,23 +1,18 @@
-/* Edge Impulse inferencing library
- * Copyright (c) 2021 EdgeImpulse Inc.
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _EIDSP_NUMPY_TYPES_H_
@@ -138,9 +133,9 @@ typedef struct ei_matrix {
 
     /**
      * @brief Get a pointer to the buffer advanced by n rows
-     * 
-     * @param row Numer of rows to advance the returned buffer pointer 
-     * @return float* Pointer to the buffer at the start of row n 
+     *
+     * @param row Numer of rows to advance the returned buffer pointer
+     * @return float* Pointer to the buffer at the start of row n
      */
     float *get_row_ptr(size_t row)
     {
@@ -235,9 +230,9 @@ typedef struct ei_matrix_i8 {
 
     /**
      * @brief Get a pointer to the buffer advanced by n rows
-     * 
-     * @param row Numer of rows to advance the returned buffer pointer 
-     * @return float* Pointer to the buffer at the start of row n 
+     *
+     * @param row Numer of rows to advance the returned buffer pointer
+     * @return float* Pointer to the buffer at the start of row n
      */
     int8_t *get_row_ptr(size_t row)
     {
@@ -246,6 +241,102 @@ typedef struct ei_matrix_i8 {
 
 #endif // #ifdef __cplusplus
 } matrix_i8_t;
+
+/**
+ * A matrix structure that allocates a matrix on the **heap**.
+ * Freeing happens by calling `delete` on the object or letting the object go out of scope.
+ */
+typedef struct ei_matrix_i32 {
+    int32_t *buffer;
+    uint32_t rows;
+    uint32_t cols;
+    bool buffer_managed_by_me;
+
+#if EIDSP_TRACK_ALLOCATIONS
+    const char *_fn;
+    const char *_file;
+    int _line;
+    uint32_t _originally_allocated_rows;
+    uint32_t _originally_allocated_cols;
+#endif
+
+#ifdef __cplusplus
+    /**
+     * Create a new matrix
+     * @param n_rows Number of rows
+     * @param n_cols Number of columns
+     * @param a_buffer Buffer, if not provided we'll alloc on the heap
+     */
+    ei_matrix_i32(
+        uint32_t n_rows,
+        uint32_t n_cols,
+        int32_t *a_buffer = NULL
+#if EIDSP_TRACK_ALLOCATIONS
+        ,
+        const char *fn = NULL,
+        const char *file = NULL,
+        int line = 0
+#endif
+        )
+    {
+        if (a_buffer) {
+            buffer = a_buffer;
+            buffer_managed_by_me = false;
+        }
+        else {
+            buffer = (int32_t*)ei_calloc(n_rows * n_cols * sizeof(int32_t), 1);
+            buffer_managed_by_me = true;
+        }
+        rows = n_rows;
+        cols = n_cols;
+
+        if (!a_buffer) {
+#if EIDSP_TRACK_ALLOCATIONS
+            _fn = fn;
+            _file = file;
+            _line = line;
+            _originally_allocated_rows = rows;
+            _originally_allocated_cols = cols;
+            if (_fn) {
+                ei_dsp_register_matrix_alloc_internal(fn, file, line, rows, cols, sizeof(int32_t), buffer);
+            }
+            else {
+                ei_dsp_register_matrix_alloc(rows, cols, sizeof(int32_t), buffer);
+            }
+#endif
+        }
+    }
+
+    ~ei_matrix_i32() {
+        if (buffer && buffer_managed_by_me) {
+            ei_free(buffer);
+
+#if EIDSP_TRACK_ALLOCATIONS
+            if (_fn) {
+                ei_dsp_register_matrix_free_internal(_fn, _file, _line, _originally_allocated_rows,
+                    _originally_allocated_cols, sizeof(int32_t), buffer);
+            }
+            else {
+                ei_dsp_register_matrix_free(_originally_allocated_rows, _originally_allocated_cols,
+                    sizeof(int32_t), buffer);
+            }
+#endif
+        }
+    }
+
+    /**
+     * @brief Get a pointer to the buffer advanced by n rows
+     *
+     * @param row Numer of rows to advance the returned buffer pointer
+     * @return float* Pointer to the buffer at the start of row n
+     */
+    int32_t *get_row_ptr(size_t row)
+    {
+        return buffer + row * cols;
+    }
+
+#endif // #ifdef __cplusplus
+} matrix_i32_t;
 
 /**
  * Another matrix structure that allocates a matrix on the **heap**.
@@ -342,9 +433,9 @@ typedef struct ei_quantized_matrix {
 
     /**
      * @brief Get a pointer to the buffer advanced by n rows
-     * 
-     * @param row Numer of rows to advance the returned buffer pointer 
-     * @return float* Pointer to the buffer at the start of row n 
+     *
+     * @param row Numer of rows to advance the returned buffer pointer
+     * @return float* Pointer to the buffer at the start of row n
      */
     uint8_t *get_row_ptr(size_t row)
     {
@@ -353,6 +444,102 @@ typedef struct ei_quantized_matrix {
 
 #endif // #ifdef __cplusplus
 } quantized_matrix_t;
+
+/**
+ * A matrix structure that allocates a matrix on the **heap**.
+ * Freeing happens by calling `delete` on the object or letting the object go out of scope.
+ */
+typedef struct ei_matrix_u8 {
+    uint8_t *buffer;
+    uint32_t rows;
+    uint32_t cols;
+    bool buffer_managed_by_me;
+
+#if EIDSP_TRACK_ALLOCATIONS
+    const char *_fn;
+    const char *_file;
+    int _line;
+    uint32_t _originally_allocated_rows;
+    uint32_t _originally_allocated_cols;
+#endif
+
+#ifdef __cplusplus
+    /**
+     * Create a new matrix
+     * @param n_rows Number of rows
+     * @param n_cols Number of columns
+     * @param a_buffer Buffer, if not provided we'll alloc on the heap
+     */
+    ei_matrix_u8(
+        uint32_t n_rows,
+        uint32_t n_cols,
+        uint8_t *a_buffer = NULL
+#if EIDSP_TRACK_ALLOCATIONS
+        ,
+        const char *fn = NULL,
+        const char *file = NULL,
+        int line = 0
+#endif
+        )
+    {
+        if (a_buffer) {
+            buffer = a_buffer;
+            buffer_managed_by_me = false;
+        }
+        else {
+            buffer = (uint8_t*)ei_calloc(n_rows * n_cols * sizeof(uint8_t), 1);
+            buffer_managed_by_me = true;
+        }
+        rows = n_rows;
+        cols = n_cols;
+
+        if (!a_buffer) {
+#if EIDSP_TRACK_ALLOCATIONS
+            _fn = fn;
+            _file = file;
+            _line = line;
+            _originally_allocated_rows = rows;
+            _originally_allocated_cols = cols;
+            if (_fn) {
+                ei_dsp_register_matrix_alloc_internal(fn, file, line, rows, cols, sizeof(uint8_t), buffer);
+            }
+            else {
+                ei_dsp_register_matrix_alloc(rows, cols, sizeof(uint8_t), buffer);
+            }
+#endif
+        }
+    }
+
+    ~ei_matrix_u8() {
+        if (buffer && buffer_managed_by_me) {
+            ei_free(buffer);
+
+#if EIDSP_TRACK_ALLOCATIONS
+            if (_fn) {
+                ei_dsp_register_matrix_free_internal(_fn, _file, _line, _originally_allocated_rows,
+                    _originally_allocated_cols, sizeof(uint8_t), buffer);
+            }
+            else {
+                ei_dsp_register_matrix_free(_originally_allocated_rows, _originally_allocated_cols,
+                    sizeof(uint8_t), buffer);
+            }
+#endif
+        }
+    }
+
+    /**
+     * @brief Get a pointer to the buffer advanced by n rows
+     *
+     * @param row Numer of rows to advance the returned buffer pointer
+     * @return float* Pointer to the buffer at the start of row n
+     */
+    uint8_t *get_row_ptr(size_t row)
+    {
+        return buffer + row * cols;
+    }
+
+#endif // #ifdef __cplusplus
+} matrix_u8_t;
 
 /**
  * Size of a matrix

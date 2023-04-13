@@ -15,6 +15,7 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_MICRO_KERNELS_SOFTMAX_H_
 #define TENSORFLOW_LITE_MICRO_KERNELS_SOFTMAX_H_
 
+#include "edge-impulse-sdk/classifier/ei_classifier_config.h"
 #include "edge-impulse-sdk/tensorflow/lite/c/builtin_op_data.h"
 #include "edge-impulse-sdk/tensorflow/lite/c/common.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/internal/types.h"

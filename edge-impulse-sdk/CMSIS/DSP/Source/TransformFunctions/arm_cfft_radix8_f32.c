@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_cfft_radix8_f32.c
@@ -283,3 +285,5 @@ void arm_radix8_butterfly_f32(
       twidCoefModifier <<= 3;
    } while (n2 > 7);
 }
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

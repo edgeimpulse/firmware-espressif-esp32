@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_cos_q31.c
@@ -82,3 +84,5 @@ q31_t arm_cos_q31(
 /**
   @} end of cos group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

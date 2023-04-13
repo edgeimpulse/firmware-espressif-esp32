@@ -1,23 +1,18 @@
-/* Edge Impulse inferencing library
- * Copyright (c) 2021 EdgeImpulse Inc.
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _EIDSP_NUMPY_H_
@@ -35,7 +30,7 @@
 #include <string.h>
 #include <stddef.h>
 #include <cfloat>
-#include <vector>
+#include "ei_vector.h"
 #include <algorithm>
 #include "numpy_types.h"
 #include "config.hpp"
@@ -73,7 +68,7 @@ static constexpr float quantized_values_one_zero[] = { (0.0f / 1.0f), (1.0f / 10
 
 class numpy {
 public:
-    
+
     static float sqrt(float x) {
 #if EIDSP_USE_CMSIS_DSP
         float temp;
@@ -82,7 +77,7 @@ public:
 #else
         return sqrtf(x);
 #endif
-    }    
+    }
 
     /**
      * Roll array elements along a given axis.
@@ -341,9 +336,9 @@ public:
         float temp; // temp for swap
         size_t next; // next item to swap
         size_t cycleBegin; // index of start of cycle
-        size_t i; // location in matrix 
-        size_t all_done_mark = 1; 
-        std::vector<bool> done(size+1,false);
+        size_t i; // location in matrix
+        size_t all_done_mark = 1;
+        ei_vector<bool> done(size+1,false);
 
         i = 1; // Note that matrix[0] and last element of matrix won't move
         while (1)
@@ -359,11 +354,11 @@ public:
                 float temp2 = matrix->buffer[next];
                 matrix->buffer[next] = temp;
                 temp = temp2;
-                done[next] = true; 
+                done[next] = true;
                 i = next;
             }
             while (i != cycleBegin);
-    
+
             // start next cycle by find next not done
             for (i = all_done_mark; done[i]; i++) {
                 all_done_mark++; // move the high water mark so we don't look again
@@ -1571,20 +1566,17 @@ public:
      */
     __attribute__((always_inline)) static inline float log(float a)
     {
-        float m, r, s, t, i, f;
-        int32_t e, g;
-
-        g = (int32_t) * ((int32_t *)&a);
-        e = (g - 0x3f2aaaab) & 0xff800000;
+        int32_t g = (int32_t) * ((int32_t *)&a);
+        int32_t e = (g - 0x3f2aaaab) & 0xff800000;
         g = g - e;
-        m = (float) * ((float *)&g);
-        i = (float)e * 1.19209290e-7f; // 0x1.0p-23
+        float m = (float) * ((float *)&g);
+        float i = (float)e * 1.19209290e-7f; // 0x1.0p-23
         /* m in [2/3, 4/3] */
-        f = m - 1.0f;
-        s = f * f;
+        float f = m - 1.0f;
+        float s = f * f;
         /* Compute log1p(f) for f in [-1/3, 1/3] */
-        r = fmaf(0.230836749f, f, -0.279208571f); // 0x1.d8c0f0p-3, -0x1.1de8dap-2
-        t = fmaf(0.331826031f, f, -0.498910338f); // 0x1.53ca34p-2, -0x1.fee25ap-2
+        float r = fmaf(0.230836749f, f, -0.279208571f); // 0x1.d8c0f0p-3, -0x1.1de8dap-2
+        float t = fmaf(0.331826031f, f, -0.498910338f); // 0x1.53ca34p-2, -0x1.fee25ap-2
         r = fmaf(r, s, t);
         r = fmaf(r, s, f);
         r = fmaf(i, 0.693147182f, r); // 0x1.62e430p-1 // log(2)
@@ -2351,7 +2343,7 @@ public:
         bool do_overlap)
     {
         // save off one point to put back, b/c we're going to calculate in place
-        float saved_point;
+        float saved_point = 0;
         bool do_saved_point = false;
         size_t fft_out_size = fft_points / 2 + 1;
         float *fft_out;
@@ -2371,7 +2363,7 @@ public:
         // init the output to zeros
         memset(output, 0, sizeof(float) * (stop_bin - start_bin));
         int input_ix = 0;
-        while (input_ix < input_size) {
+        while (input_ix < (int)input_size) {
             // Figure out if we need any zero padding
             size_t n_input_points = input_ix + fft_points <= input_size ? fft_points
                                                                         : input_size - input_ix;
@@ -2407,7 +2399,21 @@ public:
     {
         // Use CMSIS either way.  Will fall back to straight C when needed
         float temp;
+#if EIDSP_USE_CMSIS_DSP
         arm_var_f32(input, size, &temp);
+#else
+        float mean = 0.0f;
+        for (size_t i = 0; i < size; i++) {
+            mean += input[i];
+        }
+        mean /= size;
+
+        temp = 0.0f;
+        for (size_t i = 0; i < size; i++) {
+            temp += (input[i] - mean) * (input[i] - mean);
+        }
+        temp /= (size - 1);
+#endif
         return temp;
     }
 

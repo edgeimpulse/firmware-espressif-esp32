@@ -1,31 +1,27 @@
-/* Edge Impulse inferencing library
- * Copyright (c) 2021 EdgeImpulse Inc.
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #ifndef _EIDSP_SPECTRAL_FEATURE_H_
 #define _EIDSP_SPECTRAL_FEATURE_H_
 
-#include <vector>
 #include <stdint.h>
 #include "processing.hpp"
+#include "wavelet.hpp"
+#include "signal.hpp"
 #include "edge-impulse-sdk/dsp/ei_utils.h"
 #include "model-parameters/model_metadata.h"
 
@@ -40,23 +36,6 @@ typedef enum {
 
 class feature {
 public:
-
-    static int subtract_mean(matrix_t* input_matrix) {
-        // calculate the mean
-        EI_DSP_MATRIX(mean_matrix, input_matrix->rows, 1);
-        int ret = numpy::mean(input_matrix, &mean_matrix);
-        if (ret != EIDSP_OK) {
-            EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
-        }
-
-        // scale by the mean
-        ret = numpy::subtract(input_matrix, &mean_matrix);
-        if (ret != EIDSP_OK) {
-            EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
-        }
-
-        return EIDSP_OK;
-    }
 
     /**
      * Calculate the spectral features over a signal.
@@ -101,7 +80,7 @@ public:
 
         size_t axes = input_matrix->rows;
 
-        EI_TRY( subtract_mean(input_matrix) );
+        EI_TRY(processing::subtract_mean(input_matrix) );
 
         // apply filter
         if (filter_type == filter_lowpass) {
@@ -338,17 +317,26 @@ public:
         }
     }
 
-    static int extract_spectral_analysis_features_v2(
+    /**
+     * @brief Calculates the spectral analysis features.
+     *
+     * @return the number of features calculated
+     */
+    static size_t extract_spec_features(
         matrix_t *input_matrix,
         matrix_t *output_matrix,
         ei_dsp_config_spectral_analysis_t *config,
-        const float sampling_freq)
+        const float sampling_freq,
+        const bool remove_mean = true,
+        const bool transpose_and_scale_input = true)
     {
-        // transpose the matrix so we have one row per axis
-        numpy::transpose_in_place(input_matrix);
-        
-        // func tests for scale of 1 and does a no op in that case
-        EI_TRY(numpy::scale(input_matrix, config->scale_axes));
+        if (transpose_and_scale_input) {
+            // transpose the matrix so we have one row per axis
+            numpy::transpose_in_place(input_matrix);
+
+            // func tests for scale of 1 and does a no op in that case
+            EI_TRY(numpy::scale(input_matrix, config->scale_axes));
+        }
 
         bool do_filter = false;
         bool is_high_pass;
@@ -378,7 +366,9 @@ public:
             is_high_pass = true;
         }
 
-        EI_TRY(subtract_mean(input_matrix));
+        if (remove_mean){
+            EI_TRY(processing::subtract_mean(input_matrix));
+        }
 
         // Figure bins we remove based on filter cutoff
         size_t start_bin, stop_bin;
@@ -398,6 +388,7 @@ public:
         size_t num_bins = stop_bin - start_bin;
 
         float *feature_out = output_matrix->buffer;
+        const float *feature_out_ori = feature_out;
         for (size_t row = 0; row < input_matrix->rows; row++) {
             float *data_window = input_matrix->get_row_ptr(row);
             size_t data_size = input_matrix->cols;
@@ -410,6 +401,9 @@ public:
 
             // Standard Deviation
             float stddev = *(feature_out-1); //= sqrt(numpy::variance(data_window, data_size));
+            if (stddev == 0.0f) {
+                stddev = 1e-10f;
+            }
             // Don't add std dev as a feature b/c it's the same as RMS
             // Skew and Kurtosis w/ shortcut:
             // See definition at https://en.wikipedia.org/wiki/Skewness
@@ -422,7 +416,7 @@ public:
             float s_sum = 0;
             float k_sum = 0;
             float temp;
-            for (int i = 0; i < data_size; i++) {
+            for (size_t i = 0; i < data_size; i++) {
                 temp = data_window[i] * data_window[i] * data_window[i];
                 s_sum += temp;
                 k_sum += temp * data_window[i];
@@ -433,14 +427,38 @@ public:
             // Kurtosis out
             *feature_out++ = ((k_sum / data_size) / (temp * stddev)) - 3;
 
-            EI_TRY(numpy::welch_max_hold(
-                data_window,
-                data_size,
-                feature_out,
-                start_bin,
-                stop_bin,
-                config->fft_length,
-                config->do_fft_overlap));
+            if (config->implementation_version == 4) {
+
+                size_t fft_out_size = config->fft_length / 2 + 1;
+                ei_vector<float> fft_out(fft_out_size);
+                EI_TRY(numpy::welch_max_hold(
+                    data_window,
+                    data_size,
+                    fft_out.data(),
+                    0,
+                    fft_out_size,
+                    config->fft_length,
+                    config->do_fft_overlap));
+
+                matrix_t x(1, fft_out.size(), const_cast<float *>(fft_out.data()));
+                matrix_t out(1, 1);
+
+                *feature_out++ = (numpy::skew(&x, &out) == EIDSP_OK) ? (out.get_row_ptr(0)[0]) : 0.0f;
+                *feature_out++ = (numpy::kurtosis(&x, &out) == EIDSP_OK) ? (out.get_row_ptr(0)[0]) : 0.0f;
+
+                for (size_t i = start_bin; i < stop_bin; i++) {
+                    feature_out[i - start_bin] = fft_out[i];
+                }
+            } else {
+                EI_TRY(numpy::welch_max_hold(
+                    data_window,
+                    data_size,
+                    feature_out,
+                    start_bin,
+                    stop_bin,
+                    config->fft_length,
+                    config->do_fft_overlap));
+            }
             if (config->do_log) {
                 numpy::zero_handling(feature_out, num_bins);
                 ei_matrix temp(num_bins, 1, feature_out);
@@ -448,7 +466,179 @@ public:
             }
             feature_out += num_bins;
         }
-        return EIDSP_OK;
+        size_t num_features = feature_out - feature_out_ori;
+        return num_features;
+    }
+
+    static int extract_spectral_analysis_features_v2(
+        matrix_t *input_matrix,
+        matrix_t *output_matrix,
+        ei_dsp_config_spectral_analysis_t *config,
+        const float sampling_freq)
+    {
+        size_t n_features =
+            extract_spec_features(input_matrix, output_matrix, config, sampling_freq);
+        return n_features == output_matrix->cols ? EIDSP_OK : EIDSP_MATRIX_SIZE_MISMATCH;
+    }
+
+    static int extract_spectral_analysis_features_v3(
+        matrix_t *input_matrix,
+        matrix_t *output_matrix,
+        ei_dsp_config_spectral_analysis_t *config,
+        const float sampling_freq)
+    {
+        if (strcmp(config->analysis_type, "Wavelet") == 0) {
+            return wavelet::extract_wavelet_features(input_matrix, output_matrix, config, sampling_freq);
+        } else {
+            return extract_spectral_analysis_features_v2(input_matrix, output_matrix, config, sampling_freq);
+        }
+    }
+
+    static ei_vector<int> get_ratio_combo(int r)
+    {
+        if (r == 1 || r == 3 || r == 10) {
+            return {r};
+        } else if (r == 30) {
+            return {3, 10};
+        } else if (r == 100) {
+            return {10, 10};
+        } else if (r == 1000) {
+            return {10, 10, 10};
+        } else {
+            assert(0);
+        }
+        return {0}; // to make linter happy
+    }
+
+    // can do in-place or out-of-place
+    static size_t _decimate(matrix_t *input_matrix, matrix_t *output_matrix, size_t ratio)
+    {
+        // generated by build_sav4_header in prepare.py
+        static float sos_deci_3[] = {
+            3.4799547399084973e-05f, 6.959909479816995e-05f, 3.4799547399084973e-05f, 1.0f, -1.416907422639627f, 0.5204552955670066f, 1.0f, 2.0f, 1.0f, 1.0f, -1.3342748248687593f, 0.594631953081447f, 1.0f, 2.0f, 1.0f, 1.0f, -1.237675162600336f, 0.7259326611233617f, 1.0f, 2.0f, 1.0f, 1.0f, -1.2180861262950025f, 0.8987833581253264};
+        static float sos_zi_deci_3[] = { 0.0013094887094341828f, -0.0006648423946383296f,
+                                         0.0193087012128479f,    -0.010936639208493802f,
+                                         0.1485445305451165f,    -0.10217301649013415f,
+                                         0.8250625539381586f,    -0.7244268881025758 };
+        static float sos_deci_10[] = { 3.5863243209995215e-09f,
+                                       7.172648641999043e-09f,
+                                       3.5863243209995215e-09f,
+                                       1.0f,
+                                       -1.8204968644767618f,
+                                       0.8308597403796137f,
+                                       1.0f,
+                                       2.0f,
+                                       1.0f,
+                                       1.0f,
+                                       -1.8289505620176847f,
+                                       0.8553173710387741f,
+                                       1.0f,
+                                       2.0f,
+                                       1.0f,
+                                       1.0f,
+                                       -1.8517334482627625f,
+                                       0.9015161055713813f,
+                                       1.0f,
+                                       2.0f,
+                                       1.0f,
+                                       1.0f,
+                                       -1.8965395961864169f,
+                                       0.9644245584642932 };
+        static float sos_zi_deci_10[] = { 1.38071060429997e-06f,   -1.146570262401316e-06f,
+                                          0.00020862168862901534f, -0.0001782374705409433f,
+                                          0.016663820918116152f,   -0.015002020730727955f,
+                                          0.9773862470492868f,     -0.9420150059170858 };
+
+        assert(ratio == 3 || ratio == 10);
+
+        float* sos = ratio == 3 ? sos_deci_3 : sos_deci_10;
+        float* sos_zi = ratio == 3 ? sos_zi_deci_3 : sos_zi_deci_10;
+
+        const size_t out_size = signal::get_decimated_size(input_matrix->cols, ratio);
+
+        for (size_t row = 0; row < input_matrix->rows; row++) {
+            const float *x = input_matrix->get_row_ptr(row);
+            float *y = output_matrix->get_row_ptr(row);
+            signal::sosfilt sosfilt(sos, sos_zi, 4);
+            signal::decimate_simple(
+                x,
+                input_matrix->cols,
+                y,
+                output_matrix->cols,
+                ratio,
+                sosfilt);
+        }
+
+        return out_size;
+    }
+
+    static int extract_spectral_analysis_features_v4(
+        matrix_t *input_matrix,
+        matrix_t *output_matrix,
+        ei_dsp_config_spectral_analysis_t *config,
+        const float sampling_freq)
+    {
+        if (strcmp(config->analysis_type, "Wavelet") == 0) {
+            return wavelet::extract_wavelet_features(input_matrix, output_matrix, config, sampling_freq);
+        }
+        else if (config->extra_low_freq == false && config->input_decimation_ratio == 1) {
+            size_t n_features =
+                extract_spec_features(input_matrix, output_matrix, config, sampling_freq);
+            return n_features == output_matrix->cols ? EIDSP_OK : EIDSP_MATRIX_SIZE_MISMATCH;
+        }
+        else {
+            numpy::transpose_in_place(input_matrix);
+            EI_TRY(numpy::scale(input_matrix, config->scale_axes));
+
+            if (config->input_decimation_ratio > 1) {
+                ei_vector<int> ratio_combo = get_ratio_combo(config->input_decimation_ratio);
+                size_t out_size = input_matrix->cols;
+                for (int r : ratio_combo) {
+                    out_size = _decimate(input_matrix, input_matrix, r);
+                }
+
+                // rearrange input matrix to be in the right shape after decimation
+                float* out = input_matrix->get_row_ptr(0) + out_size;
+                for(uint32_t r = 1; r < input_matrix->rows; r++) {
+                    float *row = input_matrix->get_row_ptr(r);
+                    for(size_t c = 0; c < out_size; c++) {
+                        *out++ = row[c];
+                    }
+                }
+                input_matrix->cols = out_size;
+            }
+
+            float new_sampling_freq = sampling_freq / config->input_decimation_ratio;
+
+            // do this before extract_spec_features because extract_spec_features modifies the matrix
+            constexpr size_t decimation = 10;
+            const size_t decimated_size =
+                signal::get_decimated_size(input_matrix->cols, decimation);
+            matrix_t lf_signal(input_matrix->rows, decimated_size);
+            _decimate(input_matrix, &lf_signal, decimation);
+
+            size_t n_features = extract_spec_features(
+                input_matrix,
+                output_matrix,
+                config,
+                new_sampling_freq,
+                true,
+                false);
+
+            if (n_features > 0 && config->extra_low_freq) {
+                matrix_t lf_features(1, output_matrix->rows * output_matrix->cols - n_features,
+                    output_matrix->buffer + n_features);
+
+                n_features += extract_spec_features(
+                    &lf_signal,
+                    &lf_features,
+                    config,
+                    new_sampling_freq / decimation,
+                    true,
+                    false);
+            }
+            return n_features == output_matrix->cols ? EIDSP_OK : EIDSP_MATRIX_SIZE_MISMATCH;
+        }
     }
 };
 

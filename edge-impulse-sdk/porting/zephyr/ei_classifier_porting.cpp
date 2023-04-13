@@ -1,31 +1,36 @@
-/* Edge Impulse inferencing library
- * Copyright (c) 2021 EdgeImpulse Inc.
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "../ei_classifier_porting.h"
 #if EI_PORTING_ZEPHYR == 1
 
+#include <version.h>
+// Zpehyr 3.1.x and newer uses different include scheme
+#if (KERNEL_VERSION_MAJOR > 3) || ((KERNEL_VERSION_MAJOR == 3) && (KERNEL_VERSION_MINOR >= 1))
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/uart.h>
+#else
 #include <zephyr.h>
+#include <drivers/uart.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
+
+extern const struct device *uart;
 
 #define EI_WEAK_FN __attribute__((weak))
 
@@ -46,6 +51,17 @@ uint64_t ei_read_timer_us() {
     return k_uptime_get() * 1000;
 }
 
+EI_WEAK_FN char ei_getchar()
+{
+    uint8_t rcv_char = 0;
+    if(uart_fifo_read(uart, &rcv_char, 1) == 1) {
+        return rcv_char;
+    }
+    else {
+        return 0;
+    }
+}
+
 /**
  *  Printf function uses vsnprintf and output using Arduino Serial
  */
@@ -57,7 +73,7 @@ __attribute__((weak)) void ei_printf(const char *format, ...) {
     int r = vsnprintf(print_buf, sizeof(print_buf), format, args);
     va_end(args);
 
-    if (r > 0) {
+    if(r > 0) {
         printf("%s", print_buf);
     }
 }

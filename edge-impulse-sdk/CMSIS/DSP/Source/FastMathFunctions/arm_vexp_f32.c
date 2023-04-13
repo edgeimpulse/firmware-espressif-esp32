@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_vlog_f32.c
@@ -95,3 +97,5 @@ void arm_vexp_f32(
       blkCnt--;
    }
 }
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

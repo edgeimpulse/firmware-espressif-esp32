@@ -48,8 +48,6 @@ static float analog_data[ANALOG_AXIS_SAMPLED];
 bool ei_analog_sensor_init(void)
 {
     adc1_config_width(width);
-    //adc1_config_channel_atten(channel, atten);
-
     ei_add_sensor_to_fusion_list(analog_sensor);
 
     return true;

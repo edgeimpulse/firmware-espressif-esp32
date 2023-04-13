@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_fir_decimate_fast_q15.c
@@ -593,3 +595,5 @@ void arm_fir_decimate_fast_q15(
 /**
   @} end of FIR_decimate group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_conv_f32.c
@@ -962,3 +964,5 @@ void arm_conv_f32(
 /**
   @} end of Conv group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

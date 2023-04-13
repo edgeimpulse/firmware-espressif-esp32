@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include <stdint.h>
-#include <src/common/common_functions.h>
+#include <edge-impulse-sdk/porting/espressif/ESP-NN/src/common/common_functions.h>
 
 #define MASK_IF_ZERO(x)                 (x) == 0 ? ~0 : 0
 #define MASK_IF_NON_ZERO(x)             (x) != 0 ? ~0 : 0

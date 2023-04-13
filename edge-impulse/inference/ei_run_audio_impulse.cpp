@@ -47,7 +47,7 @@ static bool debug_mode = false;
 static float samples_circ_buff[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE];
 static int samples_wr_index = 0;
 
-static void timing_and_classification(ei_impulse_result_t* result)
+static void display_results(ei_impulse_result_t* result)
 {
     ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n",
         result->timing.dsp, result->timing.classification, result->timing.anomaly);
@@ -61,28 +61,6 @@ static void timing_and_classification(ei_impulse_result_t* result)
         ei_printf_float(result->anomaly);
         ei_printf("\r\n");
 #endif
-}
-
-static void display_results(ei_impulse_result_t* result)
-{
-    if(continuous_mode == true) {
-        if(result->label_detected >= 0) {
-            ei_printf("LABEL DETECTED : %s\r\n", result->classification[result->label_detected].label);
-            timing_and_classification(result);
-        }
-        else {
-            const char spinner[] = {'/', '-', '\\', '|'};
-            static int spin = 0;
-            ei_printf("Running inference %c\r", spinner[spin]);
-
-            if(++spin >= sizeof(spinner)) {
-                spin = 0;
-            }
-        }
-    }
-    else {
-        timing_and_classification(result);
-    }
 }
 
 void ei_run_impulse(void)
@@ -186,7 +164,7 @@ void ei_start_impulse(bool continuous, bool debug, bool use_max_uart_speed)
     }
 
     if (ei_microphone_inference_start(continuous_mode ? EI_CLASSIFIER_SLICE_SIZE : EI_CLASSIFIER_RAW_SAMPLE_COUNT, EI_CLASSIFIER_INTERVAL_MS) == false) {
-        ei_printf("ERR: Failed to setup audio sampling");
+        ei_printf("ERR: Could not allocate audio buffer (size %d), this could be due to the window length of your model\r\n", EI_CLASSIFIER_RAW_SAMPLE_COUNT);
         return;
     }
 

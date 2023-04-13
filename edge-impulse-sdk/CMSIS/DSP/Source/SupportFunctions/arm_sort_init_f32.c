@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_sort_init_f32.c
@@ -52,3 +54,5 @@ void arm_sort_init_f32(arm_sort_instance_f32 * S, arm_sort_alg alg, arm_sort_dir
 /**
   @} end of Sorting group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

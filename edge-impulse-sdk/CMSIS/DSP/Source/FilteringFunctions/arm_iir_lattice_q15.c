@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_iir_lattice_q15.c
@@ -394,3 +396,5 @@ void arm_iir_lattice_q15(
 /**
   @} end of IIR_Lattice group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

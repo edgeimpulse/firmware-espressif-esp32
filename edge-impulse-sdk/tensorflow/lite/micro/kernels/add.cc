@@ -1,4 +1,4 @@
-// Patched by Edge Impulse to include reference, CMSIS-NN, ARC and MVP kernels
+// Patched by Edge Impulse to include reference and hardware-accelerated kernels
 #include "../../../../classifier/ei_classifier_config.h"
 #if 0 == 1
 /* noop */
@@ -527,7 +527,7 @@ limitations under the License.
 #include "edge-impulse-sdk/tensorflow/lite/micro/memory_helpers.h"
 
 #include <esp_timer.h>
-#include <esp_nn.h>
+#include "edge-impulse-sdk/porting/espressif/ESP-NN/include/esp_nn.h"
 
 long long add_total_time = 0;
 

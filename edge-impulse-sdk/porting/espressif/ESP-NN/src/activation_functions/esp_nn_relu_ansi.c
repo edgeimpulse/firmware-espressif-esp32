@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/classifier/ei_classifier_config.h"
+#if EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN
 // Copyright 2020-2021 Espressif Systems (Shanghai) PTE LTD
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,12 +14,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifdef EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN
-
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <src/common/common_functions.h>
+#include <edge-impulse-sdk/porting/espressif/ESP-NN/src/common/common_functions.h>
 
 void esp_nn_relu6_s8_ansi(int8_t *data, uint16_t size)
 {
@@ -31,4 +31,4 @@ void esp_nn_relu6_s8_ansi(int8_t *data, uint16_t size)
     }
 }
 
-#endif
+#endif // EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN

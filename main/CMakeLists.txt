@@ -8,14 +8,13 @@ set(FIRMWARE_SDK_FOLDER ../firmware-sdk)
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 add_definitions(-DEI_SENSOR_AQ_STREAM=FILE
                 -DEI_CLASSIFIER_TFLITE_ENABLE_ESP_NN=1) # enables ESP-NN optimizations by Espressif
-endif() 
+endif()
 
-set(include_dirs 
+set(include_dirs
     ${MODEL_FOLDER}
     ${MODEL_FOLDER}/tflite-model
     ${MODEL_FOLDER}/model-parameters
     ${EI_SDK_FOLDER}
-    ${EI_SDK_FOLDER}/anomaly
     ${EI_SDK_FOLDER}/classifier
     ${EI_SDK_FOLDER}/dsp
     ${EI_SDK_FOLDER}/porting

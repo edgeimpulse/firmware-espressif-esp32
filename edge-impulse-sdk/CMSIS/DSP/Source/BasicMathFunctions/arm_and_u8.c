@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_and_u8.c
@@ -128,3 +130,5 @@ void arm_and_u8(
 /**
   @} end of And group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES

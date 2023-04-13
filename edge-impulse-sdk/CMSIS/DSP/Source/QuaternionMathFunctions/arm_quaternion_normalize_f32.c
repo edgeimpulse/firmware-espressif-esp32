@@ -1,3 +1,5 @@
+#include "edge-impulse-sdk/dsp/config.hpp"
+#if EIDSP_LOAD_CMSIS_DSP_SOURCES
 /* ----------------------------------------------------------------------
  * Project:      CMSIS DSP Library
  * Title:        arm_quaternion_normalize_f32.c
@@ -102,3 +104,5 @@ void arm_quaternion_normalize_f32(const float32_t *pInputQuaternions,
 /**
   @} end of QuatNormalized group
  */
+
+#endif // EIDSP_LOAD_CMSIS_DSP_SOURCES
