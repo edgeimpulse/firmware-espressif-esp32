@@ -81,8 +81,8 @@ void AsymmetricQuantizeFloats(const float* values, const int size,
   const double qmin_double = kMinScale;
   const double qmax_double = kMaxScale;
   const auto minmax = std::minmax_element(values, values + size);
-  const double rmin = std::fmin(0, *minmax.first);
-  const double rmax = std::fmax(0, *minmax.second);
+  const double rmin = fmin(0, *minmax.first);
+  const double rmax = fmax(0, *minmax.second);
   if (rmin == rmax) {
     std::fill_n(quantized_values, size, 0);
     *scaling_factor = 1;

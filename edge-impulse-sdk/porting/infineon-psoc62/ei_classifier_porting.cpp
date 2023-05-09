@@ -23,6 +23,11 @@
 #include <cstdio>
 #include "unistd.h"
 #include "cyhal.h"
+#ifdef FREERTOS_ENABLED
+#include <FreeRTOS.h>
+#include <timers.h>
+#include <task.h>
+#else /* bare-metal */
 #include "cyhal_lptimer.h"
 
 static bool timer_init = false;
@@ -32,18 +37,31 @@ static void systick_isr(void)
 {
     tick++;
 }
+#endif
 
 __attribute__((weak)) EI_IMPULSE_ERROR ei_run_impulse_check_canceled() {
     return EI_IMPULSE_OK;
 }
 
-/**
- * Cancelable sleep, can be triggered with signal from other thread
- */
+#ifdef FREERTOS_ENABLED
 __attribute__((weak)) EI_IMPULSE_ERROR ei_sleep(int32_t time_ms) {
+    vTaskDelay(time_ms / portTICK_PERIOD_MS);
 
+    return EI_IMPULSE_OK;
+}
+
+__attribute__((weak)) uint64_t ei_read_timer_ms() {
+
+    return xTaskGetTickCount();
+}
+
+__attribute__((weak)) uint64_t ei_read_timer_us() {
+
+    return xTaskGetTickCount()*1000;
+}
+#else /* Bare-metal */
+__attribute__((weak)) EI_IMPULSE_ERROR ei_sleep(int32_t time_ms) {
     cyhal_system_delay_ms(time_ms);
-
     return EI_IMPULSE_OK;
 }
 
@@ -63,14 +81,13 @@ uint64_t ei_read_timer_ms() {
         timer_init = true;
         return 0;
     }
-
     return tick;
 }
 
 uint64_t ei_read_timer_us() {
-
     return ei_read_timer_ms() * 1000;
 }
+#endif /* FREERTOS_ENABLED */
 
 void ei_putchar(char c)
 {
@@ -91,14 +108,33 @@ __attribute__((weak)) void ei_printf(const char *format, ...) {
     va_end(myargs);
 
     printf("%s", buffer);
-
-    // Serial_Out(buffer, length);
 }
 
 __attribute__((weak)) void ei_printf_float(float f) {
     ei_printf("%f", f);
 }
 
+#ifdef FREERTOS_ENABLED
+__attribute__((weak)) void *ei_malloc(size_t size) {
+    return pvPortMalloc(size);
+}
+
+__attribute__((weak)) void *ei_calloc(size_t nitems, size_t size) {
+    void *mem = NULL;
+
+    /* Infineon port of FreeRTOS does not support pvPortCalloc */
+    mem = pvPortMalloc(nitems * size);
+    if (mem) {
+        /* zero the memory */
+        memset(mem, 0, nitems * size);
+    }
+    return mem;
+}
+
+__attribute__((weak)) void ei_free(void *ptr) {
+    vPortFree(ptr);
+}
+#else
 __attribute__((weak)) void *ei_malloc(size_t size) {
     return malloc(size);
 }
@@ -110,6 +146,7 @@ __attribute__((weak)) void *ei_calloc(size_t nitems, size_t size) {
 __attribute__((weak)) void ei_free(void *ptr) {
     free(ptr);
 }
+#endif
 
 #if defined(__cplusplus) && EI_C_LINKAGE == 1
 extern "C"

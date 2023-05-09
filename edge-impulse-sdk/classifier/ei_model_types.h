@@ -40,6 +40,7 @@
 #define EI_CLASSIFIER_AKIDA                      9
 #define EI_CLASSIFIER_SYNTIANT                   10
 #define EI_CLASSIFIER_ONNX_TIDL                  11
+#define EI_CLASSIFIER_MEMRYX                     12
 
 #define EI_CLASSIFIER_SENSOR_UNKNOWN             -1
 #define EI_CLASSIFIER_SENSOR_MICROPHONE          1

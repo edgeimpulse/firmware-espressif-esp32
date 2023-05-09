@@ -53,6 +53,8 @@
 #include "edge-impulse-sdk/classifier/inferencing_engines/akida.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL
 #include "edge-impulse-sdk/classifier/inferencing_engines/onnx_tidl.h"
+#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_MEMRYX
+#include "edge-impulse-sdk/classifier/inferencing_engines/memryx.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_NONE
 // noop
 #else

@@ -22,7 +22,6 @@
 #include "ei_sampler.h"
 #include <iomanip>
 #include <math.h>
-#include <sstream>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,7 +77,7 @@ static bool add_axis(int sensor_ix, char *name_buffer);
 static float highest_frequency(float *frequencies, size_t size);
 #if MULTI_FREQ_ENABLED == 1
 static float calc_gcd(float time1, float time2);
-static void get_multi_freq_combinations(int row, int col, float* mat_period, float* actual_comb, int ix, std::vector<float>* freq_comb, std::vector<int>* mem_fact, float allowed_period);
+static void get_multi_freq_combinations(int row, int col, float* mat_period, float* actual_comb, int ix, vector<float>* freq_comb, vector<int>* mem_fact, float allowed_period);
 static void clean_multi_freq_combinations(int n, int col, float* mat_period, float* actual_comb, int ix, float* actual_max);
 static bool ei_fusion_calc_optimal_frequencies(uint8_t row, uint8_t col, float freq_objective);
 #endif
@@ -521,21 +520,21 @@ static void print_all_combinations(
     int r,
     uint32_t ingest_memory_size)
 {
-    stringstream buf;
+    string buf;
     fused_sensors_t sens;
     /* Print sensor string if requested combinations found */
     if (index == r) {
         int local_num_fusion_axis = 0;
         for (int j = 0; j < r; j++) {
 
-            buf << fusable_sensor_list[data[j]].name;
+            buf += fusable_sensor_list[data[j]].name;
             local_num_fusion_axis += fusable_sensor_list[data[j]].num_axis;
 
             if (j + 1 < r) {
-                buf << " + ";
+                buf += " + ";
             }
         }
-        sens.name = buf.str();
+        sens.name = buf;
 
         if (index == 1) {
             float frequency =
@@ -558,8 +557,8 @@ static void print_all_combinations(
             const int mem_inc_threshold = MULTI_FREQ_MAX_INC_FACTOR;
             int how_many_under_threshold = 0;
 
-            std::vector<float> found_freq_combinations;
-            std::vector<int> mem_increase_factor;
+            vector<float> found_freq_combinations;
+            vector<int> mem_increase_factor;
 
             for (int j = 0; j < r; j++) {                         // per sensors
                 for (int z = 0; z < EI_MAX_FREQUENCIES; z++) {     // per freq                
@@ -790,7 +789,7 @@ static float calc_gcd(float fnum1, float fnum2)
  * @param ix 
  * @param psens 
  */
-static void get_multi_freq_combinations(int n, int col, float* mat_period, float* actual_comb, int ix, std::vector<float>* freq_comb, std::vector<int>* mem_fact, float allowed_period)
+static void get_multi_freq_combinations(int n, int col, float* mat_period, float* actual_comb, int ix, vector<float>* freq_comb, vector<int>* mem_fact, float allowed_period)
 {   
     int i;    
 
@@ -809,7 +808,7 @@ static void get_multi_freq_combinations(int n, int col, float* mat_period, float
             return;
         }
         
-        if (std::find(std::begin(*freq_comb), std::end(*freq_comb), freq) != std::end(*freq_comb)) {  /* already present, let's check if better mem increase */
+        if (find(begin(*freq_comb), end(*freq_comb), freq) != end(*freq_comb)) {  /* already present, let's check if better mem increase */
             int j;
             for (j = 0; j < freq_comb->size(); j++) {
                 if (freq_comb->at(j) == freq) {
@@ -990,6 +989,11 @@ float ei_fusion_calc_multi_gcd(float* numbers, uint8_t how_many)
     }
 
     return (inttime1);
+}
+
+bool ei_is_fusion(void)
+{
+    return (num_fusions > 1);
 }
 
 #endif

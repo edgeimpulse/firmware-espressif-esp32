@@ -23,6 +23,8 @@
 #include <cstdio>
 
 extern "C" void spresense_time_cb(uint32_t *sec, uint32_t *nano);
+extern "C" void spresense_putchar(char cChar);
+extern "C" char spresense_getchar(void);
 
 __attribute__((weak)) EI_IMPULSE_ERROR ei_run_impulse_check_canceled() {
     return EI_IMPULSE_OK;
@@ -64,11 +66,16 @@ uint64_t ei_read_timer_us() {
 
 __attribute__((weak)) void ei_printf(const char *format, ...) {
 
+    char buffer[256];
+    int length;
     va_list myargs;
     va_start(myargs, format);
-    vprintf(format, myargs);
-
+    length = vsprintf(buffer, format, myargs);
     va_end(myargs);
+
+    for(int i = 0; i < length; i++) {
+        spresense_putchar(buffer[i]);
+    }
 }
 
 __attribute__((weak)) void ei_printf_float(float f) {
@@ -82,7 +89,12 @@ __attribute__((weak)) void ei_printf_float(float f) {
  */
 __attribute__((weak)) void ei_putchar(char cChar)
 {
-    ei_printf("%c", cChar);
+    spresense_putchar(cChar);
+}
+
+__attribute__((weak)) char ei_getchar(void)
+{
+    return spresense_getchar();
 }
 
 __attribute__((weak)) void *ei_malloc(size_t size) {
