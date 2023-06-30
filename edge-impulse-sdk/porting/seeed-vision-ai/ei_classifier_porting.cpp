@@ -67,9 +67,6 @@ uint64_t ei_read_timer_ms()
         system_time_ms += elapsed_time_ms;
         prev_tick_us = tick_us;
     }
-    else {
-        ei_printf("TMR: tmr overflow!\n");
-    }
 
     return system_time_ms;
 }

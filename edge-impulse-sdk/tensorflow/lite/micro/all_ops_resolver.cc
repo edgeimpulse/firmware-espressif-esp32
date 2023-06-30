@@ -62,6 +62,7 @@ AllOpsResolver::AllOpsResolver() {
   AddLogicalNot();
   AddLogicalOr();
   AddLogistic();
+  AddLogSoftmax();
   AddMaxPool2D();
   AddMaximum();
   AddMean();
@@ -106,6 +107,7 @@ AllOpsResolver::AllOpsResolver() {
   AddTanh();
   AddTranspose();
   AddTransposeConv();
+  AddTreeEnsembleClassifier();
   AddUnpack();
 }
 

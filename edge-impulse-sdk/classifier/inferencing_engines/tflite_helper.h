@@ -18,6 +18,7 @@
 #ifndef _EI_CLASSIFIER_INFERENCING_ENGINE_TFLITE_HELPER_H_
 #define _EI_CLASSIFIER_INFERENCING_ENGINE_TFLITE_HELPER_H_
 
+#include "edge-impulse-sdk/classifier/ei_quantize.h"
 #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE_FULL) || (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE)
 
 #if EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE_FULL
@@ -64,8 +65,9 @@ EI_IMPULSE_ERROR fill_input_tensor_from_matrix(
             }
 
             for (size_t ix = 0; ix < fmatrix->rows * fmatrix->cols; ix++) {
-                float pixel = (float)fmatrix->buffer[ix];
-                input->data.int8[ix] = static_cast<int8_t>(round(pixel / input->params.scale) + input->params.zero_point);
+                float val = (float)fmatrix->buffer[ix];
+                input->data.int8[ix] = static_cast<int8_t>(
+                    pre_cast_quantize(val, input->params.scale, input->params.zero_point, true));
             }
             break;
         }
@@ -77,9 +79,9 @@ EI_IMPULSE_ERROR fill_input_tensor_from_matrix(
             }
 
             for (size_t ix = 0; ix < fmatrix->rows * fmatrix->cols; ix++) {
-                float pixel = (float)fmatrix->buffer[ix];
-                input->data.uint8[ix] = static_cast<uint8_t>((pixel / input->params.scale) + input->params.zero_point);
-            }
+                float val = (float)fmatrix->buffer[ix];
+                input->data.uint8[ix] = static_cast<uint8_t>(
+                    pre_cast_quantize(val, input->params.scale, input->params.zero_point, false));            }
             break;
         }
         default: {

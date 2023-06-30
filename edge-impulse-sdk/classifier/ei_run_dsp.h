@@ -1262,7 +1262,8 @@ __attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, m
 
 #if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
 
-__attribute__((unused)) int extract_image_features_quantized(signal_t *signal, matrix_i8_t *output_matrix, void *config_ptr, float scale, float zero_point, const float frequency) {
+__attribute__((unused)) int extract_image_features_quantized(signal_t *signal, matrix_i8_t *output_matrix, void *config_ptr, float scale, float zero_point, const float frequency,
+                                                             int image_scaling) {
     ei_dsp_config_image_t config = *((ei_dsp_config_image_t*)config_ptr);
 
     int16_t channel_count = strcmp(config.channels, "Grayscale") == 0 ? 1 : 3;
@@ -1272,6 +1273,9 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
     const int32_t iRedToGray = (int32_t)(0.299f * 65536.0f);
     const int32_t iGreenToGray = (int32_t)(0.587f * 65536.0f);
     const int32_t iBlueToGray = (int32_t)(0.114f * 65536.0f);
+
+    static const float torch_mean[] = { 0.485, 0.456, 0.406 };
+    static const float torch_std[] = { 0.229, 0.224, 0.225 };
 
 #if defined(EI_DSP_IMAGE_BUFFER_STATIC_SIZE)
     const size_t page_size = EI_DSP_IMAGE_BUFFER_STATIC_SIZE;
@@ -1299,7 +1303,7 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
 
             if (channel_count == 3) {
                 // fast code path
-                if (scale == 0.003921568859368563f && zero_point == -128) {
+                if (scale == 0.003921568859368563f && zero_point == -128 && image_scaling == EI_CLASSIFIER_IMAGE_SCALING_NONE) {
                     int32_t r = static_cast<int32_t>(pixel >> 16 & 0xff);
                     int32_t g = static_cast<int32_t>(pixel >> 8 & 0xff);
                     int32_t b = static_cast<int32_t>(pixel & 0xff);
@@ -1310,9 +1314,24 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
                 }
                 // slow code path
                 else {
-                    float r = static_cast<float>(pixel >> 16 & 0xff) / 255.0f;
-                    float g = static_cast<float>(pixel >> 8 & 0xff) / 255.0f;
-                    float b = static_cast<float>(pixel & 0xff) / 255.0f;
+                    float r = static_cast<float>(pixel >> 16 & 0xff);
+                    float g = static_cast<float>(pixel >> 8 & 0xff);
+                    float b = static_cast<float>(pixel & 0xff);
+
+                    if (image_scaling == EI_CLASSIFIER_IMAGE_SCALING_NONE) {
+                        r /= 255.0f;
+                        g /= 255.0f;
+                        b /= 255.0f;
+                    }
+                    else if (image_scaling == EI_CLASSIFIER_IMAGE_SCALING_TORCH) {
+                        r /= 255.0f;
+                        g /= 255.0f;
+                        b /= 255.0f;
+
+                        r = (r - torch_mean[0]) / torch_std[0];
+                        g = (g - torch_mean[1]) / torch_std[1];
+                        b = (b - torch_mean[2]) / torch_std[2];
+                    }
 
                     output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(r / scale) + zero_point);
                     output_matrix->buffer[output_ix++] = static_cast<int8_t>(round(g / scale) + zero_point);
@@ -1321,7 +1340,7 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
             }
             else {
                 // fast code path
-                if (scale == 0.003921568859368563f && zero_point == -128) {
+                if (scale == 0.003921568859368563f && zero_point == -128 && image_scaling == EI_CLASSIFIER_IMAGE_SCALING_NONE) {
                     int32_t r = static_cast<int32_t>(pixel >> 16 & 0xff);
                     int32_t g = static_cast<int32_t>(pixel >> 8 & 0xff);
                     int32_t b = static_cast<int32_t>(pixel & 0xff);
@@ -1337,9 +1356,24 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
                 }
                 // slow code path
                 else {
-                    float r = static_cast<float>(pixel >> 16 & 0xff) / 255.0f;
-                    float g = static_cast<float>(pixel >> 8 & 0xff) / 255.0f;
-                    float b = static_cast<float>(pixel & 0xff) / 255.0f;
+                    float r = static_cast<float>(pixel >> 16 & 0xff);
+                    float g = static_cast<float>(pixel >> 8 & 0xff);
+                    float b = static_cast<float>(pixel & 0xff);
+
+                    if (image_scaling == EI_CLASSIFIER_IMAGE_SCALING_NONE) {
+                        r /= 255.0f;
+                        g /= 255.0f;
+                        b /= 255.0f;
+                    }
+                    else if (image_scaling == EI_CLASSIFIER_IMAGE_SCALING_TORCH) {
+                        r /= 255.0f;
+                        g /= 255.0f;
+                        b /= 255.0f;
+
+                        r = (r - torch_mean[0]) / torch_std[0];
+                        g = (g - torch_mean[1]) / torch_std[1];
+                        b = (b - torch_mean[2]) / torch_std[2];
+                    }
 
                     // ITU-R 601-2 luma transform
                     // see: https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.convert

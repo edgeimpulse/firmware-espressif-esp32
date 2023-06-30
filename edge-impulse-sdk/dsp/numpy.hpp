@@ -1731,10 +1731,10 @@ public:
         }
 
         for (size_t ix = 0; ix < matrix->rows * matrix->cols; ix++) {
-            if (min != DBL_MIN && matrix->buffer[ix] < min) {
+            if (matrix->buffer[ix] < min) {
                 matrix->buffer[ix] = min;
             }
-            else if (max != DBL_MAX && matrix->buffer[ix] > max) {
+            else if (matrix->buffer[ix] > max) {
                 matrix->buffer[ix] = max;
             }
         }

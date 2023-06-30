@@ -25,6 +25,7 @@ limitations under the License.
 #include "edge-impulse-sdk/tensorflow/lite/kernels/op_macros.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/compatibility.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/kernels/ethosu.h"
+#include "edge-impulse-sdk/tensorflow/lite/micro/kernels/tree_ensemble_classifier.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/kernels/fully_connected.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/kernels/micro_ops.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/micro_op_resolver.h"
@@ -329,6 +330,11 @@ class MicroMutableOpResolver : public MicroOpResolver {
                       tflite::ops::micro::Register_LOGISTIC(), ParseLogistic);
   }
 
+  TfLiteStatus AddLogSoftmax() {
+    return AddBuiltin(BuiltinOperator_LOG_SOFTMAX,
+                      Register_LOG_SOFTMAX(), ParseLogSoftmax);
+  }
+
   TfLiteStatus AddMaximum() {
     return AddBuiltin(BuiltinOperator_MAXIMUM,
                       tflite::ops::micro::Register_MAXIMUM(), ParseMaximum);
@@ -539,6 +545,11 @@ class MicroMutableOpResolver : public MicroOpResolver {
   TfLiteStatus AddTransposeConv() {
     return AddBuiltin(BuiltinOperator_TRANSPOSE_CONV,
                       tflite::Register_TRANSPOSE_CONV(), ParseTransposeConv);
+  }
+
+  TfLiteStatus AddTreeEnsembleClassifier() {
+    return AddCustom(tflite::GetString_TreeEnsembleClassifier(),
+                     tflite::Register_TreeEnsembleClassifier());
   }
 
   TfLiteStatus AddUnpack() {

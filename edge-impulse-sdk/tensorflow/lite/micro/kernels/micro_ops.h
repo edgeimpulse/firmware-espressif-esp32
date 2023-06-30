@@ -48,6 +48,7 @@ TfLiteRegistration Register_GATHER();
 TfLiteRegistration Register_IMAG();
 TfLiteRegistration Register_L2_POOL_2D();
 TfLiteRegistration Register_LEAKY_RELU();
+TfLiteRegistration Register_LOG_SOFTMAX();
 TfLiteRegistration Register_QUANTIZE();
 TfLiteRegistration Register_REAL();
 TfLiteRegistration Register_RFFT2D();

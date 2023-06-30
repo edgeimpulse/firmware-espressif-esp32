@@ -569,6 +569,7 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     const ei_impulse_t *impulse,
     signal_t *signal,
     ei_impulse_result_t *result,
+    void *config_ptr,
     bool debug = false)
 {
     static std::vector<Ort::Value> input_tensors;
@@ -605,7 +606,8 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     ei::matrix_i8_t a_features_matrix(1, impulse->nn_input_frame_size);
 
     // run DSP process and quantize automatically
-    int ret = extract_image_features_quantized(impulse, signal, &a_features_matrix, impulse->dsp_blocks[0].config, impulse->frequency);
+    int ret = extract_image_features_quantized(impulse, signal, &a_features_matrix, impulse->dsp_blocks[0].config, impulse->frequency,
+        impulse->learning_blocks[0].image_scaling);
     if (ret != EIDSP_OK) {
         ei_printf("ERR: Failed to run DSP process (%d)\n", ret);
         return EI_IMPULSE_DSP_ERROR;

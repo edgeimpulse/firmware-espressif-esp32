@@ -28,6 +28,7 @@
 #include "tensorflow-lite/tensorflow/lite/kernels/register.h"
 #include "tensorflow-lite/tensorflow/lite/model.h"
 #include "tensorflow-lite/tensorflow/lite/optional_debug_tools.h"
+#include "edge-impulse-sdk/tensorflow/lite/kernels/tree_ensemble_classifier.h"
 #include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "edge-impulse-sdk/classifier/inferencing_engines/tflite_helper.h"
@@ -56,6 +57,10 @@ static EI_IMPULSE_ERROR get_interpreter(ei_learning_block_config_tflite_graph_t 
         }
 
         tflite::ops::builtin::BuiltinOpResolver resolver;
+#if EI_CLASSIFIER_HAS_TREE_ENSEMBLE_CLASSIFIER
+        resolver.AddCustom("TreeEnsembleClassifier",
+            tflite::ops::custom::Register_TREE_ENSEMBLE_CLASSIFIER());
+#endif
         tflite::InterpreterBuilder builder(*new_state->model, resolver);
         builder(&new_state->interpreter);
 

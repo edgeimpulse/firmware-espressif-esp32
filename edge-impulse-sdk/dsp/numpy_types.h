@@ -582,8 +582,8 @@ typedef struct ei_signal_t {
 } // namespace ei {
 #endif // __cplusplus
 
-// required on Adafruit nRF52, it seems not to matter too much on other targets...
-#ifdef __cplusplus
+// required on Adafruit nRF52
+#if defined(__cplusplus) && defined(ARDUINO_NRF52_ADAFRUIT)
 namespace std {
     __attribute__((weak)) void __throw_bad_function_call() { while(1); };
     __attribute__((weak)) void __throw_length_error(char const*) { while(1); };

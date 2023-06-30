@@ -54,6 +54,7 @@
 #include <iomanip>
 #include <limits>
 #include <math.h>
+#include <algorithm>
 #include "pybind11/embed.h"
 #include "pybind11/numpy.h"
 #include "pybind11/stl.h"
@@ -71,6 +72,9 @@ static bool akida_initialized = false;
 static std::vector<size_t> input_shape;
 static tflite::RuntimeShape softmax_shape;
 static tflite::SoftmaxParams dummy_params;
+static int model_input_bits = 0;
+static float scale;
+static int down_scale;
 
 bool init_akida(const uint8_t *model_arr, size_t model_arr_size, bool debug)
 {
@@ -132,6 +136,32 @@ bool init_akida(const uint8_t *model_arr, size_t model_arr_size, bool debug)
     }
     // extend input by (N, ...) - hardcoded to (1, ...)
     input_shape.insert(input_shape.begin(), (size_t)1);
+
+    // get model input_bits
+    std::vector<py::object> layers = model.attr("layers").cast<std::vector<py::object>>();
+    auto input_layer = layers[0];
+    model_input_bits = input_layer.attr("input_bits").cast<int>();
+    if((model_input_bits != 8) && (model_input_bits != 4)) {
+        ei_printf("ERR: Unsupported input_bits. Expected 4 or 8 got %d\n", model_input_bits);
+        return false;
+    }
+
+    // initialize scale coefficients
+    if(model_input_bits == 8) {
+        scale = 255;
+        down_scale = 1;
+    }
+    else if(model_input_bits == 4) {
+        // these values are recommended by BrainChip
+        scale = 15;
+        down_scale = 16;
+    }
+
+    if(debug) {
+        ei_printf("INFO: Model input_bits: %d\n", model_input_bits);
+        ei_printf("INFO: Scale: %f\n", scale);
+        ei_printf("INFO: Down scale: %d\n", down_scale);
+    }
 
 #if (defined(EI_CLASSIFIER_USE_AKIDA_HARDWARE) && (EI_CLASSIFIER_USE_AKIDA_HARDWARE == 1))
     // get list of available devices
@@ -238,19 +268,31 @@ EI_IMPULSE_ERROR run_nn_inference(
      * For images BW shape is (width, height, 1)
      * For Audio shape is (width, height, 1) - spectrogram
      * TODO: test with other ML models/data types
+     * For details see:
+     * https://pybind11.readthedocs.io/en/stable/advanced/pycpp/numpy.html#direct-access
      */
     auto r = input_data.mutable_unchecked<4>();
+    float temp;
     for (py::ssize_t x = 0; x < r.shape(1); x++) {
         for (py::ssize_t y = 0; y < r.shape(2); y++) {
             for(py::ssize_t z = 0; z < r.shape(3); z++) {
-                r(0, x, y, z) = (uint8_t)(fmatrix->buffer[x * r.shape(2) * r.shape(3) + y * r.shape(3) + z] * 255.0);
+                temp = (fmatrix->buffer[x * r.shape(2) * r.shape(3) + y * r.shape(3) + z] * scale);
+                temp = std::max(0.0f, std::min(temp, 255.0f));
+                r(0, x, y, z) = (uint8_t)(temp / down_scale);
             }
         }
     }
 
     // Run inference on AKD1000
     uint64_t ctx_start_us = ei_read_timer_us();
-    py::array_t<float> potentials = model_predict(input_data);
+    py::array_t<float> potentials;
+    try {
+        potentials = model_predict(input_data);
+    }
+    catch (py::error_already_set &e) {
+        ei_printf("ERR: Inference error:\n%s\n", e.what());
+        return EI_IMPULSE_AKIDA_ERROR;
+    }
     // TODO: 'forward' is returning int8 or int32, but EI SDK supports int8 or float32 only
     // py::array_t<float> potentials = model_forward(input_data);
     uint64_t ctx_end_us = ei_read_timer_us();

@@ -135,7 +135,8 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     processed_features = (int8_t *) features_matrix.buffer;
 
     // run DSP process and quantize automatically
-    int ret = extract_image_features_quantized(signal, &features_matrix, ei_dsp_blocks[0].config, graph_config->input_scale, graph_config->input_zeropoint, impulse->frequency);
+    int ret = extract_image_features_quantized(signal, &features_matrix, impulse->dsp_blocks[0].config, graph_config->input_scale, graph_config->input_zeropoint,
+        impulse->frequency, impulse->learning_blocks[0].image_scaling);
     if (ret != EIDSP_OK) {
         ei_printf("ERR: Failed to run DSP process (%d)\n", ret);
         return EI_IMPULSE_DSP_ERROR;

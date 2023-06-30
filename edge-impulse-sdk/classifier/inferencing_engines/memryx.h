@@ -31,8 +31,7 @@
  *
  */
 #ifndef EI_CLASSIFIER_USE_MEMRYX_SOFTWARE
-#define EI_CLASSIFIER_USE_MEMRYX_SOFTWARE 1
-#define EI_CLASSIFIER_USE_MEMRYX_HARDWARE 0
+#define EI_CLASSIFIER_USE_MEMRYX_HARDWARE 1
 #endif
 
 /**
@@ -58,30 +57,46 @@
 #include <iomanip>
 #include <limits>
 #include <math.h>
+#ifdef EI_CLASSIFIER_USE_MEMRYX_SOFTWARE
 #include "pybind11/embed.h"
 #include "pybind11/numpy.h"
 #include "pybind11/stl.h"
+#else
+#include "memx/memx.h"
+#endif
 
 /* Result delivered by memryx simulator contains 3 fields, indexes for print */
 #define MX_SIM_RES_OUTPUTS 0
 #define MX_SIM_RES_LATENCY 1
 #define MX_SIM_RES_FPS     2
 
-/* brings in the `_a` literals to set args to python API */
-using namespace pybind11::literals;
-
-namespace py = pybind11;
-
 std::stringstream engine_info;
 
+static bool memryx_initialized = false;
+
+#ifdef EI_CLASSIFIER_USE_MEMRYX_SOFTWARE
+/* brings in the `_a` literals to set args to python API */
+using namespace pybind11::literals;
+namespace py = pybind11;
+/* PyBind variables for EIM with Simulator */
 static py::module_ memryx;
 static py::module_ np;
 static py::object zeroes;
 static py::object Simulator;
 static py::object model;
 static py::object device;
-static bool memryx_initialized = false;
 static std::vector<size_t> vec;
+#endif
+
+#ifdef EI_CLASSIFIER_USE_MEMRYX_HARDWARE
+/* Variables for EIM with Hardware */
+const uint8_t flow_id = 0; // flow port 0
+const uint8_t model_id = 0; // model 0
+const uint8_t group_id = 0; // MPU device group 0
+const int timeout = 0; // was 200 ms
+int argmax = 0; // index with maximum score
+#endif
+
 /* We need a workaround for softmax because
  * the MX3+ is not coming out this year, and
  * the MX3 does not support the SoftMax layer
@@ -89,26 +104,40 @@ static std::vector<size_t> vec;
 static tflite::RuntimeShape softmax_shape;
 static tflite::SoftmaxParams dummy_params;
 
+static bool verbose_debug = 0;
+
 bool init_memryx(bool debug)
 {
-    py::list path;
     constexpr char model_file_path[] = "memryx_trained.dfp";
-
 #if (defined(EI_CLASSIFIER_USE_MEMRYX_HARDWARE) && (EI_CLASSIFIER_USE_MEMRYX_HARDWARE == 1))
 #warning "Trying to use hardware"
-    /* TODO Use C++ Driver to run on the MX3 board
-     * Deploy memryx model file into temporary file
-    std::ofstream model_file(model_file_path, std::ios::out | std::ios::binary);
-    model_file.write(reinterpret_cast<const char*>(memryx_model_fbz), memryx_model_fbz_len);
-    if(model_file.bad()) {
-        ei_printf("ERR: failed to unpack model ile into %s\n", model_file_path);
-        model_file.close();
+    memx_status status = MEMX_STATUS_OK;
+    // 1. Bind MPU device group 0 as MX3:Cascade to model 0.
+    status = memx_open(model_id, group_id, MEMX_DEVICE_CASCADE);
+    if(memx_status_error(status)) {
         return false;
     }
-    model_file.close();
-     */
+    ei_printf("Memryx device opened.\n");
+
+    // 2. Download model from a DFP file to MPU device group, input and
+    // output feature map shape is auto, configured after download complete.
+    status = memx_download_model(model_id, model_file_path, 0, // model_idx = 0
+                                 MEMX_DOWNLOAD_TYPE_WTMEM_AND_MODEL);
+    if(memx_status_error(status)) {
+        return false;
+    }
+    ei_printf("Memryx model downloaded.\n");
+
+    // 3. Enable data transfer of this model to device. Set to no wait here
+    // since driver will go to data transfer state eventually.
+    status = memx_set_stream_enable(model_id, 0);
+    if(memx_status_error(status)) {
+        return false;
+    }
+    ei_printf("Data streaming to and from the MX3 board is enabled\n");
 #elif (defined(EI_CLASSIFIER_USE_MEMRYX_SOFTWARE) && (EI_CLASSIFIER_USE_MEMRYX_SOFTWARE == 1))
 #warning "MEMRYX model will be run in SIMULATION mode (not on real hardware)!"
+    py::list path;
     // import Python's memryx module
     try {
         memryx = py::module_::import("memryx");
@@ -153,9 +182,122 @@ bool init_memryx(bool debug)
  * @return     The ei impulse error.
  */
 #if (defined(EI_CLASSIFIER_USE_MEMRYX_HARDWARE) && (EI_CLASSIFIER_USE_MEMRYX_HARDWARE == 1))
-#warning "About to run inference on MX3 hardware"
+EI_IMPULSE_ERROR run_nn_inference(
+    const ei_impulse_t *impulse,
+    ei::matrix_t *fmatrix,
+    ei_impulse_result_t *result,
+    void *config_ptr,
+    bool debug = false)
+{
+    memx_status status = MEMX_STATUS_OK;
+    int32_t ifmap_height, ifmap_width, ifmap_channel_number, ifmap_format;
+    int32_t ofmap_height, ofmap_width, ofmap_channel_number, ofmap_format;
+    uint64_t ctx_start_us = 0;
+    uint64_t ctx_end_us = 0;
+
+    // check if we've initialized the interpreter and device?
+    if (memryx_initialized == false) {
+        if(init_memryx(debug) == false) {
+            return EI_IMPULSE_MEMRYX_ERROR;
+        }
+        memryx_initialized = true;
+    }
+
+    /* 4. get input shape - Not needed during runtime, available only for debugging */
+    if(verbose_debug) {
+        status = memx_get_ifmap_size(model_id, flow_id, &ifmap_height, &ifmap_width, &ifmap_channel_number, &ifmap_format);
+        ei_printf("status = %d, ifmap shape = (%d, %d, %d), format = %d\n",
+                   status, ifmap_height, ifmap_width, ifmap_channel_number, ifmap_format);
+    }
+
+    // 5. get output shape
+    status = memx_get_ofmap_size(model_id, flow_id, &ofmap_height, &ofmap_width, &ofmap_channel_number, &ofmap_format);
+    if(debug) {
+        ei_printf("status = %d, ofmap shape = (%d, %d, %d), format = %d\n",
+                  status, ofmap_height, ofmap_width, ofmap_channel_number, ofmap_format);
+    }
+    if(memx_status_error(status)) {
+        return EI_IMPULSE_MEMRYX_ERROR;
+    }
+
+    // 6. Prepare input and output buffers
+    float* ofmap = new float [ofmap_width * ofmap_height * ofmap_channel_number];
+    float* ifmap = (float*)fmatrix->buffer;
+
+    if(verbose_debug) {
+        for(int fidx = 0; fidx < (ofmap_width*ofmap_height); fidx++) {
+            ei_printf("%f\t", fmatrix->buffer[fidx]);
+            if(!(fidx % ofmap_width)) ei_printf("\n");
+        }
+    }
+
+    // TODO stream_ifmap only copies buffer to MX3 board,
+    // we need a different approach to measure latency
+    ctx_start_us = ei_read_timer_us();
+    // 7. Stream inputs to device and start inference.
+    status = memx_stream_ifmap(model_id, 0, ifmap, timeout);
+    ctx_end_us = ei_read_timer_us();
+    if(memx_status_error(status)) {
+        return EI_IMPULSE_MEMRYX_ERROR;
+    }
+
+    result->timing.classification_us = ctx_end_us - ctx_start_us;
+    result->timing.classification = (int)(result->timing.classification_us / 1000);
+
+    engine_info.str("");
+    engine_info << "Inferences per second: " << (1000000 / result->timing.classification_us);
+
+    // 6. Stream output results from device after inference
+    status = memx_stream_ofmap(model_id, 0, ofmap, timeout);
+    if(debug) {
+        ei_printf(" memx_stream_ofmap (status=%d)\n", status);
+    }
+    if(memx_status_error(status)) {
+        return EI_IMPULSE_MEMRYX_ERROR;
+    }
+
+    // init softmax shape
+    std::vector<size_t> output_shape = {12,12,2};
+    softmax_shape.BuildFrom(output_shape);
+    // dumy beta parameter for softmax purposes
+    dummy_params.beta = 1;
+
+    // apply softmax, becuase Akida is not supporting this operation
+    tflite::reference_ops::Softmax(dummy_params, softmax_shape, ofmap, softmax_shape, ofmap);
+
+    // handle inference outputs
+    if (impulse->object_detection) {
+        switch (impulse->object_detection_last_layer) {
+            case EI_CLASSIFIER_LAST_LAYER_FOMO: {
+                ei_printf("FOMO executed on Memryx\n");
+                fill_result_struct_f32_fomo(
+                    impulse,
+                    result,
+                    ofmap,
+                    impulse->input_width / 8,
+                    impulse->input_height / 8);
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_SSD: {
+                ei_printf("Mobilenet SSD executed on Memryx\n");
+                break;
+            }
+            default: {
+                ei_printf("ERR: Unsupported object detection last layer (%d)\n",
+                    impulse->object_detection_last_layer);
+                return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+            }
+        }
+    }
+    else {
+        fill_result_struct_f32(impulse, result, ofmap, debug);
+    }
+
+    delete ofmap;
+    // Device is closed only at EIM exit, therefore we do not use memx_close()
+    return EI_IMPULSE_OK;
+}
 #elif (defined(EI_CLASSIFIER_USE_MEMRYX_SOFTWARE) && (EI_CLASSIFIER_USE_MEMRYX_SOFTWARE == 1))
-#warning "About to run inference using Memryx simulator"
 EI_IMPULSE_ERROR run_nn_inference(
     const ei_impulse_t *impulse,
     ei::matrix_t *fmatrix,

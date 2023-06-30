@@ -305,7 +305,9 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     ei::matrix_i8_t features_matrix(1, impulse->nn_input_frame_size, input.data.int8);
 
     // run DSP process and quantize automatically
-    int ret = extract_image_features_quantized(signal, &features_matrix, ei_dsp_blocks[0].config, input.params.scale, input.params.zero_point, impulse->frequency);
+    int ret = extract_image_features_quantized(signal, &features_matrix, impulse->dsp_blocks[0].config, input.params.scale, input.params.zero_point,
+        impulse->frequency, impulse->learning_blocks[0].image_scaling);
+
     if (ret != EIDSP_OK) {
         ei_printf("ERR: Failed to run DSP process (%d)\n", ret);
         return EI_IMPULSE_DSP_ERROR;
@@ -317,7 +319,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
     result->timing.dsp = (int)(result->timing.dsp_us / 1000);
-
 
     if (debug) {
         ei_printf("Features (%d ms.): ", result->timing.dsp);
@@ -340,7 +341,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
         static_cast<uint8_t*>(p_tensor_arena.get()),
         result,
         debug);
-
     if (run_res != EI_IMPULSE_OK) {
         return run_res;
     }
