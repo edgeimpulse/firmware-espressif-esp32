@@ -104,10 +104,10 @@ protected:
     std::string upload_host = "host";
     std::string upload_path = "path";
     std::string upload_api_key = "0123456789abcdef";
-    
+
 #if MULTI_FREQ_ENABLED == 1
     uint8_t fusioning;
-    uint32_t sample_interval;    
+    uint32_t sample_interval;
 #endif
 
     EiDeviceMemory *memory;
@@ -349,17 +349,13 @@ public:
     /**
 	 * @brief      Create resolution list for snapshot setting
 	 *             The studio and daemon require this list
-	 * @param      snapshot_list       Place pointer to resolution list
-	 * @param      snapshot_list_size  Write number of resolutions here
 	 *
-	 * @return     False if all went ok
+	 * @return     EiSnapshotProperties
 	 */
-    virtual bool get_snapshot_list(
-        const ei_device_snapshot_resolutions_t **snapshot_list,
-        size_t *snapshot_list_size,
-        const char **color_depth)
+    virtual EiSnapshotProperties get_snapshot_list()
     {
-        return true;
+        EiSnapshotProperties props;
+        return props;
     }
 
     virtual uint32_t get_data_output_baudrate(void)
@@ -389,7 +385,7 @@ public:
 	uint32_t actual_timer;
     std::vector<float> multi_sample_interval;
     void (*sample_multi_read_callback)(uint8_t);
-    
+
     virtual bool start_multi_sample_thread(void (*sample_multi_read_cb)(uint8_t), float* fusion_sample_interval_ms, uint8_t num_fusioned)
     {
         uint8_t i;
@@ -417,7 +413,7 @@ public:
         * TODO
         * start timer/thread
         */
-       
+
         return false;
     }
 
@@ -431,7 +427,7 @@ public:
         return sample_interval;
     }
 
-#endif 
+#endif
 
     virtual void set_state(EiState)
     {

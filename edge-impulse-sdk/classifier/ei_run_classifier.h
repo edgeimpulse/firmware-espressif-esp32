@@ -67,17 +67,6 @@
 void*   __dso_handle = (void*) &__dso_handle;
 #endif
 
-// EI_CLASSIFIER_CALIBRATION_ENABLED needs to be added to new
-// model metadata, since we are getting rid of macro for sensors
-// (multiple impulses means we can have multiple sensors)
-// for now we just enable it if EI_CLASSIFIER_SENSOR is present and
-// is microphone (performance calibration only works for mic).
-#if defined(EI_CLASSIFIER_SENSOR) && (EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_MICROPHONE)
-#define EI_CLASSIFIER_CALIBRATION_ENABLED 1
-#else
-#define EI_CLASSIFIER_CALIBRATION_ENABLED 0
-#endif
-
 #ifdef __cplusplus
 namespace {
 #endif // __cplusplus
@@ -204,7 +193,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse(const ei_impulse_t *impulse,
                                             bool debug = false)
 {
 
-#if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL)) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI
+#if (EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL)) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI
     // Shortcut for quantized image models
     ei_learning_block_t block = impulse->learning_blocks[0];
     if (can_run_classifier_image_quantized(impulse, block) == EI_IMPULSE_OK) {
@@ -482,8 +471,9 @@ __attribute__((unused)) static EI_IMPULSE_ERROR can_run_classifier_image_quantiz
         return EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES;
     }
 
-        // Check if we have a quantized NN Input layer (input is always quantized for DRP-AI)
-    if (impulse->quantized != 1) {
+    // Check if we have a quantized NN Input layer (input is always quantized for DRP-AI)
+    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)block_ptr.config;
+    if (block_config->quantized != 1) {
         return EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES;
     }
 
@@ -495,10 +485,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR can_run_classifier_image_quantiz
     return EI_IMPULSE_OK;
 }
 
-#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL)
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL)
 
 /**
- * Special function to run the classifier on images, only works on TFLite models (either interpreter, EON, tensaiflow, drpai or tidl)
+ * Special function to run the classifier on images, only works on TFLite models (either interpreter, EON, tensaiflow, drpai, tidl, memryx)
  * that allocates a lot less memory by quantizing in place. This only works if 'can_run_classifier_image_quantized'
  * returns EI_IMPULSE_OK.
  */
@@ -513,7 +503,7 @@ extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(
     return run_nn_inference_image_quantized(impulse, signal, result, impulse->learning_blocks[0].config, debug);
 }
 
-#endif // #if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
+#endif // #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
 
 /* Public functions ------------------------------------------------------- */
 

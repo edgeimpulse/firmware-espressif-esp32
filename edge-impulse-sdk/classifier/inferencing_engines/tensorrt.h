@@ -60,7 +60,7 @@ EI_IMPULSE_ERROR run_nn_inference(
     ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
     ei_config_tflite_graph_t *graph_config = (ei_config_tflite_graph_t*)block_config->graph_config;
 
-    #if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1
+    #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
     #error "TensorRT requires an unquantized network"
     #endif
 

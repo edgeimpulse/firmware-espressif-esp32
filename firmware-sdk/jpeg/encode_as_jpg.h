@@ -112,12 +112,16 @@ static int encode_bw_signal_as_jpg_common(signal_t *signal, int width, int heigh
         // each call
 
         int offset = jpe.x + (jpe.y * width);
-        rc = signal->get_data(offset, buf_len, encode_buffer);
+
+        int available_pixels_to_read = signal->total_length - offset;
+        int pixels_to_read = (available_pixels_to_read < buf_len) ? available_pixels_to_read : buf_len;
+
+        rc = signal->get_data(offset, pixels_to_read, encode_buffer);
         if (rc != 0) {
             goto cleanup;
         }
 
-        for (size_t ix = 0; ix < buf_len; ix++) {
+        for (int ix = 0; ix < buf_len; ix++) {
             encode_buffer_u8[ix] = static_cast<uint32_t>(encode_buffer[ix]) & 0xff;
         }
 
@@ -211,12 +215,15 @@ static int encode_rgb888_signal_as_jpg_common(signal_t *signal, int width, int h
         // pixel offset
         int offset = jpe.x  + (jpe.y * width);
 
-        rc = signal->get_data(offset, buf_len, encode_buffer);
+        int available_pixels_to_read = signal->total_length - offset;
+        int pixels_to_read = (available_pixels_to_read < buf_len) ? available_pixels_to_read : buf_len;
+
+        rc = signal->get_data(offset, pixels_to_read, encode_buffer);
         if (rc != 0) {
             goto cleanup;
         }
 
-        for (size_t ix = 0; ix < buf_len; ix++) {
+        for (int ix = 0; ix < buf_len; ix++) {
             uint32_t pixel = static_cast<uint32_t>(encode_buffer[ix]);
             // pixel pointer to byte pointer
             size_t out_pix_ptr = ix * bytePp;
@@ -317,12 +324,15 @@ static int encode_rgb565_signal_as_jpg_common(signal_t *signal, int width, int h
         // pixel offset
         int offset = jpe.x  + (jpe.y * width);
 
-        rc = signal->get_data(offset, buf_len, encode_buffer);
+        int available_pixels_to_read = signal->total_length - offset;
+        int pixels_to_read = (available_pixels_to_read < buf_len) ? available_pixels_to_read : buf_len;
+
+        rc = signal->get_data(offset, pixels_to_read, encode_buffer);
         if (rc != 0) {
             goto cleanup;
         }
 
-        for (size_t ix = 0; ix < buf_len; ix++) {
+        for (int ix = 0; ix < pixels_to_read; ix++) {
             uint32_t pixel = static_cast<uint32_t>(encode_buffer[ix]);
             // pixel pointer to byte pointer
             size_t out_pix_ptr = ix * bytePp;

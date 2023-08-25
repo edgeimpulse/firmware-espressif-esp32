@@ -38,7 +38,7 @@ void ei_microphone_inference_reset_buffers(void);
 int ei_microphone_inference_get_data(size_t offset, size_t length, float *out_ptr);
 bool ei_microphone_inference_end(void);
 
-static int i2s_init(uint32_t sampling_rate);
-static int i2s_deinit(void);
+int i2s_init(uint32_t sampling_rate);
+int i2s_deinit(void);
 
 #endif

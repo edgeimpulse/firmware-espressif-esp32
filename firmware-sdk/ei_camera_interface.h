@@ -31,28 +31,51 @@ public:
      * @brief Call to driver to return an image encoded in RGB88
      * Format should be Big Endian, or in other words, if your image
      * pointer is indexed as a char*, then image[0] is R, image[1] is G
-     * image[2] is B, and image[3] is R again (no padding / word alignment) 
-     * 
-     * @param image Point to output buffer for image.  32 bit for word alignment on some platforms 
-     * @param image_size Size of buffer allocated ( should be 3 * width * height ) 
-     * @return true If successful 
-     * @return false If not successful 
+     * image[2] is B, and image[3] is R again (no padding / word alignment)
+     *
+     * @param image Point to output buffer for image.  32 bit for word alignment on some platforms
+     * @param image_size Size of buffer allocated ( should be 3 * width * height )
+     * @return true If successful
+     * @return false If not successful
      */
     virtual bool ei_camera_capture_rgb888_packed_big_endian(
         uint8_t *image,
-        uint32_t image_size) = 0; //pure virtual.  You must provide an implementation
+        uint32_t image_size)
+        {
+            // virtual. You must provide an implementation - if your camera supports color
+            return true;
+        }
+
+    /**
+     * @brief Call to driver to return an image encoded in Grayscale
+     * Format should be Big Endian, or in other words, if your image
+     * pointer is indexed as a char*, then image[0] is R, image[1] is G
+     * image[2] is B, and image[3] is R again (no padding / word alignment)
+     *
+     * @param image Point to output buffer for image.  32 bit for word alignment on some platforms
+     * @param image_size Size of buffer allocated ( should be 1 * width * height )
+     * @return true If successful
+     * @return false If not successful
+     */
+    virtual bool ei_camera_capture_grayscale_packed_big_endian(
+        uint8_t *image,
+        uint32_t image_size)
+        {
+            // virtual. You must provide an implementation - if your camera supports grayscale
+            return false;
+        }
 
     /**
      * @brief Get the min resolution supported by camera
-     * 
-     * @return ei_device_snapshot_resolutions_t 
+     *
+     * @return ei_device_snapshot_resolutions_t
      */
     virtual ei_device_snapshot_resolutions_t get_min_resolution(void) = 0;
 
     /**
      * @brief Get the list of supported resolutions, ie. not requiring
      * any software processing like crop or resize
-     * 
+     *
      * @param res pointer to store the list of resolutions
      * @param res_num pointer to a variable that will contain size of the res list
      */
@@ -60,7 +83,7 @@ public:
 
     /**
      * @brief Set the camera resolution to desired width and height
-     * 
+     *
      * @param res struct with desired width and height of the snapshot
      * @return true if resolution set successfully
      * @return false if something went wrong
@@ -73,12 +96,12 @@ public:
      * (from the list of natively supported)
      * Usually required resolutions are smaller or the same as min camera resolution, because
      * many cameras support much bigger resolutions that required in TinyML models.
-     * 
+     *
      * @param required_width required width of snapshot
      * @param required_height required height of snapshot
      * @return ei_device_snapshot_resolutions_t returns
      * the best match of sensor supported resolutions
-     * to user specified resolution 
+     * to user specified resolution
      */
     virtual ei_device_snapshot_resolutions_t search_resolution(uint32_t required_width, uint32_t required_height)
     {
@@ -111,11 +134,11 @@ public:
     /**
      * @brief Call to driver to initialize camera
      * to capture images in required resolution
-     * 
+     *
      * @param width image width size, in pixels
-     * @param height image height size, in pixels 
-     * @return true if successful 
-     * @return false if not successful 
+     * @param height image height size, in pixels
+     * @return true if successful
+     * @return false if not successful
      */
 
     virtual bool init(uint16_t width, uint16_t height)
@@ -126,9 +149,9 @@ public:
     /**
      * @brief Call to driver to deinitialize camera
      * and release all resources (fb, etc).
-     * 
-     * @return true if successful 
-     * @return false if not successful 
+     *
+     * @return true if successful
+     * @return false if not successful
      */
 
     virtual bool deinit()
@@ -137,10 +160,24 @@ public:
     }
 
     /**
+     * @brief Provides pointer to a framebuffer
+     * if camera framebuffer is not available
+     * a dedicated framebuffer needs to be
+     * created manually
+     *
+     * @return EiCamera*
+     */
+    virtual bool get_fb_ptr(uint8_t** fb_ptr)
+    {
+        return false;
+    }
+
+    /**
      * @brief Implementation must provide a singleton getter
-     * 
-     * @return EiCamera* 
+     *
+     * @return EiCamera*
      */
     static EiCamera *get_camera();
+
 };
 #endif /* EI_CAMERA_INTERFACE_H */

@@ -1206,7 +1206,7 @@ __attribute__((unused)) int extract_image_features(signal_t *signal, matrix_t *o
     return EIDSP_OK;
 }
 
-#if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
+#if (EI_CLASSIFIER_QUANTIZATION_ENABLED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
 
 __attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, matrix_u8_t *output_matrix, void *config_ptr, const float frequency) {
     ei_dsp_config_image_t config = *((ei_dsp_config_image_t*)config_ptr);
@@ -1258,9 +1258,9 @@ __attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, m
     return EIDSP_OK;
 }
 
-#endif //(EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
+#endif //(EI_CLASSIFIER_QUANTIZATION_ENABLED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
 
-#if (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
+#if (EI_CLASSIFIER_QUANTIZATION_ENABLED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
 
 __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, matrix_i8_t *output_matrix, void *config_ptr, float scale, float zero_point, const float frequency,
                                                              int image_scaling) {
@@ -1388,7 +1388,7 @@ __attribute__((unused)) int extract_image_features_quantized(signal_t *signal, m
     }
     return EIDSP_OK;
 }
-#endif // (EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
+#endif // (EI_CLASSIFIER_QUANTIZATION_ENABLED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_DRPAI)
 
 /**
  * Clear all state regarding continuous audio. Invoke this function after continuous audio loop ends.

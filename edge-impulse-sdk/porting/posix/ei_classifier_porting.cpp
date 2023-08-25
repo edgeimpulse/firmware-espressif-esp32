@@ -15,7 +15,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "../ei_classifier_porting.h"
+#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #if EI_PORTING_POSIX == 1
 
 #include <inttypes.h>

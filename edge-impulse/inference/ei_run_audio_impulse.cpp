@@ -44,8 +44,6 @@ static inference_state_t state = INFERENCE_STOPPED;
 static uint64_t last_inference_ts = 0;
 static bool continuous_mode = false;
 static bool debug_mode = false;
-static float samples_circ_buff[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE];
-static int samples_wr_index = 0;
 
 static void display_results(ei_impulse_result_t* result)
 {
@@ -174,16 +172,15 @@ void ei_start_impulse(bool continuous, bool debug, bool use_max_uart_speed)
     }
 
     ei_stop_impulse();
-    
+
 }
 
-void ei_stop_impulse(void) 
+void ei_stop_impulse(void)
 {
     if(state != INFERENCE_STOPPED) {
         ei_printf("Inferencing stopped by user\r\n");
         // EiDevice.set_state(eiStateFinished);
         /* reset samples buffer */
-        samples_wr_index = 0;
         ei_microphone_inference_end();
         run_classifier_deinit();
     }

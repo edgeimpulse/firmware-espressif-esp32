@@ -67,7 +67,6 @@ static uint32_t samples_required;
 static uint32_t current_sample;
 static uint32_t audio_sampling_frequency = 16000;
 
-//static signed short *inference_buffers[2];
 static inference_t inference;
 
 static unsigned char ei_mic_ctx_buffer[1024];
@@ -131,7 +130,7 @@ static void capture_samples(void* arg) {
 
     if (bytes_read <= 0) {
       ESP_LOGE(TAG, "Error in I2S read : %d", bytes_read);
-    } 
+    }
     else {
         if (bytes_read < i2s_bytes_to_read) {
         ESP_LOGW(TAG, "Partial I2S read");
@@ -141,7 +140,7 @@ static void capture_samples(void* arg) {
         for (int x = 0; x < i2s_bytes_to_read/2; x++) {
             sampleBuffer[x] = (int16_t)(sampleBuffer[x]) * 8;
         }
-        
+
         // see if are recording samples for ingestion
         // or inference and send them their way
         if (record_status == 1) {
@@ -163,7 +162,7 @@ static void finish_and_upload(char *filename, uint32_t sample_length_ms) {
 
     EiDeviceESP32* dev = static_cast<EiDeviceESP32*>(EiDeviceESP32::get_device());
     EiDeviceMemory* mem = dev->get_memory();
-    
+
     ei_printf("Done sampling, total bytes collected: %u\n", current_sample*2);
 
     dev->set_state(eiStateUploading);
@@ -277,7 +276,7 @@ bool ei_microphone_record(uint32_t sample_length_ms, uint32_t start_delay_ms, bo
 
     if(mem->erase_sample_data(0, (samples_required << 1) + 4096) != ((samples_required << 1) + 4096)) {
         return false;
-    }    
+    }
 
     vTaskDelay(start_delay_ms / portTICK_RATE_MS);
 
@@ -297,25 +296,25 @@ bool ei_microphone_record(uint32_t sample_length_ms, uint32_t start_delay_ms, bo
 bool ei_microphone_inference_start(uint32_t n_samples, float interval_ms)
 {
 
-    inference.buffers[0] = (int16_t *)malloc(n_samples * sizeof(int16_t));
+    inference.buffers[0] = (int16_t *)ei_malloc(n_samples * sizeof(int16_t));
 
     if(inference.buffers[0] == NULL) {
         return false;
     }
 
-    inference.buffers[1] = (int16_t *)malloc(n_samples * sizeof(int16_t));
+    inference.buffers[1] = (int16_t *)ei_malloc(n_samples * sizeof(int16_t));
 
     if(inference.buffers[1] == NULL) {
-        free(inference.buffers[0]);
+        ei_free(inference.buffers[0]);
         return false;
     }
 
     uint32_t sample_buffer_size = (n_samples / 100) * sizeof(int16_t);
-    sampleBuffer = (int16_t *)malloc(sample_buffer_size);
+    sampleBuffer = (int16_t *)ei_malloc(sample_buffer_size);
 
     if(sampleBuffer == NULL) {
-        free(inference.buffers[0]);
-        free(inference.buffers[1]);
+        ei_free(inference.buffers[0]);
+        ei_free(inference.buffers[1]);
         return false;
     }
 
@@ -394,9 +393,9 @@ bool ei_microphone_inference_end(void)
     record_status = 0;
     ei_sleep(100);
     i2s_deinit();
-    free(inference.buffers[0]);
-    free(inference.buffers[1]);
-    free(sampleBuffer);
+    ei_free(inference.buffers[0]);
+    ei_free(inference.buffers[1]);
+    ei_free(sampleBuffer);
     return 0;
 }
 
@@ -429,7 +428,7 @@ bool ei_microphone_sample_start(void)
 
     is_uploaded = false;
 
-    sampleBuffer = (int16_t *)malloc(mem->block_size);
+    sampleBuffer = (int16_t *)ei_malloc(mem->block_size);
 
     if (sampleBuffer == NULL) {
         return false;
@@ -459,7 +458,7 @@ bool ei_microphone_sample_start(void)
     }
 
     // load the first page in flash...
-    uint8_t *page_buffer = (uint8_t*)malloc(mem->block_size);
+    uint8_t *page_buffer = (uint8_t*)ei_malloc(mem->block_size);
     if (!page_buffer) {
         ei_printf("Failed to allocate a page buffer to write the hash\n");
         return false;
@@ -511,7 +510,7 @@ bool ei_microphone_sample_start(void)
     return true;
 }
 
-static int i2s_init(uint32_t sampling_rate) {
+int i2s_init(uint32_t sampling_rate) {
   // Start listening for audio: MONO @ 8/16KHz
   i2s_config_t i2s_config = {
       .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_TX),
@@ -552,7 +551,7 @@ static int i2s_init(uint32_t sampling_rate) {
   return int(ret);
 }
 
-static int i2s_deinit(void) {
+int i2s_deinit(void) {
     i2s_driver_uninstall((i2s_port_t)1); //stop & destroy i2s driver
     return 0;
 }

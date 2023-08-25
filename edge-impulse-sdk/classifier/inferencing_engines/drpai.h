@@ -39,26 +39,27 @@
 #include <unistd.h>
 #include <vector>
 
+#include <model-parameters/model_metadata.h>
+
 #if ((EI_CLASSIFIER_OBJECT_DETECTION == 1) && (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI))
+// For a YOLOV5_V5_DRPAI model we ran the unsupported layers with TF
 #include <thread>
-#include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/interpreter.h"
-#include "tensorflow/lite/kernels/register.h"
-#include "tensorflow/lite/model.h"
-#include "tensorflow/lite/optional_debug_tools.h"
+#include "tensorflow-lite/tensorflow/lite/c/common.h"
+#include "tensorflow-lite/tensorflow/lite/interpreter.h"
+#include "tensorflow-lite/tensorflow/lite/kernels/register.h"
+#include "tensorflow-lite/tensorflow/lite/model.h"
+#include "tensorflow-lite/tensorflow/lite/optional_debug_tools.h"
 #endif
-
-#include <linux/drpai.h>
-
-#include <tflite-model/drpai_model.h>
-
-#include "edge-impulse-sdk/classifier/ei_run_dsp.h"
-#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
+#include "edge-impulse-sdk/tensorflow/lite/kernels/tree_ensemble_classifier.h"
 #include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
+#include "edge-impulse-sdk/classifier/ei_run_dsp.h"
 #include "edge-impulse-sdk/porting/ei_logging.h"
 
-#include <model-parameters/model_metadata.h>
+#include <linux/drpai.h>
+#include <tflite-model/drpai_model.h>
+
+
 
 /*****************************************
  * Macro

@@ -38,7 +38,7 @@ extern char* ei_classifier_inferencing_categories[];
  *
  * @return     true if user requested stop
  */
-extern bool ei_user_invoke_stop_lib(void)
+__attribute__((weak)) bool ei_user_invoke_stop_lib(void)
 {
     char ch;
     while(1) {

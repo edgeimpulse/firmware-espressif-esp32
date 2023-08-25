@@ -257,7 +257,7 @@ EI_IMPULSE_ERROR run_nn_inference(
     return EI_IMPULSE_OK;
 }
 
-#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
 /**
  * Special function to run the classifier on images, only works on TFLite models (either interpreter or EON or for tensaiflow)
  * that allocates a lot less memory by quantizing in place. This only works if 'can_run_classifier_image_quantized'
@@ -349,7 +349,7 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 
     return EI_IMPULSE_OK;
 }
-#endif // EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1
+#endif // EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
 
 __attribute__((unused)) int extract_tflite_eon_features(signal_t *signal, matrix_t *output_matrix, void *config_ptr, const float frequency) {
     ei_dsp_config_tflite_eon_t *dsp_config = (ei_dsp_config_tflite_eon_t*)config_ptr;
@@ -371,6 +371,8 @@ __attribute__((unused)) int extract_tflite_eon_features(signal_t *signal, matrix
         .output_data_tensor = 0,
         .output_labels_tensor = 255,
         .output_score_tensor = 255,
+        .quantized = 0,
+        .compiled = 1,
         .graph_config = &ei_config_tflite_graph_0
     };
 

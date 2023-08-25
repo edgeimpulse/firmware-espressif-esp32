@@ -1819,7 +1819,6 @@ int JPEGAddMCU(JPEGIMAGE *pJPEG, JPEGENCODE *pEncode, uint8_t *pPixels, int iPit
             pJPEG->pfnWrite(&pJPEG->JPEGFile, pJPEG->ucFileBuf, iLen);
             pJPEG->iDataSize += iLen;
 
-            unsigned char *ptr = pJPEG->pc.pOut;
             pJPEG->pc.pOut = pJPEG->ucFileBuf;
             for (int i = 0; i < len_diff; i++) {
                 *pJPEG->pc.pOut++ = pJPEG->ucFileBuf[iLen + i];

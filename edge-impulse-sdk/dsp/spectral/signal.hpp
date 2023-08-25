@@ -24,6 +24,7 @@
 
 #include "edge-impulse-sdk/dsp/ei_vector.h"
 #include <assert.h>
+#include <string.h>
 
 namespace ei {
 
@@ -85,42 +86,36 @@ public:
 
     struct sosfilt {
         const float *coeff; // 6 * num_sections coefficients
-        float *zi; // 2 * num_sections initial conditions
+        float* zi;
+        fvec zi_vec; // 2 * num_sections initial conditions
         size_t num_sections;
 
         sosfilt(const float *coeff_, const float *zi_, size_t num_sections_)
-            : coeff(coeff_)
-            , num_sections(num_sections_)
+            : coeff(coeff_),
+              zi_vec(zi_, zi_ + (num_sections_ * 2)),
+              num_sections(num_sections_)
         {
-            zi = (float *)ei_calloc(2 * num_sections, sizeof(float));
-            memcpy(zi, zi_, 2 * num_sections * sizeof(float));
-        }
-
-        ~sosfilt()
-        {
-            ei_free(zi);
+            zi = zi_vec.data();
         }
 
         /**
          * @brief IIR filters in second-order sections.
          * This is the counterpart of scipy.signal.sosfilt .
          * @param input Input signal
-         * @param output Output signal
-         * @param sos Second-order section coefficients
-         * @param zi Initial conditions
+         * @param output Output signal. Can be the same as input for in place
+         * @param x_size Minimum size of input and output signal
          */
-        void run(const float *x, const size_t x_size, fvec &y)
+        void run(const float *input, const size_t size, float* output)
         {
-            assert(y.size() >= x_size);
             assert(num_sections > 0);
 
-            iir2(x, y.data(), x_size, coeff, coeff + 3, zi);
+            iir2(input, output, size, coeff, coeff + 3, zi);
 
             for (size_t sect = 1; sect < num_sections; sect++) {
                 iir2(
-                    y.data(),
-                    y.data(),
-                    y.size(),
+                    output,
+                    output,
+                    size,
                     coeff + sect * 6,
                     coeff + sect * 6 + 3,
                     zi + sect * 2);
@@ -155,7 +150,7 @@ public:
         sos.init(input[0]);
 
         fvec filtered(input_size);
-        sos.run(input, input_size, filtered);
+        sos.run(input, input_size, filtered.data());
 
         size_t expected_size = get_decimated_size(input_size, factor);
         assert(output_size >= expected_size);
@@ -222,7 +217,6 @@ public:
         }
     }
 
-    // https://www.tutorialspoint.com/cplusplus-program-to-find-gcd
     static int gcd(int a, int b)
     {
         if (b == 0)
@@ -237,12 +231,13 @@ public:
      * @param y Output signal
      * @param h FIR coefficients
      */
-    static void upfirdn(const fvec &x, fvec &y, int up, int down, const fvec &h)
+    static void upfirdn(const float * x, size_t x_size, fvec &y, int up, int down, const fvec &h)
     {
         assert(up > 0);
         assert(down > 0);
         assert(h.size() > 0);
 
+#if 0 // bug in optimized version
         const int N = (h.size() - 1) / 2;
 
         for (size_t n = 0; n < y.size(); n++) {
@@ -255,16 +250,48 @@ public:
             }
             y[n] = acc;
         }
+#else
+        int nx = x_size;
+        int nh = h.size();
+
+        // Upsample the input signal by inserting zeros
+        fvec r(up * nx);
+        for (int i = 0; i < nx; i++)
+        {
+            r[i * up] = x[i];
+        }
+
+        // Filter the upsampled signal using the given filter coefficients
+        fvec z(nh + up * nx - 1);
+        for (int i = 0; i < up * nx; i++)
+        {
+            for (int j = 0; j < nh; j++)
+            {
+                if (i - j >= 0 && i - j < up * nx)
+                {
+                    z[i] += r[i - j] * h[j];
+                }
+            }
+        }
+
+        // Downsample the filtered signal by skipping samples
+        int skip = (nh - 1) / 2;
+        for (size_t i = 0; i < y.size(); i++)
+        {
+            y[i] = z[i * down + skip];
+        }
+#endif
+
     }
 
     /**
      * @brief Resample using a polyphase FIR.
      * This is the counterpart of scipy.signal.resample_poly.
      * @param input Input signal
-     * @param output Output signal
+     * @param output Output signal, will be moved from an internal vector sized correctly.
      * @param window FIR coefficients. e.g. signal.firwin(2 * half_len + 1, f_c, window=('kaiser', 5.0))
      */
-    static void resample_poly(const fvec &input, fvec &output, int up, int down, const fvec &window)
+    static void resample_poly(const float* input, size_t input_size, fvec &output, int up, int down, const fvec &window)
     {
         assert(up > 0);
         assert(down > 0);
@@ -275,20 +302,19 @@ public:
         down /= gcd_up_down;
 
         if (up == 1 && down == 1) {
-            output = input;
+            // output = std::move(fvec(input, input + input_size));
+            output = fvec(input, input + input_size);
             return;
         }
 
-        int n_out = (input.size() * up);
+        int n_out = (input_size * up);
         n_out = n_out / down + (n_out % down == 0 ? 0 : 1);
 
         fvec h = window;
         scale(h, float(up));
 
-        fvec y(n_out);
-        upfirdn(input, y, up, down, h);
-
-        output = y;
+        output.resize(n_out);
+        upfirdn(input, input_size, output, up, down, h);
     }
 
     static void calc_decimation_ratios(

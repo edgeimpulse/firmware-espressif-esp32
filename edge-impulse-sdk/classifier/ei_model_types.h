@@ -133,6 +133,9 @@ typedef struct {
     uint8_t output_data_tensor;
     uint8_t output_labels_tensor;
     uint8_t output_score_tensor;
+    /* tflite graph params */
+    bool quantized;
+    bool compiled;
     /* tflite graph config pointer */
     void *graph_config;
 } ei_learning_block_config_tflite_graph_t;
@@ -188,8 +191,6 @@ typedef struct ei_impulse {
 
     /* inference parameters */
     uint32_t inferencing_engine;
-    bool quantized;
-    bool compiled;
 
     /* sensors and on-device inference */
     uint32_t sensor;

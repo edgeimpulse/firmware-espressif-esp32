@@ -104,7 +104,7 @@ bool ei_add_sensor_to_fusion_list(ei_device_fusion_sensor_t sensor)
 bool ei_connect_fusion_list(const char *input_list, ei_fusion_list_format format)
 {
     char *buff;
-    bool is_fusion;
+    bool is_fusion = false;
 
     num_fusions = 0;
     num_fusion_axis = 0;
@@ -338,11 +338,6 @@ bool ei_fusion_setup_data_sampling(void)
         return false;
     }
 
-#if MULTI_FREQ_ENABLED == 1
-    memset(multi_sampling_freq, 0, sizeof(multi_sampling_freq));
-    memset(multi_freq_combination, 0, sizeof(multi_freq_combination));
-#endif
-
     // Calculate number of bytes available on flash for sampling, reserve 1 block for header + overhead
     uint32_t available_bytes = (mem->get_available_sample_blocks() - 1) * mem->block_size;
     // Check available sample size before sampling for the selected frequency
@@ -375,13 +370,6 @@ bool ei_fusion_setup_data_sampling(void)
             payload_bytes += strlen(fusion_sensors[i]->sensors[j].name) +
                 strlen(fusion_sensors[i]->sensors[j].units) + SENSORS_BYTE_OFFSET;
         }
-#if (MULTI_FREQ_ENABLED == 1)
-        if (num_fusions > 1) {
-            for (int j = 0; j < EI_MAX_FREQUENCIES; j++) {
-                multi_freq_combination[i][j] = (fusion_sensors[i]->frequencies[j]);    // storing all possible frequencies for each sensor
-            }
-        }
-#endif
     }
 
     // use heap for unit name, add 4 bytes for padding
@@ -491,8 +479,8 @@ const vector<fused_sensors_t> &ei_get_sensor_fusion_list(void)
 static void print_fusion_list(int r, uint32_t ingest_memory_size)
 {
     /* A temporary array to store all combination one by one */
-    int data[r];
-    int arr[fusable_sensor_list.size()];
+    auto data = new int[r];
+    auto arr = new int[fusable_sensor_list.size()];
 
     for (unsigned int i = 0; i < fusable_sensor_list.size(); i++) {
         arr[i] = i;
@@ -500,6 +488,8 @@ static void print_fusion_list(int r, uint32_t ingest_memory_size)
 
     /* Print all combination using temporary array 'data[]' */
     print_all_combinations(arr, data, 0, 0, r, ingest_memory_size);
+    delete[] data;
+    delete[] arr;
 }
 
 /**
@@ -944,6 +934,16 @@ static bool ei_fusion_calc_optimal_frequencies(uint8_t row, uint8_t col, float f
 
     if (freq_objective == 0.0) {
         return false;
+    }
+
+    memset(multi_sampling_freq, 0, sizeof(multi_sampling_freq));
+    memset(multi_freq_combination, 0, sizeof(multi_freq_combination));
+
+    for (int i = 0; i < row; i++) {
+        for (int j = 0; j < col; j++) {
+            //
+            multi_freq_combination[i][j] = fusion_sensors[i]->frequencies[j];
+        }
     }
 
     for (int i = 0; i < row; i++) {  // for each sensors

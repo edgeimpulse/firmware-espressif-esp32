@@ -44,7 +44,7 @@ struct EiAlloc
         auto bytes = n * sizeof(T);
         auto ptr = ei_dsp_malloc(bytes);
 #if EIDSP_TRACK_ALLOCATIONS
-        allocs[ptr] = bytes;
+        get_allocs()[ptr] = bytes;
 #endif
         return (T *)ptr;
     }
@@ -52,9 +52,9 @@ struct EiAlloc
     void deallocate(T *p, size_t n) noexcept
     {
 #if EIDSP_TRACK_ALLOCATIONS
-        auto size_p = allocs.find(p);
+        auto size_p = get_allocs().find(p);
         ei_dsp_free(p,size_p->second);
-        allocs.erase(size_p);
+        get_allocs().erase(size_p);
 #else
         ei_dsp_free(p,0);
 #endif
@@ -62,7 +62,11 @@ struct EiAlloc
 #if EIDSP_TRACK_ALLOCATIONS
     private:
     // [address] -> size requested
-    std::map<void*,size_t> allocs;
+    typedef std::map<void*,size_t> map_t;
+    static map_t& get_allocs() {
+        static map_t allocs;
+        return allocs;
+    }
 #endif
 };
 

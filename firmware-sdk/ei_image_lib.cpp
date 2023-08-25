@@ -70,7 +70,11 @@ static bool ei_camera_take_snapshot_encode_and_output_no_init(size_t width, size
 
     auto camera = EiCamera::get_camera();
 
-    // check if minimum suitable sensor resolution is the same as 
+    EiDeviceInfo* dev = EiDeviceInfo::get_device();
+    EiSnapshotProperties props = dev->get_snapshot_list();
+    int pixel_size_B = (props.color_depth == "RGB") ? RGB888_B_SIZE : MONO_B_SIZE;
+
+    // check if minimum suitable sensor resolution is the same as
     // desired snapshot resolution
     // if not we need to resize later
     fb_resoluton = camera->search_resolution(width, height);
@@ -81,56 +85,92 @@ static bool ei_camera_take_snapshot_encode_and_output_no_init(size_t width, size
         height = fb_resoluton.height;
     }
 
-    // rgb888 packed, 3B color depth
-    uint32_t size = width * height * RGB888_B_SIZE;
+    uint32_t size = width * height * pixel_size_B;
 
 #if EI_PORTING_SONY_SPRESENSE
     // 32 BYTE aligned (for Sony, maybe others too?  Monster vector moves in our future?)
     auto image_p = std::unique_ptr<uint8_t, decltype(free) *> { reinterpret_cast<uint8_t *>(
                                                                     memalign(32, size)),
                                                                 free };
+    auto image = image_p.get();
 #else // more portable version
-    std::unique_ptr<uint8_t[]> image_p(new uint8_t[size]);
-#endif
 
-    if (!image_p) {
-        ei_printf("Take snapshot: Out of memory\n");
-        return false;
+    // try to get framebuffer to be used for image transformations
+    // from the camera
+    // if the camera driver does not make it possible
+    // then create our own second framebuffer
+    uint8_t* image = nullptr;
+    if (!camera->get_fb_ptr(&image)) {
+        std::unique_ptr<uint8_t[]> image_p(new uint8_t[size]);
+        if (!image_p) {
+            ei_printf("ERR: Cannot allocate memory for framebuffer\n");
+            return false;
+        }
+        image = image_p.get();
+    }
+    else {
+        camera->get_fb_ptr(&image);
     }
 
-    auto image = image_p.get();
+#endif
 
 #if SEND_TEST_IMAGE
     uint32_t counter = 0;
-    for (int i = 0; i < size; i += 3) {
-        image[i] = counter & 0xff;
-        image[i + 1] = counter >> 8;
-        image[i + 2] = counter >> 16;
-        counter += 100;
+    switch(pixel_size_B) {
+        case RGB888_B_SIZE:
+            for (int i = 0; i < size; i += 3) {
+                image[i] = counter & 0xff;
+                image[i + 1] = counter >> 8;
+                image[i + 2] = counter >> 16;
+                counter += 100;
+            }
+            break;
+        case MONO_B_SIZE:
+            for (int i = 0; i < size; i += 1) {
+                if (counter >= 256) { counter = 0; }
+                image[i] = counter;
+                counter += 1;
+            }
+            break;
+        default:
+            ei_printf("ERR: Wrong pixel size, not supported: %d\n", pixel_size_B);
+            break;
     }
 #else
-    bool isOK = camera->ei_camera_capture_rgb888_packed_big_endian(image, size);
+    bool isOK = false;
+    switch(pixel_size_B) {
+        case RGB888_B_SIZE:
+            isOK = camera->ei_camera_capture_rgb888_packed_big_endian(image, size);
+            break;
+        case MONO_B_SIZE:
+            isOK = camera->ei_camera_capture_grayscale_packed_big_endian(image, size);
+            break;
+        default:
+            ei_printf("ERR: Wrong pixel size, not supported: %d\n", pixel_size_B);
+            break;
+    }
+
     if (!isOK) {
         return false;
     }
 
     if (needs_a_resize) {
         // interpolate in place
-        ei::image::processing::crop_and_interpolate_rgb888(
+        ei::image::processing::crop_and_interpolate_image(
             image,
             width,
             height,
             image,
             final_width,
-            final_height);
+            final_height,
+            pixel_size_B);
     }
-
 #endif
 
     // recalculate size b/c now we want to send just the interpolated bytes
     base64_encode(
         reinterpret_cast<char *>(image),
-        final_height * final_width * RGB888_B_SIZE,
+        final_height * final_width * pixel_size_B,
         ei_putchar);
 
     return true;
@@ -141,7 +181,7 @@ ei_camera_take_snapshot_output_on_serial(size_t width, size_t height, bool use_m
 {
     auto camera = EiCamera::get_camera();
 
-    // sets camera sensor resolution to the best suitable 
+    // sets camera sensor resolution to the best suitable
     // might not be the same as final snapshot resolution
     // this is why below we pass desired snapshot resolution
     // to ei_camera_take_snapshot_encode_and_output_no_init
@@ -154,7 +194,7 @@ ei_camera_take_snapshot_output_on_serial(size_t width, size_t height, bool use_m
         respond_and_change_to_max_baud();
     }
 
-    // here we pass desired snapshot resolution 
+    // here we pass desired snapshot resolution
     // if it is different from camera sensor resolution
     // we will resize before sending out the image
     bool isOK = ei_camera_take_snapshot_encode_and_output_no_init(width, height);
@@ -197,3 +237,8 @@ extern bool ei_camera_start_snapshot_stream(size_t width, size_t height, bool us
 
     return isOK;
 }
+
+//AT+SNAPSHOTSTREAM=128,96
+//AT+SNAPSHOT=128,96
+//AT+SNAPSHOT=640,480
+//AT+SNAPSHOT=320,240

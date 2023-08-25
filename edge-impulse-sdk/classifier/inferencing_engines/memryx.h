@@ -47,7 +47,7 @@
 #if EI_CLASSIFIER_HAS_MODEL_VARIABLES == 1
 #include "model-parameters/model_variables.h"
 #endif
-/* TODO: Not sure we need it #include <memryx_model/memryx_model.h> */
+
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/internal/reference/softmax.h"
@@ -64,6 +64,9 @@
 #else
 #include "memx/memx.h"
 #endif
+/* Headers below help us bundle the DFP model with EIM in single binary */
+#include "memryx-model/memryx-model.h"
+#include "utils/model_header_utils.h"
 
 /* Result delivered by memryx simulator contains 3 fields, indexes for print */
 #define MX_SIM_RES_OUTPUTS 0
@@ -106,11 +109,16 @@ static tflite::SoftmaxParams dummy_params;
 
 static bool verbose_debug = 0;
 
-bool init_memryx(bool debug)
+bool init_memryx(bool debug, const ei_impulse_t *impulse)
 {
-    constexpr char model_file_path[] = "memryx_trained.dfp";
+    /* Unpack DFP model to file system */
+    std::string project_file_path = "/tmp/" + std::string(impulse->project_name) + "-" + std::to_string(impulse->project_id) + "-" + std::to_string(impulse->deploy_version);
+    create_project_if_not_exists(project_file_path, model_h_files, model_h_files_len);
+
+    std::string proj_model_path = project_file_path + "/memryx_trained.dfp";
+    const char * model_file_path = proj_model_path.c_str();
 #if (defined(EI_CLASSIFIER_USE_MEMRYX_HARDWARE) && (EI_CLASSIFIER_USE_MEMRYX_HARDWARE == 1))
-#warning "Trying to use hardware"
+#warning "Building EIM for use with MemryX Hardware"
     memx_status status = MEMX_STATUS_OK;
     // 1. Bind MPU device group 0 as MX3:Cascade to model 0.
     status = memx_open(model_id, group_id, MEMX_DEVICE_CASCADE);
@@ -197,7 +205,7 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     // check if we've initialized the interpreter and device?
     if (memryx_initialized == false) {
-        if(init_memryx(debug) == false) {
+        if(init_memryx(debug, impulse) == false) {
             return EI_IMPULSE_MEMRYX_ERROR;
         }
         memryx_initialized = true;
@@ -257,12 +265,13 @@ EI_IMPULSE_ERROR run_nn_inference(
     }
 
     // init softmax shape
-    std::vector<size_t> output_shape = {12,12,2};
+    std::vector<size_t> output_shape = {static_cast<size_t>(ofmap_height),static_cast<size_t>(ofmap_width),
+                                        static_cast<size_t>(ofmap_channel_number)};
     softmax_shape.BuildFrom(output_shape);
     // dumy beta parameter for softmax purposes
     dummy_params.beta = 1;
 
-    // apply softmax, becuase Akida is not supporting this operation
+    // apply softmax, becuase MX3 does not support this operation
     tflite::reference_ops::Softmax(dummy_params, softmax_shape, ofmap, softmax_shape, ofmap);
 
     // handle inference outputs
@@ -279,7 +288,7 @@ EI_IMPULSE_ERROR run_nn_inference(
                 break;
             }
             case EI_CLASSIFIER_LAST_LAYER_SSD: {
-                ei_printf("Mobilenet SSD executed on Memryx\n");
+                ei_printf("Mobilenet SSD is not implemented for Edge Impulse MemryX engine, please contact Edge Impulse Support\n");
                 break;
             }
             default: {
@@ -310,7 +319,7 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     // check if we've initialized the interpreter and device?
     if (memryx_initialized == false) {
-        if(init_memryx(debug) == false) {
+        if(init_memryx(debug, impulse) == false) {
             return EI_IMPULSE_MEMRYX_ERROR;
         }
         memryx_initialized = true;

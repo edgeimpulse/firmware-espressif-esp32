@@ -144,7 +144,7 @@ EI_IMPULSE_ERROR run_nn_inference(
     }
 
     // Obtain pointers to the model's input and output tensors.
-#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
     int8_t* input = interpreter->typed_input_tensor<int8_t>(0);
 #else
     float* input = interpreter->typed_input_tensor<float>(0);
@@ -156,7 +156,7 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     for (uint32_t ix = 0; ix < fmatrix->rows * fmatrix->cols; ix++) {
     if (impulse->object_detection) {
-#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
         float pixel = (float)fmatrix->buffer[ix];
         input[ix] = static_cast<uint8_t>((pixel / input->tflite_input_scale) + input->tflite_input_zeropoint);
 #else
@@ -164,7 +164,7 @@ EI_IMPULSE_ERROR run_nn_inference(
 #endif
     }
     else {
-#if EI_CLASSIFIER_TFLITE_INPUT_QUANTIZED == 1
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
         input[ix] = static_cast<int8_t>(round(fmatrix->buffer[ix] / input->tflite_input_scale) + input->tflite_input_zeropoint);
 #else
         input[ix] = fmatrix->buffer[ix];

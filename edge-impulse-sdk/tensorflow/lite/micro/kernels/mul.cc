@@ -476,9 +476,9 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteEvalTensor* input1 =
       tflite::micro::GetEvalInput(context, node, kInput1Tensor);
   const TfLiteEvalTensor* input2 =
-      tflite::micro::GetEvalInput(context, node, kInput1Tensor);
+      tflite::micro::GetEvalInput(context, node, kInput2Tensor);
   TfLiteEvalTensor* output =
-      tflite::micro::GetEvalOutput(context, node, kInput1Tensor);
+      tflite::micro::GetEvalOutput(context, node, kOutputTensor);
 
   long long start_time = esp_timer_get_time();
   switch (input1->type) {

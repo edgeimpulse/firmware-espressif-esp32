@@ -54,7 +54,7 @@ typedef struct {
 } ei_device_resize_resolutions_t;
 
 /**
- * @brief      Class description and implementation of device specific 
+ * @brief      Class description and implementation of device specific
  * 			   characteristics
  */
 class EiDeviceESP32 : public EiDeviceInfo {
@@ -69,7 +69,7 @@ private:
     EiCameraESP32 *cam;
 
     bool network_present;
-    bool network_connected;   
+    bool network_connected;
     //EiNetworkDevice *net;
 
     EiDeviceESP32() = delete;
@@ -83,7 +83,7 @@ public:
 
     void delay_ms(uint32_t milliseconds);
 
-    bool scan_networks(void);    
+    bool scan_networks(void);
     bool get_wifi_connection_status(void);
     bool get_wifi_present_status();
 
@@ -110,6 +110,5 @@ public:
 /* Function prototypes ----------------------------------------------------- */
 char ei_get_serial_byte(void);
 bool ei_user_invoke_stop(void);
-static bool read_sample_buffer(size_t begin, size_t length, void (*data_fn)(uint8_t *, size_t));
 
 #endif

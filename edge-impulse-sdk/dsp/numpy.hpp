@@ -60,6 +60,9 @@
 
 namespace ei {
 
+using fvec = ei_vector<float>;
+using ivec = ei_vector<int>;
+
 // clang-format off
 // lookup table for quantized values between 0.0f and 1.0f
 static constexpr float quantized_values_one_zero[] = { (0.0f / 1.0f), (1.0f / 100.0f), (2.0f / 100.0f), (3.0f / 100.0f), (4.0f / 100.0f), (1.0f / 22.0f), (1.0f / 21.0f), (1.0f / 20.0f), (1.0f / 19.0f), (1.0f / 18.0f), (1.0f / 17.0f), (6.0f / 100.0f), (1.0f / 16.0f), (1.0f / 15.0f), (7.0f / 100.0f), (1.0f / 14.0f), (1.0f / 13.0f), (8.0f / 100.0f), (1.0f / 12.0f), (9.0f / 100.0f), (1.0f / 11.0f), (2.0f / 21.0f), (1.0f / 10.0f), (2.0f / 19.0f), (11.0f / 100.0f), (1.0f / 9.0f), (2.0f / 17.0f), (12.0f / 100.0f), (1.0f / 8.0f), (13.0f / 100.0f), (2.0f / 15.0f), (3.0f / 22.0f), (14.0f / 100.0f), (1.0f / 7.0f), (3.0f / 20.0f), (2.0f / 13.0f), (3.0f / 19.0f), (16.0f / 100.0f), (1.0f / 6.0f), (17.0f / 100.0f), (3.0f / 17.0f), (18.0f / 100.0f), (2.0f / 11.0f), (3.0f / 16.0f), (19.0f / 100.0f), (4.0f / 21.0f), (1.0f / 5.0f), (21.0f / 100.0f), (4.0f / 19.0f), (3.0f / 14.0f), (22.0f / 100.0f), (2.0f / 9.0f), (5.0f / 22.0f), (23.0f / 100.0f), (3.0f / 13.0f), (4.0f / 17.0f), (5.0f / 21.0f), (24.0f / 100.0f), (1.0f / 4.0f), (26.0f / 100.0f), (5.0f / 19.0f), (4.0f / 15.0f), (27.0f / 100.0f), (3.0f / 11.0f), (5.0f / 18.0f), (28.0f / 100.0f), (2.0f / 7.0f), (29.0f / 100.0f), (5.0f / 17.0f), (3.0f / 10.0f), (4.0f / 13.0f), (31.0f / 100.0f), (5.0f / 16.0f), (6.0f / 19.0f), (7.0f / 22.0f), (32.0f / 100.0f), (33.0f / 100.0f), (1.0f / 3.0f), (34.0f / 100.0f), (7.0f / 20.0f), (6.0f / 17.0f), (5.0f / 14.0f), (36.0f / 100.0f), (4.0f / 11.0f), (7.0f / 19.0f), (37.0f / 100.0f), (3.0f / 8.0f), (38.0f / 100.0f), (8.0f / 21.0f), (5.0f / 13.0f), (7.0f / 18.0f), (39.0f / 100.0f), (2.0f / 5.0f), (9.0f / 22.0f), (41.0f / 100.0f), (7.0f / 17.0f), (5.0f / 12.0f), (42.0f / 100.0f), (8.0f / 19.0f), (3.0f / 7.0f), (43.0f / 100.0f), (7.0f / 16.0f), (44.0f / 100.0f), (4.0f / 9.0f), (9.0f / 20.0f), (5.0f / 11.0f), (46.0f / 100.0f), (6.0f / 13.0f), (7.0f / 15.0f), (47.0f / 100.0f), (8.0f / 17.0f), (9.0f / 19.0f), (10.0f / 21.0f), (48.0f / 100.0f), (49.0f / 100.0f), (1.0f / 2.0f), (51.0f / 100.0f), (52.0f / 100.0f), (11.0f / 21.0f), (10.0f / 19.0f), (9.0f / 17.0f), (53.0f / 100.0f), (8.0f / 15.0f), (7.0f / 13.0f), (54.0f / 100.0f), (6.0f / 11.0f), (11.0f / 20.0f), (5.0f / 9.0f), (56.0f / 100.0f), (9.0f / 16.0f), (57.0f / 100.0f), (4.0f / 7.0f), (11.0f / 19.0f), (58.0f / 100.0f), (7.0f / 12.0f), (10.0f / 17.0f), (59.0f / 100.0f), (13.0f / 22.0f), (3.0f / 5.0f), (61.0f / 100.0f), (11.0f / 18.0f), (8.0f / 13.0f), (13.0f / 21.0f), (62.0f / 100.0f), (5.0f / 8.0f), (63.0f / 100.0f), (12.0f / 19.0f), (7.0f / 11.0f), (64.0f / 100.0f), (9.0f / 14.0f), (11.0f / 17.0f), (13.0f / 20.0f), (66.0f / 100.0f), (2.0f / 3.0f), (67.0f / 100.0f), (68.0f / 100.0f), (15.0f / 22.0f), (13.0f / 19.0f), (11.0f / 16.0f), (69.0f / 100.0f), (9.0f / 13.0f), (7.0f / 10.0f), (12.0f / 17.0f), (71.0f / 100.0f), (5.0f / 7.0f), (72.0f / 100.0f), (13.0f / 18.0f), (8.0f / 11.0f), (73.0f / 100.0f), (11.0f / 15.0f), (14.0f / 19.0f), (74.0f / 100.0f), (3.0f / 4.0f), (76.0f / 100.0f), (16.0f / 21.0f), (13.0f / 17.0f), (10.0f / 13.0f), (77.0f / 100.0f), (17.0f / 22.0f), (7.0f / 9.0f), (78.0f / 100.0f), (11.0f / 14.0f), (15.0f / 19.0f), (79.0f / 100.0f), (4.0f / 5.0f), (17.0f / 21.0f), (81.0f / 100.0f), (13.0f / 16.0f), (9.0f / 11.0f), (82.0f / 100.0f), (14.0f / 17.0f), (83.0f / 100.0f), (5.0f / 6.0f), (84.0f / 100.0f), (16.0f / 19.0f), (11.0f / 13.0f), (17.0f / 20.0f), (6.0f / 7.0f), (86.0f / 100.0f), (19.0f / 22.0f), (13.0f / 15.0f), (87.0f / 100.0f), (7.0f / 8.0f), (88.0f / 100.0f), (15.0f / 17.0f), (8.0f / 9.0f), (89.0f / 100.0f), (17.0f / 19.0f), (9.0f / 10.0f), (19.0f / 21.0f), (10.0f / 11.0f), (91.0f / 100.0f), (11.0f / 12.0f), (92.0f / 100.0f), (12.0f / 13.0f), (13.0f / 14.0f), (93.0f / 100.0f), (14.0f / 15.0f), (15.0f / 16.0f), (94.0f / 100.0f), (16.0f / 17.0f), (17.0f / 18.0f), (18.0f / 19.0f), (19.0f / 20.0f), (20.0f / 21.0f), (21.0f / 22.0f), (96.0f / 100.0f), (97.0f / 100.0f), (98.0f / 100.0f), (99.0f / 100.0f), (1.0f / 1.0f) ,
@@ -270,7 +273,7 @@ public:
      * @param out_matrix Pointer to out matrix (MxK)
      * @returns EIDSP_OK if OK
      */
-    static inline int dot_by_row(int i, float *row, uint32_t matrix1_cols, matrix_t *matrix2, matrix_t *out_matrix) {
+    static  int dot_by_row(int i, float *row, uint32_t matrix1_cols, matrix_t *matrix2, matrix_t *out_matrix) {
         if (matrix1_cols != matrix2->rows) {
             EIDSP_ERR(EIDSP_MATRIX_SIZE_MISMATCH);
         }
@@ -310,7 +313,7 @@ public:
      * @param out_matrix Pointer to out matrix (MxK)
      * @returns EIDSP_OK if OK
      */
-    static inline int dot_by_row(int i, float *row, size_t matrix1_cols,
+    static  int dot_by_row(int i, float *row, size_t matrix1_cols,
         quantized_matrix_t *matrix2, matrix_t *out_matrix)
     {
         if (matrix1_cols != matrix2->rows) {
@@ -2174,7 +2177,7 @@ public:
     static int cmsis_rfft_init_f32(arm_rfft_fast_instance_f32 *rfft_instance, const size_t n_fft)
     {
 // ARM cores (ex M55) with Helium extensions (MVEF) need special treatment (Issue 2843)
-#if EI_CLASSIFIER_HAS_FFT_INFO == 1 && !defined(ARM_MATH_MVEF)
+#if EI_CLASSIFIER_HAS_FFT_INFO == 1 && !defined(ARM_MATH_MVEF) && !defined(EI_CLASSIFIER_LOAD_ALL_FFTS)
         arm_status status;
         switch (n_fft) {
 #if EI_CLASSIFIER_LOAD_FFT_32 == 1
@@ -2443,8 +2446,333 @@ public:
     {
         zero_handling(input->buffer, input->rows * input->cols);
     }
+
+    __attribute__((unused)) static void scale(fvec& v, float scale) {
+        for (auto& x : v) {
+            x *= scale;
+        }
+    }
+
+    __attribute__((unused)) static void sub(fvec& v, float b) {
+        for (auto& x : v) {
+            x -= b;
+        }
+    }
+
+    __attribute__((unused)) static void mul(float* y, const float* x, float* b, size_t n) {
+        for (size_t i = 0; i < n; i++) {
+            y[i] = x[i] * b[i];
+        }
+    }
+
+    __attribute__((unused)) static fvec diff(const float* v, size_t n) {
+        fvec d(n - 1);
+        for (size_t i = 0; i < d.size(); i++) {
+            d[i] = v[i + 1] - v[i];
+        }
+        return d;
+    }
+
+    __attribute__((unused)) static float sum(const float* v, size_t n) {
+        float sum = 0;
+        for (size_t i = 0; i < n; i++) {
+            sum += v[i];
+        }
+        return sum;
+    }
+
+    static float mean(const fvec& v) {
+        float mean = 0;
+        for (auto x : v) {
+            mean += x;
+        }
+        mean /= v.size();
+        return mean;
+    }
+
+    static float mean(const float* v, size_t n) {
+        float mean = 0;
+        for (size_t i = 0; i < n; i++) {
+            mean += v[i];
+        }
+        mean /= n;
+        return mean;
+    }
+
+    static float median(const float* v, size_t n) {
+        fvec vc(n);
+        std::copy(v, v + n, vc.begin());
+        std::sort(vc.begin(), vc.end());
+        if (vc.size() % 2 == 0) {
+            return (vc[vc.size() / 2 - 1] + vc[vc.size() / 2]) / 2;
+        }
+        return vc[vc.size() / 2];
+    }
+
+    __attribute__((unused)) static float median(const fvec& v) {
+        return median(v.data(), v.size());
+    }
+
+    static float stddev(const float* v, size_t n, float m /* mean */, int ddof = 0) {
+        float var = 0;
+        for (size_t i = 0; i < n; i++) {
+            var += (v[i] - m) * (v[i] - m);
+        }
+        var /= n - ddof;
+        return sqrt(var);
+    }
+
+    __attribute__((unused)) static float stddev(const float* v, size_t n) {
+        return stddev(v, n, mean(v, n), 0);
+    }
+
+    __attribute__((unused)) static float stddev(const float* v, size_t n, int ddof) {
+        return stddev(v, n, mean(v, n), ddof);
+    }
+
+    __attribute__((unused)) static float stddev(const fvec& v, int ddof = 0) {
+        return stddev(v.data(), v.size(), mean(v), ddof);
+    }
+
+    static float rms(const float* v, size_t n) {
+        float rms = 0;
+        for (size_t i = 0; i < n; i++) {
+            rms += v[i] * v[i];
+        }
+        rms /= n;
+        return sqrt(rms);
+    }
+
+    __attribute__((unused)) static float rms(const fvec& v) {
+        return rms(v.data(), v.size());
+    }
+
+    template <typename T>
+    static float max(const ei_vector<T>& v) {
+        return *std::max_element(v.begin(), v.end());
+    }
+
+    __attribute__((unused)) static float max(const float* v, size_t n) {
+        return *std::max_element(v, v + n);
+    }
+
+    template <typename T>
+    static float min(const ei_vector<T>& v) {
+        return *std::min_element(v.begin(), v.end());
+    }
+
+    __attribute__((unused)) static float min(const float* v, size_t n) {
+        return *std::min_element(v, v + n);
+    }
+
+    __attribute__((unused)) static int argmax(const fvec& v, int start, int end) {
+        return std::max_element(v.begin() + start, v.begin() + end) - v.begin();
+    }
+
+    __attribute__((unused)) static fvec divide(float num, const float* den, size_t n) {
+        fvec v(n);
+        for (size_t i = 0; i < n; i++) {
+            v[i] = num / den[i];
+        }
+        return v;
+    }
+
+    __attribute__((unused)) static ivec histogram(const float* x, size_t n, int a, int b, int inc) {
+        int num_bins = (b - a) / inc;
+        ivec bins(num_bins, 0);
+        for (size_t i = 0; i < n; i++) {
+            int bin = (int)((x[i] - a) / inc);
+            if (bin >= 0 && bin < num_bins) {
+                bins[bin]++;
+            }
+        }
+        return bins;
+    }
+
+    __attribute__((unused)) static fvec cumsum(const float* v, size_t n) {
+        fvec c(n);
+        c[0] = v[0];
+        for (size_t i = 1; i < n; i++) {
+            c[i] = c[i - 1] + v[i];
+        }
+        return c;
+    }
+
+    __attribute__((unused)) static fvec arrange(float start, float end, float step) {
+        assert(start < end);
+        assert(step > 0);
+        fvec v((size_t)((end - start) / step));
+        for (size_t i = 0; i < v.size(); i++) {
+            v[i] = start + i * step;
+        }
+        return v;
+    }
+
+    __attribute__((unused)) static void add(fvec& v, fvec& b) {
+        for (size_t i = 0; i < v.size(); i++) {
+            v[i] += b[i];
+        }
+    }
+
+    __attribute__((unused)) static float trapz(const fvec& x, const fvec& y, size_t lo, size_t hi) {
+        float area = 0;
+        for (size_t i = lo; i < hi; i++) {
+            area += (x[i + 1] - x[i]) * (y[i + 1] + y[i]) / 2;
+        }
+        return area;
+    }
+
+    __attribute__((unused)) static fvec quantile(const fvec& v, size_t start, size_t end, const fvec& q) {
+        end = std::min(end, v.size());
+        fvec vc(end - start);
+        std::copy(v.begin() + start, v.begin() + end, vc.begin());
+        std::sort(vc.begin(), vc.end());
+        fvec res(q.size());
+        for (size_t i = 0; i < q.size(); i++) {
+            res[i] = vc[q[i] * vc.size()];
+        }
+        return res;
+    }
+
+    __attribute__((unused)) static fvec quantile(const float* v, size_t n, const fvec& q) {
+        fvec vc(n);
+        std::copy(v, v + n, vc.begin());
+        std::sort(vc.begin(), vc.end());
+        fvec res(q.size());
+        for (size_t i = 0; i < q.size(); i++) {
+            res[i] = vc[q[i] * vc.size()];
+        }
+        return res;
+    }
+
+    static float dot(const float* x, const float* y, size_t n) {
+        float res = 0;
+        for (size_t i = 0; i < n; i++) {
+            res += x[i] * y[i];
+        }
+        return res;
+    }
+
+
+    __attribute__((unused)) static float cosine_similarity(const fvec& x, const fvec& y) {
+        float xy = dot(x.data(), y.data(), x.size());
+        float magx = dot(x.data(), x.data(), x.size());
+        float magy = dot(y.data(), y.data(), y.size());
+        xy /= sqrt(magx * magy);
+        return xy;
+    }
+
+    __attribute__((unused)) static void ln(fvec& v) {
+        for (auto& x : v) {
+            x = log(x);
+        }
+    }
+
+    static size_t next_power_of_2(size_t x) {
+        size_t res = 1;
+        while (res < x) {
+            res *= 2;
+        }
+        return res;
+    }
+
+    static void detrend(float* data, size_t n) {
+        // Calculate the mean of the data points
+        float mean = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            mean += data[i];
+        }
+        mean /= n;
+
+        // Calculate the slope of the best-fit line
+        float x_mean = (n + 1) / 2.0;
+        float y_mean = mean;
+        float numerator = 0.0;
+        float denominator = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            numerator += (i + 1 - x_mean) * (data[i] - y_mean);
+            denominator += (i + 1 - x_mean) * (i + 1 - x_mean);
+        }
+        float slope = numerator / denominator;
+
+        // Subtract the best-fit line from the data points to get the detrended data
+        for (size_t i = 0; i < n; i++) {
+            data[i] = data[i] - (slope * (i + 1));
+        }
+
+        // Calculate the mean of the detrended data
+        float detrended_mean = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            detrended_mean += data[i];
+        }
+        detrended_mean /= n;
+
+        // Subtract the mean of the detrended data from each element
+        for (size_t i = 0; i < n; i++) {
+            data[i] -= detrended_mean;
+        }
+    }
+
+    static fvec detrend(const fvec& data) {
+        auto ret = data;
+        detrend(ret.data(), ret.size());
+        return ret;
+    }
+
 };
 
+struct fmat {
+    ei_matrix* mat = nullptr;
+    fmat(size_t rows, size_t cols) {
+        mat = new ei_matrix(rows, cols);
+        assert(mat);
+    }
+
+    ~fmat() {
+        delete mat;
+    }
+
+    void resize(size_t rows, size_t cols) {
+        delete mat;
+        mat = new ei_matrix(rows, cols);
+    }
+
+    float* operator[](size_t i) {
+        if (mat == nullptr || i >= mat->rows) {
+            return nullptr;
+        }
+        return mat->get_row_ptr(i);
+    }
+
+    void fill(float x) {
+        if (mat == nullptr) {
+            return;
+        }
+        for (size_t i = 0; i < mat->rows; i++) {
+            for (size_t j = 0; j < mat->cols; j++) {
+                (*this)[i][j] = x;
+            }
+        }
+    }
+
+    void fill_col(size_t col, float x) {
+        if (mat == nullptr) {
+            return;
+        }
+        for (size_t i = 0; i < mat->rows; i++) {
+            (*this)[i][col] = x;
+        }
+    }
+
+    void fill_row(size_t row, float x) {
+        if (mat == nullptr) {
+            return;
+        }
+        for (size_t i = 0; i < mat->cols; i++) {
+            (*this)[row][i] = x;
+        }
+    }
+};
 } // namespace ei
 
 #endif // _EIDSP_NUMPY_H_
