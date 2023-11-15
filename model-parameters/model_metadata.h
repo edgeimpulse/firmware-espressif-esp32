@@ -52,7 +52,7 @@
 #define EI_CLASSIFIER_DATATYPE_UINT8             3
 #define EI_CLASSIFIER_DATATYPE_INT8              9
 
-#define EI_CLASSIFIER_PROJECT_ID                 40
+#define EI_CLASSIFIER_PROJECT_ID                 53
 #define EI_CLASSIFIER_PROJECT_OWNER              "Edge Impulse Profiling"
 #define EI_CLASSIFIER_PROJECT_NAME               "Demo: Keyword Spotting"
 #define EI_CLASSIFIER_PROJECT_DEPLOY_VERSION     1

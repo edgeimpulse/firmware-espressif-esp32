@@ -26,6 +26,13 @@
 #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_MEMRYX)
 
 /**
+ * @brief We can use a lot of space on linux and
+ * mx3 is capable of it
+ *
+ */
+#define EI_CLASSIFIER_MAX_LABELS_COUNT 2000
+
+/**
  * @brief we are forcing SOFTWARE inference (simulation),
  *        beacuse use of hardware is not ready
  *
@@ -50,7 +57,7 @@
 
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
-#include "edge-impulse-sdk/tensorflow/lite/kernels/internal/reference/softmax.h"
+#include "tensorflow-lite/tensorflow/lite/kernels/internal/reference/softmax.h"
 #include <vector>
 #include <fstream>
 #include <sstream>

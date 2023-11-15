@@ -18,66 +18,60 @@
 #ifndef EI_DEVICE_MEMORY_H
 #define EI_DEVICE_MEMORY_H
 
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 
 /**
  * @brief Interface class for all memory type storages in Edge Impulse compatible devices.
- * The memory should be organized in a blocks, because all EI sensor drivers depends on block oranization.
- * Additionaly, at least one or two block of memory at the beginning is used for device configuration
+ * The memory should be organized in blocks because all EI sensor drivers depend on block organization.
+ * Additionally, at least one or two blocks of memory at the beginning is used for device configuration
  * (see ei_device_info_lib.h)
  */
 class EiDeviceMemory {
 protected:
     /**
-     * @brief Direct read from memory, should be implemented per device/memory type.
-     * 
+     * @brief Direct read from memory should be implemented per device/memory type.
+     *
      * @param data pointer to buffer for data to be read
      * @param address absolute address in the memory (format and value depending on memory chip/type)
-     * @param num_bytes number of bytes to be read @refitem data should be at leas num_bytes long
-     * @return uint32_t number of bytes actually read. If differs from num_bytes, then some error occured.
+     * @param num_bytes number of bytes to be read @refitem data should be at least num_bytes long
+     * @return uint32_t number of bytes read. If it differs from num_bytes, then some error occurs.
      */
     virtual uint32_t read_data(uint8_t *data, uint32_t address, uint32_t num_bytes) = 0;
 
     /**
-     * @brief Direct write to memory, should be implemented per device/memory type.
-     * 
-     * @param data pointer to bufer with data to write
+     * @brief Direct write to memory should be implemented per device/memory type.
+     *
+     * @param data pointer to buffer with data to write
      * @param address absolute address in the memory (format and value depending on memory chip/type)
      * @param num_bytes number of bytes to write
-     * @return uint32_t number of bytes that has been written, if differs from num_bytes some error occured.
+     * @return uint32_t number of bytes that have been written, if differs from num_bytes some error occurred.
      */
     virtual uint32_t write_data(const uint8_t *data, uint32_t address, uint32_t num_bytes) = 0;
 
     /**
      * @brief Erase memory region
-     * 
-     * @param address absolute address in memory whwere the erase should begin. Typically block aligned.
+     *
+     * @param address absolute address in memory where the erase should begin. Typically block aligned.
      * @param num_bytes number of bytes to be erased, typically multiple of block size.
-     * @return uint32_t numer of bytes that has been erased, if differes from num_bytes, then some oerror occured.
+     * @return uint32_t number of bytes that have been erased, if differs from num_bytes, then some error occurred.
      */
     virtual uint32_t erase_data(uint32_t address, uint32_t num_bytes) = 0;
 
     /**
-     * @brief size of device configuration block, device or even firmware specific.
-     * 
-     */
-    uint32_t config_size;
-    /**
      * @brief number of blocks occupied by config. Typically 1, but depending on memory
-     * type and config size, it can be multiple blocks.
-     * 
+     * type and config size: it can be multiple blocks.
+     *
      */
     uint32_t used_blocks;
     /**
      * @brief total number of blocks in the memory
-     * 
+     *
      */
     uint32_t memory_blocks;
     /**
      * @brief total size of memory, typically integer multiply of blocks
-     * 
+     *
      */
     uint32_t memory_size;
 
@@ -87,17 +81,17 @@ public:
      */
     uint32_t block_size;
     /**
-     * @brief Erase time of a single block/sector/page in ms (miliseconds).
-     * For RAM it can be set to 0 or 1.
-     * For Flash memories take this value from datasheet or measure.
+     * @brief Erase time of a single block/sector/page in ms (milliseconds).
+     * For RAM, it can be set to 0 or 1.
+     * For Flash memories, take this value from the datasheet or measure.
      */
     uint32_t block_erase_time;
 
     /**
-     * @brief Construct a new Ei Device Memory object, make sure to pass all necessary data
-     * from derived class. Usually constructor of the derived class needs to get this data 
-     * from user code or read from chip.
-     * 
+     * @brief Construct a new Ei Device Memory object and make sure to pass all necessary data
+     * from the derived class. Usually, the derived class's constructor needs to get this data
+     * from user code or read from the chip.
+     *
      * @param config_size see property description
      * @param erase_time see property description
      * @param memory_size see property description
@@ -108,13 +102,26 @@ public:
         uint32_t erase_time,
         uint32_t memory_size,
         uint32_t block_size)
-        : config_size(config_size)
-        , used_blocks((config_size < block_size) ? 1 : ceil(float(config_size) / block_size))
-        , memory_blocks(memory_size / block_size)
+        : memory_blocks(block_size == 0 ? 0 : memory_size / block_size)
         , memory_size(memory_size)
         , block_size(block_size)
         , block_erase_time(erase_time)
     {
+        if(config_size == 0) {
+            // this means we are not storing the config
+            used_blocks = 0;
+        }
+        else if(config_size < block_size) {
+            used_blocks = 1;
+        }
+        else {
+            if(block_size == 0) {
+                used_blocks = 0;
+            }
+            else {
+                used_blocks = (config_size % block_size == 0) ? (config_size / block_size) : (config_size / block_size + 1);
+            }
+        }
     }
 
     virtual uint32_t get_available_sample_blocks(void)
@@ -130,6 +137,12 @@ public:
     virtual bool save_config(const uint8_t *config, uint32_t config_size)
     {
         uint32_t used_bytes = used_blocks * block_size;
+
+        // this means we have no space for config
+        if(used_bytes == 0) {
+            return false;
+        }
+
         if (erase_data(0, used_bytes) != used_bytes) {
             return false;
         }
@@ -175,8 +188,8 @@ public:
 
     /**
      * @brief Necessary for targets, such as RP2040, which have large Flash page size (256 bytes)
-     * For the targets, that don't require it, a default dummy implementation is provided
-     * to reduce boilerplate code in target flash implementation file.
+     * For the targets, that doesn't require it, a default dummy implementation is provided
+     * to reduce boilerplate code in the target flash implementation file.
      */
     virtual uint32_t flush_data(void)
     {
@@ -184,7 +197,7 @@ public:
     }
 };
 
-template <int BLOCK_SIZE = 512, int MEMORY_BLOCKS = 8> class EiDeviceRAM : public EiDeviceMemory {
+template <int BLOCK_SIZE = 1024, int MEMORY_BLOCKS = 4> class EiDeviceRAM : public EiDeviceMemory {
 
 protected:
     uint8_t ram_memory[MEMORY_BLOCKS * BLOCK_SIZE];
@@ -226,30 +239,6 @@ public:
     EiDeviceRAM(uint32_t config_size)
         : EiDeviceMemory(config_size, 0, BLOCK_SIZE * MEMORY_BLOCKS, BLOCK_SIZE)
     {
-    }
-
-    /**
-     * @brief for RAM memory, we don't need to care about the blocks and
-     * pack data one after another for better memory utilization.
-     * 
-     */
-    uint32_t
-    read_sample_data(uint8_t *sample_data, uint32_t address, uint32_t sample_data_size) override
-    {
-        return this->read_data(sample_data, config_size + address, sample_data_size);
-    }
-
-    uint32_t write_sample_data(
-        const uint8_t *sample_data,
-        uint32_t address,
-        uint32_t sample_data_size) override
-    {
-        return this->write_data(sample_data, config_size + address, sample_data_size);
-    }
-
-    uint32_t erase_sample_data(uint32_t address, uint32_t num_bytes) override
-    {
-        return this->erase_data(config_size + address, num_bytes);
     }
 };
 

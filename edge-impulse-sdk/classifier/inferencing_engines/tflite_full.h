@@ -21,6 +21,7 @@
 #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE_FULL)
 
 #include "model-parameters/model_metadata.h"
+#include "tflite-model/trained_model_ops_define.h"
 
 #include <thread>
 #include "tensorflow-lite/tensorflow/lite/c/common.h"

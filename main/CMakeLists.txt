@@ -6,8 +6,7 @@ set(EI_PLATFORM_FOLDER ../edge-impulse)
 set(FIRMWARE_SDK_FOLDER ../firmware-sdk)
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
-add_definitions(-DEI_SENSOR_AQ_STREAM=FILE
-                -DEI_CLASSIFIER_TFLITE_ENABLE_ESP_NN=1) # enables ESP-NN optimizations by Espressif
+add_definitions(-DEI_CLASSIFIER_TFLITE_ENABLE_ESP_NN=1) # enables ESP-NN optimizations by Espressif
 endif()
 
 set(include_dirs
@@ -31,7 +30,6 @@ set(include_dirs
     ${EI_PLATFORM_FOLDER}/ingestion-sdk-platform/sensors
     ${EI_PLATFORM_FOLDER}/mbedtls_hmac_sha256_sw
     ${EI_PLATFORM_FOLDER}/inference
-    ${EI_PLATFORM_FOLDER}/QCBOR/inc
     ${FIRMWARE_SDK_FOLDER}
     ${FIRMWARE_SDK_FOLDER}/at-server
 )
@@ -49,6 +47,7 @@ list(APPEND C_FILES "../edge-impulse-sdk/CMSIS/DSP/Source/StatisticsFunctions/ar
 RECURSIVE_FIND_FILE(PORTING_FILES "../edge-impulse-sdk/porting/espressif" "*.cpp")
 
 RECURSIVE_FIND_FILE(FIRMWARE_SDK_FILES "../firmware-sdk" "*.cpp")
+RECURSIVE_FIND_FILE(FIRMWARE_SDK_C_FILES "../firmware-sdk" "*.c")
 
 RECURSIVE_FIND_FILE(MODEL_FILES "../tflite-model" "*.cpp")
 
@@ -57,7 +56,6 @@ RECURSIVE_FIND_FILE(SENSORS_FILES "../edge-impulse/ingestion-sdk-platform/sensor
 RECURSIVE_FIND_FILE(INGESTION_FILES "../edge-impulse/ingestion-sdk-c/" "*.cpp")
 
 RECURSIVE_FIND_FILE(INFERENCE_FILES "../edge-impulse/inference" "*.cpp")
-RECURSIVE_FIND_FILE(QCBOR_FILES "../edge-impulse/QCBOR/src" "*.c")
 RECURSIVE_FIND_FILE(MBEDTLS_FILES "../edge-impulse/mbedtls_hmac_sha256_sw/mbedtls/src" "*.c")
 
 list(APPEND SOURCE_FILES ${S_FILES})
@@ -67,6 +65,7 @@ list(APPEND SOURCE_FILES ${CC_FILES})
 list(APPEND SOURCE_FILES ${PORTING_FILES})
 
 list(APPEND SOURCE_FILES ${FIRMWARE_SDK_FILES})
+list(APPEND SOURCE_FILES ${FIRMWARE_SDK_C_FILES})
 
 list(APPEND SOURCE_FILES ${MODEL_FILES})
 
@@ -75,7 +74,6 @@ list(APPEND SOURCE_FILES ${SENSORS_FILES})
 list(APPEND SOURCE_FILES ${INGESTION_FILES})
 
 list(APPEND SOURCE_FILES ${INFERENCE_FILES})
-list(APPEND SOURCE_FILES ${QCBOR_FILES})
 list(APPEND SOURCE_FILES ${MBEDTLS_FILES})
 
 idf_component_register(SRCS "main.cpp" "${SOURCE_FILES}"

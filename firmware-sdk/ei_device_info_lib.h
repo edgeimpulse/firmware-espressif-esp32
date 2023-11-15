@@ -23,6 +23,7 @@
 #include "ei_config_types.h"
 #include "ei_device_memory.h"
 #include "ei_fusion.h"
+#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -119,48 +120,58 @@ public:
 
     virtual bool save_config(void)
     {
-        EiConfig buf;
+        EiConfig *buf = (EiConfig *)ei_malloc(sizeof(EiConfig));
+        if(buf == NULL) {
+            return false;
+        }
 
-        memset(&buf, 0, sizeof(EiConfig));
+        memset(buf, 0, sizeof(EiConfig));
 
-        strncpy(buf.wifi_ssid, wifi_ssid.c_str(), 128);
-        strncpy(buf.wifi_password, wifi_password.c_str(), 128);
-        buf.wifi_security = wifi_security;
-        buf.sample_interval_ms = sample_interval_ms;
-        buf.sample_length_ms = sample_length_ms;
-        strncpy(buf.sample_label, sample_label.c_str(), 128);
-        strncpy(buf.sample_hmac_key, sample_hmac_key.c_str(), 33);
-        strncpy(buf.upload_host, upload_host.c_str(), 128);
-        strncpy(buf.upload_path, upload_path.c_str(), 128);
-        strncpy(buf.upload_api_key, upload_api_key.c_str(), 128);
-        strncpy(buf.mgmt_url, management_url.c_str(), 128);
-        buf.magic = 0xdeadbeef;
+        strncpy(buf->wifi_ssid, wifi_ssid.c_str(), 128);
+        strncpy(buf->wifi_password, wifi_password.c_str(), 128);
+        buf->wifi_security = wifi_security;
+        buf->sample_interval_ms = sample_interval_ms;
+        buf->sample_length_ms = sample_length_ms;
+        strncpy(buf->sample_label, sample_label.c_str(), 128);
+        strncpy(buf->sample_hmac_key, sample_hmac_key.c_str(), 33);
+        strncpy(buf->upload_host, upload_host.c_str(), 128);
+        strncpy(buf->upload_path, upload_path.c_str(), 128);
+        strncpy(buf->upload_api_key, upload_api_key.c_str(), 128);
+        strncpy(buf->mgmt_url, management_url.c_str(), 128);
+        buf->magic = 0xdeadbeef;
 
-        memory->save_config((uint8_t *)&buf, sizeof(EiConfig));
+        bool ret = memory->save_config((uint8_t *)buf, sizeof(EiConfig));
 
-        return true;
+        ei_free((void *)buf);
+
+        return ret;
     }
 
     virtual void load_config(void)
     {
-        EiConfig buf;
-
-        memset(&buf, 0, sizeof(EiConfig));
-        memory->load_config((uint8_t *)&buf, sizeof(EiConfig));
-
-        if (buf.magic == 0xdeadbeef) {
-            wifi_ssid = std::string(buf.wifi_ssid, 128);
-            wifi_password = std::string(buf.wifi_password, 128);
-            wifi_security = buf.wifi_security;
-            sample_interval_ms = buf.sample_interval_ms;
-            sample_length_ms = buf.sample_length_ms;
-            sample_label = std::string(buf.sample_label, 128);
-            sample_hmac_key = std::string(buf.sample_hmac_key, 33);
-            upload_host = std::string(buf.upload_host, 128);
-            upload_path = std::string(buf.upload_path, 128);
-            upload_api_key = std::string(buf.upload_api_key, 128);
-            management_url = std::string(buf.mgmt_url, 128);
+        EiConfig *buf = (EiConfig *)ei_malloc(sizeof(EiConfig));
+        if(buf == NULL) {
+            return;
         }
+
+        memset(buf, 0, sizeof(EiConfig));
+        memory->load_config((uint8_t *)buf, sizeof(EiConfig));
+
+        if (buf->magic == 0xdeadbeef) {
+            wifi_ssid = std::string(buf->wifi_ssid, 128);
+            wifi_password = std::string(buf->wifi_password, 128);
+            wifi_security = buf->wifi_security;
+            sample_interval_ms = buf->sample_interval_ms;
+            sample_length_ms = buf->sample_length_ms;
+            sample_label = std::string(buf->sample_label, 128);
+            sample_hmac_key = std::string(buf->sample_hmac_key, 33);
+            upload_host = std::string(buf->upload_host, 128);
+            upload_path = std::string(buf->upload_path, 128);
+            upload_api_key = std::string(buf->upload_api_key, 128);
+            management_url = std::string(buf->mgmt_url, 128);
+        }
+
+        ei_free((void *)buf);
     }
 
     /**

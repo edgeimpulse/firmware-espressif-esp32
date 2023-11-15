@@ -21,6 +21,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <cstring>
 // Include FreeRTOS for delay
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -73,11 +74,25 @@ __attribute__((weak)) void ei_printf_float(float f) {
     ei_printf("%f", f);
 }
 
+// we use alligned alloc instead of regular malloc
+// due to https://github.com/espressif/esp-nn/issues/7
 __attribute__((weak)) void *ei_malloc(size_t size) {
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    return aligned_alloc(16, size);
+#endif
     return malloc(size);
 }
 
 __attribute__((weak)) void *ei_calloc(size_t nitems, size_t size) {
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    void *p;
+    p = aligned_alloc(16, nitems * size);
+    if (p == nullptr)
+        return p;
+
+    memset(p, '\0', nitems * size);
+    return p;
+#endif
     return calloc(nitems, size);
 }
 

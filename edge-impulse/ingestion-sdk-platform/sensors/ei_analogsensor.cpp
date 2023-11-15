@@ -29,7 +29,7 @@
 
 #include "ei_device_espressif_esp32.h"
 #include "ei_analogsensor.h"
-#include "sensor_aq.h"
+#include "firmware-sdk/sensor-aq/sensor_aq.h"
 
 static esp_adc_cal_characteristics_t *adc_chars;
 #if CONFIG_IDF_TARGET_ESP32

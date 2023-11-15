@@ -25,16 +25,16 @@
 #include <stdint.h>
 #include "model_metadata.h"
 
-#include "tflite-model/tflite_learn_5_compiled.h"
+#include "tflite-model/tflite_learn_13_compiled.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "edge-impulse-sdk/classifier/inferencing_engines/engines.h"
 
 const char* ei_classifier_inferencing_categories[] = { "helloworld", "noise", "unknown" };
 
-uint8_t ei_dsp_config_3_axes[] = { 0 };
-const uint32_t ei_dsp_config_3_axes_size = 1;
-ei_dsp_config_mfcc_t ei_dsp_config_3 = {
-    3, // uint32_t blockId
+uint8_t ei_dsp_config_12_axes[] = { 0 };
+const uint32_t ei_dsp_config_12_axes_size = 1;
+ei_dsp_config_mfcc_t ei_dsp_config_12 = {
+    12, // uint32_t blockId
     4, // int implementationVersion
     1, // int length of axes
     13, // int num_cepstral
@@ -51,26 +51,26 @@ ei_dsp_config_mfcc_t ei_dsp_config_3 = {
 
 const size_t ei_dsp_blocks_size = 1;
 ei_model_dsp_t ei_dsp_blocks[ei_dsp_blocks_size] = {
-    { // DSP block 3
+    { // DSP block 12
         650,
         &extract_mfcc_features,
-        (void*)&ei_dsp_config_3,
-        ei_dsp_config_3_axes,
-        ei_dsp_config_3_axes_size
+        (void*)&ei_dsp_config_12,
+        ei_dsp_config_12_axes,
+        ei_dsp_config_12_axes_size
     }
 };
-const ei_config_tflite_eon_graph_t ei_config_tflite_graph_5 = {
+const ei_config_tflite_eon_graph_t ei_config_tflite_graph_13 = {
     .implementation_version = 1,
-    .model_init = &tflite_learn_5_init,
-    .model_invoke = &tflite_learn_5_invoke,
-    .model_reset = &tflite_learn_5_reset,
-    .model_input = &tflite_learn_5_input,
-    .model_output = &tflite_learn_5_output,
+    .model_init = &tflite_learn_13_init,
+    .model_invoke = &tflite_learn_13_invoke,
+    .model_reset = &tflite_learn_13_reset,
+    .model_input = &tflite_learn_13_input,
+    .model_output = &tflite_learn_13_output,
 };
 
-const ei_learning_block_config_tflite_graph_t ei_learning_block_config_5 = {
+const ei_learning_block_config_tflite_graph_t ei_learning_block_config_13 = {
     .implementation_version = 1,
-    .block_id = 5,
+    .block_id = 13,
     .object_detection = 0,
     .object_detection_last_layer = EI_CLASSIFIER_LAST_LAYER_UNKNOWN,
     .output_data_tensor = 0,
@@ -78,14 +78,14 @@ const ei_learning_block_config_tflite_graph_t ei_learning_block_config_5 = {
     .output_score_tensor = 2,
     .quantized = 1,
     .compiled = 1,
-    .graph_config = (void*)&ei_config_tflite_graph_5
+    .graph_config = (void*)&ei_config_tflite_graph_13
 };
 
 const size_t ei_learning_blocks_size = 1;
 const ei_learning_block_t ei_learning_blocks[ei_learning_blocks_size] = {
     {
         &run_nn_inference,
-        (void*)&ei_learning_block_config_5,
+        (void*)&ei_learning_block_config_13,
         EI_CLASSIFIER_IMAGE_SCALING_NONE,
     },
 };
@@ -99,8 +99,8 @@ const ei_model_performance_calibration_t ei_calibration = {
     0   /* Don't use flags */
 };
 
-const ei_impulse_t impulse_40_1 = {
-    .project_id = 40,
+const ei_impulse_t impulse_53_1 = {
+    .project_id = 53,
     .project_owner = "Edge Impulse Profiling",
     .project_name = "Demo: Keyword Spotting",
     .deploy_version = 1,
@@ -140,6 +140,6 @@ const ei_impulse_t impulse_40_1 = {
     .categories = ei_classifier_inferencing_categories
 };
 
-const ei_impulse_t ei_default_impulse = impulse_40_1;
+const ei_impulse_t ei_default_impulse = impulse_53_1;
 
 #endif // _EI_CLASSIFIER_MODEL_METADATA_H_

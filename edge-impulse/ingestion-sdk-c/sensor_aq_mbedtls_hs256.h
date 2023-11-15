@@ -28,7 +28,7 @@
  */
 
 //#include <string.h>
-#include "sensor_aq.h"
+#include "firmware-sdk/sensor-aq/sensor_aq.h"
 #include "mbedtls/md.h"
 //#include "mbedtls/sha256.h"
 //#include "mbed_trace.h"

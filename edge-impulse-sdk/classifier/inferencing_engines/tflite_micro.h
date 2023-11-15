@@ -24,9 +24,9 @@
 
 #include <cmath>
 #include "edge-impulse-sdk/tensorflow/lite/micro/all_ops_resolver.h"
-#include "edge-impulse-sdk/tensorflow/lite/micro/micro_error_reporter.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/micro_interpreter.h"
 #include "edge-impulse-sdk/tensorflow/lite/schema/schema_generated.h"
+#include "edge-impulse-sdk/tensorflow/lite/schema/schema_generated_full.h"
 #include "edge-impulse-sdk/classifier/ei_aligned_malloc.h"
 #include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
@@ -35,9 +35,6 @@
 #if defined(EI_CLASSIFIER_HAS_TFLITE_OPS_RESOLVER) && EI_CLASSIFIER_HAS_TFLITE_OPS_RESOLVER == 1
 #include "tflite-model/tflite-resolver.h"
 #endif // EI_CLASSIFIER_HAS_TFLITE_OPS_RESOLVER
-
-static tflite::MicroErrorReporter micro_error_reporter;
-static tflite::ErrorReporter* error_reporter = &micro_error_reporter;
 
 #ifdef EI_CLASSIFIER_ALLOCATION_STATIC
 #if defined __GNUC__
@@ -108,7 +105,7 @@ static EI_IMPULSE_ERROR inference_tflite_setup(
         // copying or parsing, it's a very lightweight operation.
         model = tflite::GetModel(graph_config->model);
         if (model->version() != TFLITE_SCHEMA_VERSION) {
-            error_reporter->Report(
+            ei_printf(
                 "Model provided is schema version %d not equal "
                 "to supported version %d.",
                 model->version(), TFLITE_SCHEMA_VERSION);
@@ -120,19 +117,19 @@ static EI_IMPULSE_ERROR inference_tflite_setup(
 #ifdef EI_TFLITE_RESOLVER
     EI_TFLITE_RESOLVER
 #else
-    tflite::AllOpsResolver resolver;
+    static tflite::AllOpsResolver resolver; // needs static to match the life of the interpreter
 #endif
 
     // Build an interpreter to run the model with.
     tflite::MicroInterpreter *interpreter = new tflite::MicroInterpreter(
-        model, resolver, tensor_arena, graph_config->arena_size, error_reporter);
+        model, resolver, tensor_arena, graph_config->arena_size);
 
     *micro_interpreter = interpreter;
 
     // Allocate memory from the tensor_arena for the model's tensors.
-    TfLiteStatus allocate_status = interpreter->AllocateTensors();
+    TfLiteStatus allocate_status = interpreter->AllocateTensors(true);
     if (allocate_status != kTfLiteOk) {
-        error_reporter->Report("AllocateTensors() failed");
+        ei_printf("AllocateTensors() failed");
         return EI_IMPULSE_TFLITE_ERROR;
     }
 
@@ -180,7 +177,7 @@ static EI_IMPULSE_ERROR inference_tflite_run(
     TfLiteStatus invoke_status = interpreter->Invoke();
     if (invoke_status != kTfLiteOk) {
         delete interpreter;
-        error_reporter->Report("Invoke failed (%d)\n", invoke_status);
+        ei_printf("Invoke failed (%d)\n", invoke_status);
         return EI_IMPULSE_TFLITE_ERROR;
     }
 
@@ -253,7 +250,7 @@ EI_IMPULSE_ERROR run_nn_inference_from_dsp(
     // Run inference, and report any error
     TfLiteStatus invoke_status = interpreter->Invoke();
     if (invoke_status != kTfLiteOk) {
-        error_reporter->Report("Invoke failed (%d)\n", invoke_status);
+        ei_printf("Invoke failed (%d)\n", invoke_status);
         return EI_IMPULSE_TFLITE_ERROR;
     }
 

@@ -38,7 +38,7 @@
   // let's assume the file is there
   #include "ei_fusion_sensors_config.h"
 #endif
-#include "sensor_aq.h"
+#include "sensor-aq/sensor_aq.h"
 #include <string>
 #include <vector>
 

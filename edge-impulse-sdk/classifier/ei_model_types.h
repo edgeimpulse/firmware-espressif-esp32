@@ -22,7 +22,7 @@
 
 #include "edge-impulse-sdk/classifier/ei_classifier_types.h"
 #include "edge-impulse-sdk/dsp/numpy.hpp"
-#if EI_CLASSIFIER_USE_FULL_TFLITE
+#if EI_CLASSIFIER_USE_FULL_TFLITE || (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_AKIDA) || (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_MEMRYX)
 #include "tensorflow-lite/tensorflow/lite/c/common.h"
 #else
 #include "edge-impulse-sdk/tensorflow/lite/c/common.h"
@@ -65,6 +65,7 @@
 #define EI_CLASSIFIER_IMAGE_SCALING_NONE          0
 #define EI_CLASSIFIER_IMAGE_SCALING_0_255         1
 #define EI_CLASSIFIER_IMAGE_SCALING_TORCH         2
+#define EI_CLASSIFIER_IMAGE_SCALING_MIN1_1        3
 
 struct ei_impulse;
 

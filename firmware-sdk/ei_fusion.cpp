@@ -596,16 +596,6 @@ static void print_all_combinations(
             else {
                 sens.max_sample_length  = 0;
             }
-
-#if 0
-            for (float &local_freq : found_freq_combinations) {   /* for each found freq */
-                sens.max_sample_length =
-                    (int)(ingest_memory_size / (local_freq * (sizeof(fusion_sample_format_t) * local_num_fusion_axis) * 2));
-
-                sens.frequencies.push_back(local_freq);
-            }
-#endif
-
 #else
             // fusion, use set freq
             sens.max_sample_length =
@@ -649,9 +639,23 @@ static int generate_bit_flags(int dec)
 static bool add_sensor(int sensor_ix, char *name_buffer)
 {
     bool added_loc;
-    bool is_fusion = false;
+    bool is_fusion = false;    
 
-    if (strstr(name_buffer, fusable_sensor_list[sensor_ix].name)) { // is a matching sensor
+    char* buf = (char *)ei_malloc(strlen(fusable_sensor_list[sensor_ix].name) + 1);
+
+    if (buf == NULL) {
+        return false;
+    }
+
+    memset(buf, 0, strlen(fusable_sensor_list[sensor_ix].name) + 1);
+    strncpy(buf, fusable_sensor_list[sensor_ix].name, strlen(fusable_sensor_list[sensor_ix].name));
+
+    if (strstr(fusable_sensor_list[sensor_ix].name, "(")
+        && strstr(name_buffer, "(") == NULL ) {  // full name has ( ) => BUT not the fusion string received, which probably means is using abbreviation
+        buf[strcspn(fusable_sensor_list[sensor_ix].name , " (")] = '\0';
+    }
+
+    if (strstr(name_buffer, buf)) { // is a matching sensor
         added_loc = false;
         for (int j = 0; j < num_fusions; j++) {
             if (strstr(
@@ -673,6 +677,8 @@ static bool add_sensor(int sensor_ix, char *name_buffer)
         }
         is_fusion = true;
     }
+
+    ei_free(buf);
 
     return is_fusion;
 }

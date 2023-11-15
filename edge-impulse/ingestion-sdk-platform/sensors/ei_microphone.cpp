@@ -36,7 +36,7 @@
 
 #include "ei_config_types.h"
 #include "sensor_aq_mbedtls_hs256.h"
-#include "sensor_aq_none.h"
+#include "firmware-sdk/sensor-aq/sensor_aq_none.h"
 #include "edge-impulse-sdk/dsp/numpy.hpp"
 
 typedef struct {
