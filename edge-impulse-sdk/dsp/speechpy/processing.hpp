@@ -203,7 +203,7 @@ namespace processing {
      * @param frame_stride (float): The stride between frames.
      * @returns Number of frames required, or a negative number if an error occured
      */
-    static int calculate_signal_used(
+    __attribute__((unused)) static int calculate_signal_used(
         size_t signal_size,
         uint32_t sampling_frequency,
         float frame_length,

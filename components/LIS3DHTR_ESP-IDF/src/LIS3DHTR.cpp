@@ -1,10 +1,10 @@
-/*    
+/*
  * A library for Grove - 3-Axis Digital Accelerometer ±2g to 16g Ultra-low Power(LIS3DHTR)
- *   
- * Copyright (c) 2019 seeed technology co., ltd.  
- * Author      : Hongtai Liu (lht856@foxmail.com)  
+ *
+ * Copyright (c) 2019 seeed technology co., ltd.
+ * Author      : Hongtai Liu (lht856@foxmail.com)
  * Create Time : July 2019
- * Change Log  : 
+ * Change Log  :
  *
  * The MIT License (MIT)
  *
@@ -14,10 +14,10 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software istm
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -33,16 +33,21 @@
 #include <freertos/FreeRTOS.h>
 #include "driver/i2c.h"
 
+#include "esp_idf_version.h"
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#define portTICK_RATE_MS portTICK_PERIOD_MS
+#endif
+
 #define DELAY(ms) vTaskDelay(ms / portTICK_RATE_MS);
 
 LIS3DHTR::LIS3DHTR()
 {
-    
+
 }
 
 void LIS3DHTR::begin(uint8_t address)
 {
-    int i2c_master_port = I2C_MASTER_NUM;
 
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
@@ -54,9 +59,9 @@ void LIS3DHTR::begin(uint8_t address)
 
     conf.master.clk_speed = I2C_MASTER_FREQ_HZ;
 
-    i2c_param_config(i2c_master_port, &conf);
+    i2c_param_config(I2C_MASTER_NUM, &conf);
 
-    i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+    i2c_driver_install(I2C_MASTER_NUM, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, I2C_NUM_0);
 
     devAddr = address;
 
@@ -278,11 +283,11 @@ void LIS3DHTR::setHighSolution(bool enable)
 {
     uint8_t data = 0;
     data = readRegister(LIS3DHTR_REG_ACCEL_CTRL_REG4);
-   
+
     data = enable? data | LIS3DHTR_REG_ACCEL_CTRL_REG4_HS_ENABLE : data & ~LIS3DHTR_REG_ACCEL_CTRL_REG4_HS_ENABLE;
-    
+
     writeRegister(LIS3DHTR_REG_ACCEL_CTRL_REG4, data);
-    return; 
+    return;
 }
 
 
@@ -328,7 +333,7 @@ uint16_t LIS3DHTR::readbitADC3(void)
 }
 
 void LIS3DHTR::writeRegister(uint8_t reg, uint8_t val)
-{   
+{
 
 uint8_t write_buf[2] = {reg, val};
 

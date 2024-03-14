@@ -23,6 +23,7 @@
 /* Include ----------------------------------------------------------------- */
 #include "driver/gpio.h"
 #include "sdkconfig.h"
+#include "esp_idf_version.h"
 
 #include <stdio.h>
 
@@ -35,6 +36,9 @@
 #include "ei_analogsensor.h"
 #include "ei_inertial_sensor.h"
 
+#define RED_LED_PIN GPIO_NUM_21
+#define WHITE_LED_PIN GPIO_NUM_22
+
 EiDeviceInfo *EiDevInfo = dynamic_cast<EiDeviceInfo *>(EiDeviceESP32::get_device());
 static ATServer *at;
 
@@ -42,16 +46,21 @@ static ATServer *at;
 
 /* Public functions -------------------------------------------------------- */
 
+void setup_led() {
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    esp_rom_gpio_pad_select_gpio(RED_LED_PIN);
+    esp_rom_gpio_pad_select_gpio(WHITE_LED_PIN);
+#elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+    gpio_pad_select_gpio(RED_LED_PIN);
+    gpio_pad_select_gpio(WHITE_LED_PIN);
+#endif
+    gpio_set_direction(RED_LED_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_direction(WHITE_LED_PIN, GPIO_MODE_OUTPUT);
+}
+
 extern "C" int app_main()
 {
-    gpio_pad_select_gpio(GPIO_NUM_21);
-    gpio_reset_pin(GPIO_NUM_21);
-
-    gpio_pad_select_gpio(GPIO_NUM_22);
-    gpio_reset_pin(GPIO_NUM_22);    
-    
-    gpio_set_direction(GPIO_NUM_21, GPIO_MODE_OUTPUT);
-    gpio_set_direction(GPIO_NUM_22, GPIO_MODE_OUTPUT);    
+    setup_led();
 
     /* Initialize Edge Impulse sensors and commands */
 
@@ -78,7 +87,7 @@ extern "C" int app_main()
     at->print_prompt();
 
     dev->set_state(eiStateFinished);
-    
+
     while(1){
         /* handle command comming from uart */
         char data = ei_get_serial_byte();

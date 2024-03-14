@@ -13,7 +13,8 @@
 static const char* TAG = "camera_xclk";
 #endif
 
-static ledc_channel_t g_ledc_channel = 0;
+#define NO_CAMERA_LEDC_CHANNEL 0xFF
+static ledc_channel_t g_ledc_channel = NO_CAMERA_LEDC_CHANNEL;
 
 esp_err_t xclk_timer_conf(int ledc_timer, int xclk_freq_hz)
 {
@@ -22,6 +23,10 @@ esp_err_t xclk_timer_conf(int ledc_timer, int xclk_freq_hz)
     timer_conf.freq_hz = xclk_freq_hz;
     timer_conf.speed_mode = LEDC_LOW_SPEED_MODE;
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)   
+    timer_conf.deconfigure = false;
+#endif
+   
 #if ESP_IDF_VERSION_MAJOR >= 4
     timer_conf.clk_cfg = LEDC_AUTO_CLK;
 #endif
@@ -33,7 +38,7 @@ esp_err_t xclk_timer_conf(int ledc_timer, int xclk_freq_hz)
     return err;
 }
 
-esp_err_t camera_enable_out_clock(camera_config_t* config)
+esp_err_t camera_enable_out_clock(const camera_config_t* config)
 {
     esp_err_t err = xclk_timer_conf(config->ledc_timer, config->xclk_freq_hz);
     if (err != ESP_OK) {
@@ -60,5 +65,8 @@ esp_err_t camera_enable_out_clock(camera_config_t* config)
 
 void camera_disable_out_clock()
 {
-    ledc_stop(LEDC_LOW_SPEED_MODE, g_ledc_channel, 0);
+    if (g_ledc_channel != NO_CAMERA_LEDC_CHANNEL) {
+        ledc_stop(LEDC_LOW_SPEED_MODE, g_ledc_channel, 0);
+        g_ledc_channel = NO_CAMERA_LEDC_CHANNEL;
+    }
 }

@@ -18,8 +18,8 @@
         .pin_pwdn       = PIN_PWDN,
         .pin_reset      = PIN_RESET,
         .pin_xclk       = PIN_XCLK,
-        .pin_sscb_sda   = PIN_SIOD,
-        .pin_sscb_scl   = PIN_SIOC,
+        .pin_sccb_sda   = PIN_SIOD,
+        .pin_sccb_scl   = PIN_SIOC,
         .pin_d7         = PIN_D7,
         .pin_d6         = PIN_D6,
         .pin_d5         = PIN_D5,
@@ -70,6 +70,13 @@
 #include "driver/ledc.h"
 #include "sensor.h"
 #include "sys/time.h"
+#include "sdkconfig.h"
+
+/**
+ * @brief define for if chip supports camera
+ */
+#define ESP_CAMERA_SUPPORTED (CONFIG_IDF_TARGET_ESP32 | CONFIG_IDF_TARGET_ESP32S3 | \
+                             CONFIG_IDF_TARGET_ESP32S2)
 
 #ifdef __cplusplus
 extern "C" {
@@ -84,12 +91,25 @@ typedef enum {
 } camera_grab_mode_t;
 
 /**
- * @brief Camera frame buffer location 
+ * @brief Camera frame buffer location
  */
 typedef enum {
     CAMERA_FB_IN_PSRAM,         /*!< Frame buffer is placed in external PSRAM */
     CAMERA_FB_IN_DRAM           /*!< Frame buffer is placed in internal DRAM */
 } camera_fb_location_t;
+
+#if CONFIG_CAMERA_CONVERTER_ENABLED
+/**
+ * @brief Camera RGB\YUV conversion mode
+ */
+typedef enum {
+    CONV_DISABLE,
+    RGB565_TO_YUV422,
+
+    YUV422_TO_RGB565,
+    YUV422_TO_YUV420
+} camera_conv_mode_t;
+#endif
 
 /**
  * @brief Configuration structure for camera initialization
@@ -98,8 +118,14 @@ typedef struct {
     int pin_pwdn;                   /*!< GPIO pin for camera power down line */
     int pin_reset;                  /*!< GPIO pin for camera reset line */
     int pin_xclk;                   /*!< GPIO pin for camera XCLK line */
-    int pin_sscb_sda;               /*!< GPIO pin for camera SDA line */
-    int pin_sscb_scl;               /*!< GPIO pin for camera SCL line */
+    union {
+        int pin_sccb_sda;           /*!< GPIO pin for camera SDA line */
+        int pin_sscb_sda __attribute__((deprecated("please use pin_sccb_sda instead")));           /*!< GPIO pin for camera SDA line (legacy name) */
+    };
+    union {
+        int pin_sccb_scl;           /*!< GPIO pin for camera SCL line */
+        int pin_sscb_scl __attribute__((deprecated("please use pin_sccb_scl instead")));           /*!< GPIO pin for camera SCL line (legacy name) */
+    };
     int pin_d7;                     /*!< GPIO pin for camera D7 line */
     int pin_d6;                     /*!< GPIO pin for camera D6 line */
     int pin_d5;                     /*!< GPIO pin for camera D5 line */
@@ -124,6 +150,11 @@ typedef struct {
     size_t fb_count;                /*!< Number of frame buffers to be allocated. If more than one, then each frame will be acquired (double speed)  */
     camera_fb_location_t fb_location; /*!< The location where the frame buffer will be allocated */
     camera_grab_mode_t grab_mode;   /*!< When buffers should be filled */
+#if CONFIG_CAMERA_CONVERTER_ENABLED
+    camera_conv_mode_t conv_mode;   /*!< RGB<->YUV Conversion mode */
+#endif
+
+    int sccb_i2c_port;              /*!< If pin_sccb_sda is -1, use the already configured I2C bus by number */
 } camera_config_t;
 
 /**
@@ -169,14 +200,14 @@ esp_err_t esp_camera_init(const camera_config_t* config);
  *      - ESP_OK on success
  *      - ESP_ERR_INVALID_STATE if the driver hasn't been initialized yet
  */
-esp_err_t esp_camera_deinit();
+esp_err_t esp_camera_deinit(void);
 
 /**
  * @brief Obtain pointer to a frame buffer.
  *
  * @return pointer to the frame buffer
  */
-camera_fb_t* esp_camera_fb_get();
+camera_fb_t* esp_camera_fb_get(void);
 
 /**
  * @brief Return the frame buffer to be reused again.
@@ -190,21 +221,27 @@ void esp_camera_fb_return(camera_fb_t * fb);
  *
  * @return pointer to the sensor
  */
-sensor_t * esp_camera_sensor_get();
+sensor_t * esp_camera_sensor_get(void);
 
 /**
  * @brief Save camera settings to non-volatile-storage (NVS)
- * 
- * @param key   A unique nvs key name for the camera settings 
+ *
+ * @param key   A unique nvs key name for the camera settings
  */
 esp_err_t esp_camera_save_to_nvs(const char *key);
 
 /**
  * @brief Load camera settings from non-volatile-storage (NVS)
- * 
- * @param key   A unique nvs key name for the camera settings 
+ *
+ * @param key   A unique nvs key name for the camera settings
  */
 esp_err_t esp_camera_load_from_nvs(const char *key);
+
+/**
+ * @brief Return all frame buffers to be reused again.
+ */
+void esp_camera_return_all(void);
+
 
 #ifdef __cplusplus
 }

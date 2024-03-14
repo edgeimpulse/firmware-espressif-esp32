@@ -1,6 +1,6 @@
 # ESP32 Camera Driver
 
-[![Build examples](https://github.com/espressif/esp32-camera/actions/workflows/build.yml/badge.svg)](https://github.com/espressif/esp32-camera/actions/workflows/build.yml)
+[![Build examples](https://github.com/espressif/esp32-camera/actions/workflows/build.yml/badge.svg)](https://github.com/espressif/esp32-camera/actions/workflows/build.yml) [![Component Registry](https://components.espressif.com/components/espressif/esp32-camera/badge.svg)](https://components.espressif.com/components/espressif/esp32-camera)
 ## General Information
 
 This repository hosts ESP32 series Soc compatible driver for image sensors. Additionally it provides a few tools, which allow converting the captured frame data to the more common BMP and JPEG formats.
@@ -22,10 +22,13 @@ This repository hosts ESP32 series Soc compatible driver for image sensors. Addi
 | OV7725  | 640 x 480      | color      | Raw RGB<br/>GRB 422<br/>RGB565/555/444<br/>YCbCr 422         | 1/4"     |
 | NT99141 | 1280 x 720     | color      | YCbCr 422<br/>RGB565/555/444<br/>Raw<br/>CCIR656<br/>JPEG compression | 1/4"     |
 | GC032A  | 640 x 480      | color      | YUV/YCbCr422<br/>RAW Bayer<br/>RGB565                        | 1/10"    |
-| GC0308  | 640 x 480      | color      | YUV/YCbCr422<br/>RAW Bayer<br/>RGB565                        | 1/6.5"   |
+| GC0308  | 640 x 480      | color      | YUV/YCbCr422<br/>RAW Bayer<br/>RGB565<br/>Grayscale                         | 1/6.5"   |
 | GC2145  | 1600 x 1200    | color      | YUV/YCbCr422<br/>RAW Bayer<br/>RGB565                        | 1/5"     |
 | BF3005  | 640 x 480      | color      | YUV/YCbCr422<br/>RAW Bayer<br/>RGB565                        | 1/4"     |
-| BF20A6  | 640 x 480      | color      | YUV/YCbCr422<br/>RAW Bayer                                   | 1/10"    |
+| BF20A6  | 640 x 480      | color      | YUV/YCbCr422<br/>RAW Bayer<br/>Only Y                        | 1/10"    |
+| SC101IOT| 1280 x 720     | color      | YUV/YCbCr422<br/>Raw RGB                                     | 1/4.2"   |
+| SC030IOT| 640 x 480      | color      | YUV/YCbCr422<br/>RAW Bayer                                   | 1/6.5"   |
+| SC031GS | 640 x 480      | monochrome | RAW MONO<br/>Grayscale                                       | 1/6"     |
 
 ## Important to Remember
 
@@ -37,13 +40,25 @@ This repository hosts ESP32 series Soc compatible driver for image sensors. Addi
 ## Installation Instructions
 
 
-### Using esp-idf
+### Using with ESP-IDF
 
-- Clone or download and extract the repository to the components folder of your ESP-IDF project
+- Add a dependency on `espressif/esp32-camera` component:
+  ```bash
+  idf.py add-dependency "espressif/esp32-camera"
+  ```
+  (or add it manually in idf_component.yml of your project)
 - Enable PSRAM in `menuconfig` (also set Flash and PSRAM frequiencies to 80MHz)
 - Include `esp_camera.h` in your code
 
-### Using PlatformIO
+These instructions also work for PlatformIO, if you are using `framework=espidf`.
+
+### Using with Arduino
+
+#### Arduino IDE
+
+If you are using the arduino-esp32 core in Arduino IDE, no installation is needed! You can use esp32-camera right away.
+
+#### PlatformIO
 
 The easy way -- on the `env` section of `platformio.ini`, add the following:
 
@@ -65,41 +80,15 @@ Enable PSRAM on `menuconfig` or type it direclty on `sdkconfig`. Check the [offi
 CONFIG_ESP32_SPIRAM_SUPPORT=y
 ```
 
-***Arduino*** The easy-way (content above) only seems to work if you're using `framework=arduino` which seems to take a bunch of the guesswork out (thanks Arduino!) but also suck up a lot more memory and flash, almost crippling the performance.  If you plan to use the `framework=espidf` then read the sections below carefully!!
-
-## Platform.io lib/submodule (for framework=espidf)
-
-It's probably easier to just skip the platform.io library registry version and link the git repo as a submodule. (i.e. using code outside the platform.io library management). In this example we will install this as a submodule inside the platform.io $project/lib folder: 
-```
-cd $project\lib
-git submodule add -b master https://github.com/espressif/esp32-camera.git
-```
-
-Then in `platformio.ini` file
-```
-build_flags =
-   -I../lib/esp32-camera
-```
-After that `#include "esp_camera.h"` statement will be available. Now the module is included, and you're hopefully back to the same place as the easy-Arduino way. 
-
-**Warning about platform.io/espidf and fresh (not initialized) git repos**
-There is a sharp-edge on you'll discover in the platform.io build process (in espidf v3.3 & 4.0.1) where a project which has only had `git init`  but nothing committed will crash platform.io build process with highly non-useful output.  The cause is due to lack of a version (making you think you did something wrong, when you didn't at all) - the output is horribly non-descript.  Solution: the devs want you to create a file called version.txt with a number in it, or simply commit any file to the projects git repo and use git. This happens because platform.io build process tries to be too clever and determine the build version number from the git repo - it's a sharp edge you'll only encounter if you're experimenting on a new project with no commits .. like wtf is my camera not working let's try a 'clean project'?!  </rant> 
-
-## Platform.io Kconfig 
-Kconfig is used by the platform.io menuconfig (accessed by running: `pio run -t menuconfig`) to interactively manage the various #ifdef statements throughout the espidf and supporting libraries (i.e. this repo: esp32-camera and arduino-esp32.git).  The menuconfig process generates the `sdkconfig` file which is ultimately used behind the scenes by espidf compile+build process. 
-
-**Make sure to append or symlink** [this `Kconfig`](./Kconfig) content into the `Kconfig` of your project. 
-
-You symlink (or copy) the included Kconfig into your platform.io projects src directory.  The file should be named `Kconfig.projbuild` in your projects src\ directory or you could also add the library path to a CMakefile.txt and hope the `Kconfig` (or `Kconfig.projbuild`) gets discovered by the menuconfig process, though this unpredictable for me. 
-
-The unpredictable wonky behavior in platform.io build process around Kconfig naming (Kconfig vs. Kconfig.projbuild) occurs between espidf versions 3.3 and 4.0 - but if you don't see "Camera configuration" in your `pio run -t menuconfig` then there is no point trying to test camera code (it may compile, but it probably won't work!) and it seems the platform.io devs (when they built their wrapper around the espidf menuconfig) didn't implement it properly.  You've probably already figured out you can't use the espidf build tools since the files are in totally different locations and also different versions with sometimes different syntax.   This is one of those times you might consider changing the `platformio.ini` from `platform=espressif32` to `platform=https://github.com/platformio/platform-espressif32.git#develop` to get a more recent version of the espidf 4.0 tools. 
-
-However with a bit of patience and experimenting you'll figure the Kconfig out. Once Kconfig (or Kconfig.projbuild) is working then you will be able to choose the configurations according to your setup or the camera libraries will be compiled.  Although you might also need to delete your .pio/build directory before the options appear .. again, the `pio run -t menuconfig` doens't always notice the new Kconfig files! 
-
-If you miss-skip-ignore this critical step the camera module will compile but camera logic inside the library will be 'empty' because the Kconfig sets the proper #ifdef statements during the build process to initialize the selected cameras.  It's very not optional! 
-
-
 ## Examples
+
+This component comes with a basic example illustrating how to get frames from the camera. You can try out the example using the following command:
+
+```
+idf.py create-project-from-example "espressif/esp32-camera:camera_example"
+```
+
+This command will download the example into `camera_example` directory. It comes already pre-configured with the correct settings in menuconfig.
 
 ### Initialization
 
@@ -129,8 +118,8 @@ static camera_config_t camera_config = {
     .pin_pwdn  = CAM_PIN_PWDN,
     .pin_reset = CAM_PIN_RESET,
     .pin_xclk = CAM_PIN_XCLK,
-    .pin_sscb_sda = CAM_PIN_SIOD,
-    .pin_sscb_scl = CAM_PIN_SIOC,
+    .pin_sccb_sda = CAM_PIN_SIOD,
+    .pin_sccb_scl = CAM_PIN_SIOC,
 
     .pin_d7 = CAM_PIN_D7,
     .pin_d6 = CAM_PIN_D6,
@@ -149,10 +138,10 @@ static camera_config_t camera_config = {
     .ledc_channel = LEDC_CHANNEL_0,
 
     .pixel_format = PIXFORMAT_JPEG,//YUV422,GRAYSCALE,RGB565,JPEG
-    .frame_size = FRAMESIZE_UXGA,//QQVGA-QXGA Do not use sizes above QVGA when not JPEG
+    .frame_size = FRAMESIZE_UXGA,//QQVGA-UXGA, For ESP32, do not use sizes above QVGA when not JPEG. The performance of the ESP32-S series has improved a lot, but JPEG mode always gives better frame rates.
 
-    .jpeg_quality = 12, //0-63 lower number means higher quality
-    .fb_count = 1, //if more than one, i2s runs in continuous mode. Use only with JPEG
+    .jpeg_quality = 12, //0-63, for OV series camera sensors, lower number means higher quality
+    .fb_count = 1, //When jpeg mode is used, if fb_count more than one, the driver will work in continuous mode.
     .grab_mode = CAMERA_GRAB_WHEN_EMPTY//CAMERA_GRAB_LATEST. Sets when buffers should be filled
 };
 

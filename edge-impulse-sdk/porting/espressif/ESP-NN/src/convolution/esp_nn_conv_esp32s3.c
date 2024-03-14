@@ -137,7 +137,7 @@ int esp_nn_get_conv_scratch_size_esp32s3(const data_dims_t *input_dims,
         if (pad_wd == 0 && pad_ht == 0) {
             input_scratch = 0;
         } else {
-            input_scratch = (input_wd + 2 * pad_wd) * (input_ht + 2 * pad_ht) * in_ch * 2;
+            input_scratch = (input_wd + 2 * pad_wd) * (input_ht + 2 * pad_ht) * in_ch;
         }
         filter_scratch = filter_wd * filter_ht * new_channels * out_ch;
         int offset_acc_scratch = out_ch * 4;

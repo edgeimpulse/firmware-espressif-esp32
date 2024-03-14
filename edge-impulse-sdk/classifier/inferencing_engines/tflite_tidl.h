@@ -52,10 +52,13 @@ void *out_ptrs[16] = {NULL};
 
 EI_IMPULSE_ERROR run_nn_inference(
     const ei_impulse_t *impulse,
-    ei::matrix_t *fmatrix,
+    ei_feature_t *fmatrix,
+    uint32_t learn_block_index,
+    uint32_t* input_block_ids,
+    uint32_t input_block_ids_size,
     ei_impulse_result_t *result,
     void *config_ptr,
-    bool debug = false)
+    bool debug)
 {
     ei_learning_block_config_tflite_graph_t *config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
 
@@ -154,22 +157,38 @@ EI_IMPULSE_ERROR run_nn_inference(
         return EI_IMPULSE_INPUT_TENSOR_WAS_NULL;
     }
 
-    for (uint32_t ix = 0; ix < fmatrix->rows * fmatrix->cols; ix++) {
-    if (impulse->object_detection) {
-#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
-        float pixel = (float)fmatrix->buffer[ix];
-        input[ix] = static_cast<uint8_t>((pixel / input->tflite_input_scale) + input->tflite_input_zeropoint);
+    size_t mtx_size = impulse->dsp_blocks_size + impulse->learning_blocks_size;
+
+    for (size_t i = 0; i < input_block_ids_size; i++) {
+        uint16_t cur_mtx = input_block_ids[i];
+#if EI_CLASSIFIER_SINGLE_FEATURE_INPUT == 0
+        ei::matrix_t* matrix = NULL;
+
+        if (!find_mtx_by_idx(fmatrix, &matrix, cur_mtx, mtx_size)) {
+            ei_printf("ERR: Cannot find matrix with id %zu\n", cur_mtx);
+            return EI_IMPULSE_INVALID_SIZE;
+        }
 #else
-        input[ix] = fmatrix->buffer[ix];
+        ei::matrix_t* matrix = fmatrix[0].matrix;
 #endif
-    }
-    else {
+
+        for (uint32_t ix = 0; ix < matrix->rows * matrix->cols; ix++) {
+            if (impulse->object_detection) {
 #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
-        input[ix] = static_cast<int8_t>(round(fmatrix->buffer[ix] / input->tflite_input_scale) + input->tflite_input_zeropoint);
+                float pixel = (float)matrix->buffer[ix];
+                input[ix] = static_cast<uint8_t>((pixel / input->tflite_input_scale) + input->tflite_input_zeropoint);
 #else
-        input[ix] = fmatrix->buffer[ix];
+                input[ix] = matrix->buffer[ix];
 #endif
-    }
+            }
+            else {
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
+                input[ix] = static_cast<int8_t>(round(matrix->buffer[ix] / input->tflite_input_scale) + input->tflite_input_zeropoint);
+#else
+                input[ix] = matrix->buffer[ix];
+#endif
+            }
+        }
     }
 
     uint64_t ctx_start_us = ei_read_timer_us();
@@ -269,7 +288,8 @@ EI_IMPULSE_ERROR run_nn_inference(
                         result,
                         version,
                         out_data,
-                        impulse->tflite_output_features_count);
+                        impulse->tflite_output_features_count,
+                        debug);
                 #endif
                 break;
             }
@@ -282,7 +302,8 @@ EI_IMPULSE_ERROR run_nn_inference(
                         impulse,
                         result,
                         out_data,
-                        impulse->tflite_output_features_count);
+                        impulse->tflite_output_features_count,
+                        debug);
                 #endif
                 break;
             }

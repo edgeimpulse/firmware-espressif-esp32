@@ -1439,13 +1439,27 @@ public:
     }
 
     /**
-     * Convert an int16_t buffer into a float buffer, maps to -1..1
+     * Convert an int16_t buffer into a float buffer
      * @param input
      * @param output
      * @param length
      * @returns 0 if OK
      */
     static int int16_to_float(const EIDSP_i16 *input, float *output, size_t length) {
+        for (size_t ix = 0; ix < length; ix++) {
+            output[ix] = static_cast<float>((input[ix]));
+        }
+        return EIDSP_OK;
+    }
+
+    /**
+     * Convert an int8_t buffer into a float buffer
+     * @param input
+     * @param output
+     * @param length
+     * @returns 0 if OK
+     */
+    static int int8_to_float(const EIDSP_i8 *input, float *output, size_t length) {
         for (size_t ix = 0; ix < length; ix++) {
             output[ix] = static_cast<float>((input[ix]));
         }
@@ -2453,10 +2467,10 @@ public:
         return c;
     }
 
-    __attribute__((unused)) static fvec arrange(float start, float end, float step) {
+    __attribute__((unused)) static fvec arange(float start, float end, float step) {
         assert(start < end);
         assert(step > 0);
-        fvec v((size_t)((end - start) / step));
+        fvec v(::round((end - start) / step));
         for (size_t i = 0; i < v.size(); i++) {
             v[i] = start + i * step;
         }

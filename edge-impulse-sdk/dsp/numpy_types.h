@@ -30,9 +30,7 @@
 #endif // __MBED__
 #endif // __cplusplus
 #include "config.hpp"
-
-#include "../porting/ei_classifier_porting.h"
-
+#include "edge-impulse-sdk/dsp/returntypes.h"
 
 #if EIDSP_TRACK_ALLOCATIONS
 #include "memory.hpp"

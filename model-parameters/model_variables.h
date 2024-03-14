@@ -52,11 +52,14 @@ ei_dsp_config_mfcc_t ei_dsp_config_12 = {
 const size_t ei_dsp_blocks_size = 1;
 ei_model_dsp_t ei_dsp_blocks[ei_dsp_blocks_size] = {
     { // DSP block 12
-        650,
-        &extract_mfcc_features,
-        (void*)&ei_dsp_config_12,
-        ei_dsp_config_12_axes,
-        ei_dsp_config_12_axes_size
+        12,
+        650, // output size
+        &extract_mfcc_features, // DSP function pointer
+        (void*)&ei_dsp_config_12, // pointer to config struct
+        ei_dsp_config_12_axes, // array of offsets into the input stream, one for each axis
+        ei_dsp_config_12_axes_size, // number of axes
+        1, // version
+        nullptr, // factory function
     }
 };
 const ei_config_tflite_eon_graph_t ei_config_tflite_graph_13 = {
@@ -70,6 +73,7 @@ const ei_config_tflite_eon_graph_t ei_config_tflite_graph_13 = {
 
 const ei_learning_block_config_tflite_graph_t ei_learning_block_config_13 = {
     .implementation_version = 1,
+    .classification_mode = EI_CLASSIFIER_CLASSIFICATION_MODE_CLASSIFICATION,
     .block_id = 13,
     .object_detection = 0,
     .object_detection_last_layer = EI_CLASSIFIER_LAST_LAYER_UNKNOWN,
@@ -82,11 +86,18 @@ const ei_learning_block_config_tflite_graph_t ei_learning_block_config_13 = {
 };
 
 const size_t ei_learning_blocks_size = 1;
+const uint32_t ei_learning_block_13_inputs[1] = { 12 };
+const uint32_t ei_learning_block_13_inputs_size = 1;
 const ei_learning_block_t ei_learning_blocks[ei_learning_blocks_size] = {
     {
+        13,
+        false,
         &run_nn_inference,
         (void*)&ei_learning_block_config_13,
         EI_CLASSIFIER_IMAGE_SCALING_NONE,
+        ei_learning_block_13_inputs,
+        ei_learning_block_13_inputs_size,
+        3
     },
 };
 
@@ -99,8 +110,13 @@ const ei_model_performance_calibration_t ei_calibration = {
     0   /* Don't use flags */
 };
 
-const ei_impulse_t impulse_53_1 = {
-    .project_id = 53,
+const ei_object_detection_nms_config_t ei_object_detection_nms = {
+    0.0f, /* NMS confidence threshold */
+    0.2f  /* NMS IOU threshold */
+};
+
+const ei_impulse_t impulse_87_0 = {
+    .project_id = 87,
     .project_owner = "Edge Impulse Profiling",
     .project_name = "Demo: Keyword Spotting",
     .deploy_version = 1,
@@ -116,13 +132,15 @@ const ei_impulse_t impulse_53_1 = {
     .frequency = 16000,
     .dsp_blocks_size = ei_dsp_blocks_size,
     .dsp_blocks = ei_dsp_blocks,
-    
+
     .object_detection = 0,
     .object_detection_count = 0,
+
     .object_detection_threshold = 0,
+
     .object_detection_last_layer = EI_CLASSIFIER_LAST_LAYER_UNKNOWN,
     .fomo_output_size = 0,
-    
+
     .tflite_output_features_count = 3,
     .learning_blocks_size = ei_learning_blocks_size,
     .learning_blocks = ei_learning_blocks,
@@ -134,12 +152,14 @@ const ei_impulse_t impulse_53_1 = {
     .slice_size = (16000/4),
     .slices_per_model_window = 4,
 
-    .has_anomaly = 0,
+    .has_anomaly = EI_ANOMALY_TYPE_UNKNOWN,
     .label_count = 3,
     .calibration = ei_calibration,
-    .categories = ei_classifier_inferencing_categories
+    .categories = ei_classifier_inferencing_categories,
+    .object_detection_nms = ei_object_detection_nms
 };
 
-const ei_impulse_t ei_default_impulse = impulse_53_1;
+ei_impulse_handle_t impulse_handle_87_0 = ei_impulse_handle_t( &impulse_87_0 );
+ei_impulse_handle_t& ei_default_impulse = impulse_handle_87_0;
 
 #endif // _EI_CLASSIFIER_MODEL_METADATA_H_

@@ -35,7 +35,7 @@
 #include "esp_system.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
-//#include "esp_wifi.h"
+#include "esp_mac.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/timers.h>
@@ -80,7 +80,7 @@ EiDeviceESP32::EiDeviceESP32(EiDeviceMemory* mem)
     standalone_sensor_list[0].max_sample_length_s = mem->get_available_sample_bytes() / (16000 * 2);
     standalone_sensor_list[0].frequencies[0] = 16000.0f;
     standalone_sensor_list[0].frequencies[1] = 8000.0f;
-  
+
 }
 
 
@@ -96,7 +96,7 @@ void EiDeviceESP32::init_device_id(void)
 	uint8_t baseMac[6];
 	esp_read_mac(baseMac, ESP_MAC_WIFI_STA);
 
-	sprintf(temp, 
+	sprintf(temp,
             "%02X:%02X:%02X:%02X:%02X:%02X",
             baseMac[0],
             baseMac[1],
@@ -106,7 +106,7 @@ void EiDeviceESP32::init_device_id(void)
             baseMac[5]);
 
     device_id = std::string(temp);
-    mac_address = std::string(temp);    
+    mac_address = std::string(temp);
 }
 
 EiDeviceInfo* EiDeviceInfo::get_device(void)
@@ -145,22 +145,22 @@ void EiDeviceESP32::set_state(EiState state)
         EI_RED_LED_ON;
         delay_ms(100);
         EI_RED_LED_OFF;
-        delay_ms(100);          
+        delay_ms(100);
         break;
     case eiStateUploading:
-        EI_RED_LED_ON;    
+        EI_RED_LED_ON;
         EI_WHITE_LED_ON;
         break;
     case eiStateFinished:
-        for (int i = 0; i < 4; i++) {    
+        for (int i = 0; i < 4; i++) {
             EI_RED_LED_ON;
             EI_WHITE_LED_ON;
             delay_ms(100);
             EI_RED_LED_OFF;
             EI_WHITE_LED_OFF;
-            delay_ms(100);            
-        }                                
-        break;                
+            delay_ms(100);
+        }
+        break;
     default:
         EI_RED_LED_OFF;
         EI_WHITE_LED_OFF;
@@ -279,7 +279,7 @@ void EiDeviceESP32::set_max_data_output_baudrate(void)
  */
 bool EiDeviceESP32::start_sample_thread(void (*sample_read_cb)(void), float sample_interval_ms)
 {
-    sample_cb_ptr = sample_read_cb;   
+    sample_cb_ptr = sample_read_cb;
     fusion_timer = xTimerCreate(
                         "Fusion sampler",
                         (uint32_t)sample_interval_ms / portTICK_RATE_MS,
@@ -298,7 +298,7 @@ bool EiDeviceESP32::start_sample_thread(void (*sample_read_cb)(void), float samp
  */
 bool EiDeviceESP32::stop_sample_thread(void)
 {
-    
+
     if (xTimerStop(fusion_timer, 0) != pdPASS)
     {
         ei_printf("ERR: timer has not been stopped \n");
@@ -360,7 +360,7 @@ char ei_get_serial_byte(void)
     if (ch == '\n') {
         ch = '\r';
     }
-    
+
     return ch;
 }
 
@@ -376,7 +376,7 @@ char ei_getchar()
     if (ch == '\n') {
         ch = '\r';
     }
-    
+
     return ch;
 
 }

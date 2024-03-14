@@ -28,7 +28,6 @@ set(include_dirs
     ${EI_PLATFORM_FOLDER}/ingestion-sdk-c
     ${EI_PLATFORM_FOLDER}/ingestion-sdk-platform/espressif_esp32
     ${EI_PLATFORM_FOLDER}/ingestion-sdk-platform/sensors
-    ${EI_PLATFORM_FOLDER}/mbedtls_hmac_sha256_sw
     ${EI_PLATFORM_FOLDER}/inference
     ${FIRMWARE_SDK_FOLDER}
     ${FIRMWARE_SDK_FOLDER}/at-server
@@ -79,4 +78,4 @@ list(APPEND SOURCE_FILES ${MBEDTLS_FILES})
 idf_component_register(SRCS "main.cpp" "${SOURCE_FILES}"
                        INCLUDE_DIRS "${include_dirs}")
 
-target_compile_options(${COMPONENT_LIB} PRIVATE -O3)
+target_compile_options(${COMPONENT_LIB} PRIVATE -std=gnu++17)

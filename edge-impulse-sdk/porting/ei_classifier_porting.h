@@ -20,38 +20,11 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include "edge-impulse-sdk/dsp/returntypes.h"
 
 #if defined(__cplusplus) && EI_C_LINKAGE == 1
 extern "C" {
 #endif // defined(__cplusplus)
-
-typedef enum {
-    EI_IMPULSE_OK = 0,
-    EI_IMPULSE_ERROR_SHAPES_DONT_MATCH = -1,
-    EI_IMPULSE_CANCELED = -2,
-    EI_IMPULSE_TFLITE_ERROR = -3,
-    EI_IMPULSE_DSP_ERROR = -5,
-    EI_IMPULSE_TFLITE_ARENA_ALLOC_FAILED = -6,
-    EI_IMPULSE_CUBEAI_ERROR = -7,
-    EI_IMPULSE_ALLOC_FAILED = -8,
-    EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES = -9,
-    EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE = -10,
-    EI_IMPULSE_OUT_OF_MEMORY = -11,
-    EI_IMPULSE_INPUT_TENSOR_WAS_NULL = -13,
-    EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL = -14,
-    EI_IMPULSE_SCORE_TENSOR_WAS_NULL = -15,
-    EI_IMPULSE_LABEL_TENSOR_WAS_NULL = -16,
-    EI_IMPULSE_TENSORRT_INIT_FAILED = -17,
-    EI_IMPULSE_DRPAI_INIT_FAILED = -18,
-    EI_IMPULSE_DRPAI_RUNTIME_FAILED = -19,
-    EI_IMPULSE_DEPRECATED_MODEL = -20,
-    EI_IMPULSE_LAST_LAYER_NOT_AVAILABLE = -21,
-    EI_IMPULSE_INFERENCE_ERROR = -22,
-    EI_IMPULSE_AKIDA_ERROR = -23,
-    EI_IMPULSE_INVALID_SIZE = -24,
-    EI_IMPULSE_ONNX_ERROR = -25,
-    EI_IMPULSE_MEMRYX_ERROR = -26,
-} EI_IMPULSE_ERROR;
 
 /**
  * Cancelable sleep, can be triggered with signal from other thread
@@ -125,6 +98,16 @@ void ei_free(void *ptr);
 #endif // defined(__cplusplus) && EI_C_LINKAGE == 1
 
 // Load porting layer depending on target
+
+// First check if any of the general frameworks or operating systems are supported/enabled
+#ifndef EI_PORTING_ZEPHYR
+#if defined(__ZEPHYR__)
+#define EI_PORTING_ZEPHYR      1
+#else
+#define EI_PORTING_ZEPHYR      0
+#endif
+#endif
+
 #ifndef EI_PORTING_ARDUINO
 #ifdef ARDUINO
 #define EI_PORTING_ARDUINO      1
@@ -133,20 +116,26 @@ void ei_free(void *ptr);
 #endif
 #endif
 
-#ifndef EI_PORTING_ESPRESSIF
-#if (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3))
-#define EI_PORTING_ESPRESSIF      1
-#define EI_PORTING_ARDUINO        0
-#else
-#define EI_PORTING_ESPRESSIF     0
-#endif
-#endif
-
 #ifndef EI_PORTING_MBED
 #ifdef __MBED__
 #define EI_PORTING_MBED      1
 #else
 #define EI_PORTING_MBED      0
+#endif
+#endif
+
+// Then check for target spcific build systems
+
+#ifndef EI_PORTING_ESPRESSIF
+#if ((defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3)) && EI_PORTING_ZEPHYR == 0)
+#include "esp_idf_version.h"
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#define portTICK_RATE_MS portTICK_PERIOD_MS
+#endif
+#define EI_PORTING_ESPRESSIF      1
+#define EI_PORTING_ARDUINO        0
+#else
+#define EI_PORTING_ESPRESSIF     0
 #endif
 #endif
 
@@ -174,13 +163,6 @@ void ei_free(void *ptr);
 #endif
 #endif
 
-#ifndef EI_PORTING_ZEPHYR
-#if defined(__ZEPHYR__)
-#define EI_PORTING_ZEPHYR      1
-#else
-#define EI_PORTING_ZEPHYR      0
-#endif
-#endif
 
 #ifndef EI_PORTING_STM32_CUBEAI
 #if defined(USE_HAL_DRIVER) && !defined(__MBED__) && EI_PORTING_ZEPHYR == 0
@@ -208,8 +190,16 @@ void ei_free(void *ptr);
 // End load porting layer depending on target
 
 // Additional configuration for specific architecture
-#if defined(__CORTEX_M) && ((__CORTEX_M == 85U) || (__CORTEX_M == 55U))
+#if defined(__CORTEX_M)
+
+#if (__CORTEX_M == 55U)
 #define EI_MAX_OVERFLOW_BUFFER_COUNT	15
+#endif
+
+#if (__CORTEX_M == 85U)
+#define EI_MAX_OVERFLOW_BUFFER_COUNT	50
+#endif
+
 #endif
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3)

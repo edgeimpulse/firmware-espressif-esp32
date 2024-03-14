@@ -17,12 +17,14 @@
 #if ESP_IDF_VERSION_MAJOR >= 4 // IDF 4+
 #if CONFIG_IDF_TARGET_ESP32 // ESP32/PICO-D4
 #include "esp32/rom/tjpgd.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "tjpgd.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
 #include "esp32s3/rom/tjpgd.h"
+#elif CONFIG_IDF_TARGET_ESP32C3
+#include "esp32c3/rom/tjpgd.h"
+#elif CONFIG_ESP_ROM_HAS_JPEG_DECODE // available since IDF 4.4
+#include "rom/tjpgd.h"  // latest IDFs have `rom/` includes available
 #else
-#error Target CONFIG_IDF_TARGET is not supported
+#include "tjpgd.h"  // using software decoder
 #endif
 #else // ESP32 Before IDF 4.0
 #include "rom/tjpgd.h"
@@ -57,7 +59,7 @@ static const char * jd_errors[] = {
     "Not supported JPEG standard"
 };
 
-static uint32_t _jpg_write(JDEC *decoder, void *bitmap, JRECT *rect)
+static unsigned int _jpg_write(JDEC *decoder, void *bitmap, JRECT *rect)
 {
     uint16_t x = rect->left;
     uint16_t y = rect->top;
@@ -73,7 +75,7 @@ static uint32_t _jpg_write(JDEC *decoder, void *bitmap, JRECT *rect)
     return 0;
 }
 
-static uint32_t _jpg_read(JDEC *decoder, uint8_t *buf, uint32_t len)
+static unsigned int _jpg_read(JDEC *decoder, uint8_t *buf, unsigned int len)
 {
     esp_jpg_decoder_t * jpeg = (esp_jpg_decoder_t *)decoder->device;
     if (jpeg->len && len > (jpeg->len - jpeg->index)) {

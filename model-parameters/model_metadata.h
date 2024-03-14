@@ -47,12 +47,17 @@
 #define EI_CLASSIFIER_SENSOR_ENVIRONMENTAL       5
 #define EI_CLASSIFIER_SENSOR_FUSION              6
 
+#define EI_ANOMALY_TYPE_UNKNOWN                   0
+#define EI_ANOMALY_TYPE_KMEANS                    1
+#define EI_ANOMALY_TYPE_GMM                       2
+#define EI_ANOMALY_TYPE_VISUAL_GMM                3
+
 // These must match the enum values in TensorFlow Lite's "TfLiteType"
 #define EI_CLASSIFIER_DATATYPE_FLOAT32           1
 #define EI_CLASSIFIER_DATATYPE_UINT8             3
 #define EI_CLASSIFIER_DATATYPE_INT8              9
 
-#define EI_CLASSIFIER_PROJECT_ID                 53
+#define EI_CLASSIFIER_PROJECT_ID                 87
 #define EI_CLASSIFIER_PROJECT_OWNER              "Edge Impulse Profiling"
 #define EI_CLASSIFIER_PROJECT_NAME               "Demo: Keyword Spotting"
 #define EI_CLASSIFIER_PROJECT_DEPLOY_VERSION     1
@@ -66,10 +71,11 @@
 #define EI_CLASSIFIER_NN_OUTPUT_COUNT            3
 #define EI_CLASSIFIER_INTERVAL_MS                0.0625
 #define EI_CLASSIFIER_LABEL_COUNT                3
-#define EI_CLASSIFIER_HAS_ANOMALY                0
+#define EI_CLASSIFIER_HAS_ANOMALY                EI_ANOMALY_TYPE_UNKNOWN
+#define EI_CLASSIFIER_HAS_VISUAL_ANOMALY         0
+#define EI_CLASSIFIER_SINGLE_FEATURE_INPUT       1
 #define EI_CLASSIFIER_FREQUENCY                  16000
 #define EI_CLASSIFIER_HAS_MODEL_VARIABLES        1
-
 
 
 #define EI_CLASSIFIER_OBJECT_DETECTION            0
@@ -113,6 +119,9 @@
 #endif // EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW
 #define EI_CLASSIFIER_SLICE_SIZE                 (EI_CLASSIFIER_RAW_SAMPLE_COUNT / EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW)
 
+#define EI_STUDIO_VERSION_MAJOR             1
+#define EI_STUDIO_VERSION_MINOR             42
+#define EI_STUDIO_VERSION_PATCH             2
 
 #if ((EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE) ||      (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)) &&      EI_CLASSIFIER_USE_FULL_TFLITE == 1
 
@@ -141,6 +150,7 @@ typedef struct {
     bool stdev;
     bool skewness;
     bool kurtosis;
+    int moving_avg_num_windows;
 } ei_dsp_config_flatten_t;
 
 typedef struct {
@@ -238,6 +248,8 @@ typedef struct {
     uint16_t implementation_version;
     int axes;
     bool scaling;
+    bool scaling_raw;
+    bool padding;
 } ei_dsp_config_imu_syntiant_t;
 
 #endif // _EI_CLASSIFIER_MODEL_METADATA_H_

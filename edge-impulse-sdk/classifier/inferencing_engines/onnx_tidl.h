@@ -474,7 +474,10 @@ static EI_IMPULSE_ERROR inference_onnx_run(const ei_impulse_t *impulse,
  */
 EI_IMPULSE_ERROR run_nn_inference(
     const ei_impulse_t *impulse,
-    ei::matrix_t *afmatrix,
+    ei_feature_t *afmatrix,
+    uint32_t learn_block_index,
+    uint32_t* input_block_ids,
+    uint32_t input_block_ids_size,
     ei_impulse_result_t *result,
     void *config_ptr,
     bool debug = false)
@@ -519,12 +522,14 @@ EI_IMPULSE_ERROR run_nn_inference(
     size_t height = impulse->input_height;
     size_t width = impulse->input_width;
 
+    ei::matrix_t* matrix = afmatrix[0].matrix;
+
     int dest_ix = 0;
     for (size_t c=0; c < channels; c++) {
         for (size_t h=0; h < height; h++) {
             for (size_t w=0; w < width; w++) {
                 uint32_t src_ix = channels * width * h + w*channels + c;
-                fmatrix.buffer[dest_ix++] = afmatrix->buffer[src_ix];
+                fmatrix.buffer[dest_ix++] = matrix->buffer[src_ix];
             }
         }
     }

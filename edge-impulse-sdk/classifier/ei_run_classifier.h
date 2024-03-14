@@ -18,6 +18,7 @@
 #ifndef _EDGE_IMPULSE_RUN_CLASSIFIER_H_
 #define _EDGE_IMPULSE_RUN_CLASSIFIER_H_
 
+#include "ei_model_types.h"
 #include "model-parameters/model_metadata.h"
 
 #include "ei_run_dsp.h"
@@ -26,8 +27,10 @@
 #include "ei_performance_calibration.h"
 
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
+#include "edge-impulse-sdk/porting/ei_logging.h"
+#include <memory>
 
-#if EI_CLASSIFIER_HAS_ANOMALY == 1
+#if EI_CLASSIFIER_HAS_ANOMALY
 #include "inferencing_engines/anomaly.h"
 #endif
 
@@ -61,6 +64,7 @@
 #error "Unknown inferencing engine"
 #endif
 
+// This file has an implicit dependency on ei_run_dsp.h, so must come after that include!
 #include "model-parameters/model_variables.h"
 
 #ifdef __cplusplus
@@ -68,9 +72,14 @@ namespace {
 #endif // __cplusplus
 
 /* Function prototypes ----------------------------------------------------- */
-extern "C" EI_IMPULSE_ERROR run_inference(const ei_impulse_t *impulse, ei::matrix_t *fmatrix, ei_impulse_result_t *result, bool debug);
+extern "C" EI_IMPULSE_ERROR run_inference(ei_impulse_handle_t *handle, ei_feature_t *fmatrix, ei_impulse_result_t *result, bool debug);
 extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(const ei_impulse_t *impulse, signal_t *signal, ei_impulse_result_t *result, bool debug);
 static EI_IMPULSE_ERROR can_run_classifier_image_quantized(const ei_impulse_t *impulse, ei_learning_block_t block_ptr);
+
+#if EI_CLASSIFIER_LOAD_IMAGE_SCALING
+EI_IMPULSE_ERROR ei_scale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fmatrix);
+EI_IMPULSE_ERROR ei_unscale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fmatrix);
+#endif // EI_CLASSIFIER_LOAD_IMAGE_SCALING
 
 /* Private variables ------------------------------------------------------- */
 
@@ -82,61 +91,64 @@ static RecognizeEvents *avg_scores = NULL;
 /* These functions (up to Public functions section) are not exposed to end-user,
 therefore changes are allowed. */
 
-#if EI_CLASSIFIER_LOAD_IMAGE_SCALING
-static const float torch_mean[] = { 0.485, 0.456, 0.406 };
-static const float torch_std[] = { 0.229, 0.224, 0.225 };
 
-static EI_IMPULSE_ERROR scale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fmatrix) {
-    if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_TORCH) {
-        // @todo; could we write some faster vector math here?
-        for (size_t ix = 0; ix < fmatrix->rows * fmatrix->cols; ix += 3) {
-            fmatrix->buffer[ix + 0] = (fmatrix->buffer[ix + 0] - torch_mean[0]) / torch_std[0];
-            fmatrix->buffer[ix + 1] = (fmatrix->buffer[ix + 1] - torch_mean[1]) / torch_std[1];
-            fmatrix->buffer[ix + 2] = (fmatrix->buffer[ix + 2] - torch_mean[2]) / torch_std[2];
+/**
+ * @brief      Display the results of the inference
+ *
+ * @param      result  The result
+ */
+__attribute__((unused)) void display_results(ei_impulse_result_t* result)
+{
+    // print the predictions
+    ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n",
+                result->timing.dsp, result->timing.classification, result->timing.anomaly);
+#if EI_CLASSIFIER_OBJECT_DETECTION == 1
+    ei_printf("#Object detection results:\r\n");
+    bool bb_found = result->bounding_boxes[0].value > 0;
+    for (size_t ix = 0; ix < result->bounding_boxes_count; ix++) {
+        auto bb = result->bounding_boxes[ix];
+        if (bb.value == 0) {
+            continue;
         }
-    }
-    else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_0_255) {
-        int scale_res = numpy::scale(fmatrix, 255.0f);
-        if (scale_res != EIDSP_OK) {
-            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
-            return EI_IMPULSE_DSP_ERROR;
-        }
-    }
-    else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_MIN1_1) {
-        int scale_res = numpy::scale(fmatrix, 2.0f);
-        if (scale_res != EIDSP_OK) {
-            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
-            return EI_IMPULSE_DSP_ERROR;
-        }
-        scale_res = numpy::subtract(fmatrix, 1.0f);
-        if (scale_res != EIDSP_OK) {
-            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
-            return EI_IMPULSE_DSP_ERROR;
-        }
+        ei_printf("    %s (", bb.label);
+        ei_printf_float(bb.value);
+        ei_printf(") [ x: %u, y: %u, width: %u, height: %u ]\n", bb.x, bb.y, bb.width, bb.height);
     }
 
-    return EI_IMPULSE_OK;
-}
+    if (!bb_found) {
+        ei_printf("    No objects found\n");
+    }
 
-static EI_IMPULSE_ERROR unscale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fmatrix) {
-    if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_TORCH) {
-        // @todo; could we write some faster vector math here?
-        for (size_t ix = 0; ix < fmatrix->rows * fmatrix->cols; ix += 3) {
-            fmatrix->buffer[ix + 0] = (fmatrix->buffer[ix + 0] * torch_std[0]) + torch_mean[0];
-            fmatrix->buffer[ix + 1] = (fmatrix->buffer[ix + 1] * torch_std[1]) + torch_mean[1];
-            fmatrix->buffer[ix + 2] = (fmatrix->buffer[ix + 2] * torch_std[2]) + torch_mean[2];
-        }
+#elif (EI_CLASSIFIER_LABEL_COUNT == 1) && (!EI_CLASSIFIER_HAS_ANOMALY)// regression
+    ei_printf("#Regression results:\r\n");
+    ei_printf("    %s: ", result->classification[0].label);
+    ei_printf_float(result->classification[0].value);
+    ei_printf("\n");
+
+#elif EI_CLASSIFIER_LABEL_COUNT > 1 // if there is only one label, this is an anomaly only
+    ei_printf("#Classification results:\r\n");
+    for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
+        ei_printf("    %s: ", result->classification[ix].label);
+        ei_printf_float(result->classification[ix].value);
+        ei_printf("\n");
     }
-    else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_0_255) {
-        int scale_res = numpy::scale(fmatrix, 1 / 255.0f);
-        if (scale_res != EIDSP_OK) {
-            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
-            return EI_IMPULSE_DSP_ERROR;
-        }
-    }
-    return EI_IMPULSE_OK;
-}
 #endif
+#if EI_CLASSIFIER_HAS_ANOMALY == 3 // visual AD
+    ei_printf("#Visual anomaly grid results:\r\n");
+    for (uint32_t i = 0; i < result->visual_ad_count; i++) {
+        ei_impulse_result_bounding_box_t bb = result->visual_ad_grid_cells[i];
+        if (bb.value == 0) {
+            continue;
+        }
+        ei_printf("    %s (", bb.label);
+        ei_printf_float(bb.value);
+        ei_printf(") [ x: %u, y: %u, width: %u, height: %u ]\n", bb.x, bb.y, bb.width, bb.height);
+    }
+    ei_printf("Visual anomaly values: Mean %.3f Max %.3f\r\n", result->visual_ad_result.mean_value, result->visual_ad_result.max_value);
+#elif (EI_CLASSIFIER_HAS_ANOMALY > 0) // except for visual AD
+    ei_printf("Anomaly prediction: %.3f\r\n", result->anomaly);
+#endif
+}
 
 /**
  * @brief      Do inferencing over the processed feature matrix
@@ -149,29 +161,35 @@ static EI_IMPULSE_ERROR unscale_fmatrix(ei_learning_block_t *block, ei::matrix_t
  * @return     The ei impulse error.
  */
 extern "C" EI_IMPULSE_ERROR run_inference(
-    const ei_impulse_t *impulse,
-    ei::matrix_t *fmatrix,
+    ei_impulse_handle_t *handle,
+    ei_feature_t *fmatrix,
     ei_impulse_result_t *result,
     bool debug = false)
 {
+    auto& impulse = handle->impulse;
     for (size_t ix = 0; ix < impulse->learning_blocks_size; ix++) {
+
         ei_learning_block_t block = impulse->learning_blocks[ix];
 
 #if EI_CLASSIFIER_LOAD_IMAGE_SCALING
-        EI_IMPULSE_ERROR scale_res = scale_fmatrix(&block, fmatrix);
+        // we do not plan to have multiple dsp blocks with image
+        // so just apply scaling to the first one
+        EI_IMPULSE_ERROR scale_res = ei_scale_fmatrix(&block, fmatrix[0].matrix);
         if (scale_res != EI_IMPULSE_OK) {
             return scale_res;
         }
 #endif
 
-        EI_IMPULSE_ERROR res = block.infer_fn(impulse, fmatrix, result, block.config, debug);
+        result->copy_output = block.keep_output;
+
+        EI_IMPULSE_ERROR res = block.infer_fn(impulse, fmatrix, ix, (uint32_t*)block.input_block_ids, block.input_block_ids_size, result, block.config, debug);
         if (res != EI_IMPULSE_OK) {
             return res;
         }
 
 #if EI_CLASSIFIER_LOAD_IMAGE_SCALING
         // undo scaling
-        scale_res = unscale_fmatrix(&block, fmatrix);
+        scale_res = ei_unscale_fmatrix(&block, fmatrix[0].matrix);
         if (scale_res != EI_IMPULSE_OK) {
             return scale_res;
         }
@@ -191,83 +209,152 @@ extern "C" EI_IMPULSE_ERROR run_inference(
  * @param      impulse  struct with information about model and DSP
  * @param      signal   Sample data
  * @param      result   Output classifier results
+ * @param      handle   Handle from open_impulse. nullptr for backward compatibility
  * @param[in]  debug    Debug output enable
  *
  * @return     The ei impulse error.
  */
-extern "C" EI_IMPULSE_ERROR process_impulse(const ei_impulse_t *impulse,
+extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
                                             signal_t *signal,
                                             ei_impulse_result_t *result,
                                             bool debug = false)
 {
+    if(!handle) {
+        return EI_IMPULSE_INFERENCE_ERROR;
+    }
 
 #if (EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL)) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI
     // Shortcut for quantized image models
-    ei_learning_block_t block = impulse->learning_blocks[0];
-    if (can_run_classifier_image_quantized(impulse, block) == EI_IMPULSE_OK) {
-        return run_classifier_image_quantized(impulse, signal, result, debug);
+    ei_learning_block_t block = handle->impulse->learning_blocks[0];
+    if (can_run_classifier_image_quantized(handle->impulse, block) == EI_IMPULSE_OK) {
+        return run_classifier_image_quantized(handle->impulse, signal, result, debug);
     }
 #endif
 
     memset(result, 0, sizeof(ei_impulse_result_t));
+    uint32_t block_num = handle->impulse->dsp_blocks_size + handle->impulse->learning_blocks_size;
 
-    ei::matrix_t features_matrix(1, impulse->nn_input_frame_size);
+    // smart pointer to features array
+    std::unique_ptr<ei_feature_t[]> features_ptr(new ei_feature_t[block_num]);
+    ei_feature_t* features = features_ptr.get();
+    memset(features, 0, sizeof(ei_feature_t) * block_num);
+
+    // have it outside of the loop to avoid going out of scope
+    std::unique_ptr<ei::matrix_t> *matrix_ptrs = new std::unique_ptr<ei::matrix_t>[block_num];
 
     uint64_t dsp_start_us = ei_read_timer_us();
 
     size_t out_features_index = 0;
 
-    for (size_t ix = 0; ix < impulse->dsp_blocks_size; ix++) {
-        ei_model_dsp_t block = impulse->dsp_blocks[ix];
+    for (size_t ix = 0; ix < handle->impulse->dsp_blocks_size; ix++) {
+        ei_model_dsp_t block = handle->impulse->dsp_blocks[ix];
+        matrix_ptrs[ix] = std::unique_ptr<ei::matrix_t>(new ei::matrix_t(1, block.n_output_features));
+        features[ix].matrix = matrix_ptrs[ix].get();
+        features[ix].blockId = block.blockId;
 
-        if (out_features_index + block.n_output_features > impulse->nn_input_frame_size) {
+        if (out_features_index + block.n_output_features > handle->impulse->nn_input_frame_size) {
             ei_printf("ERR: Would write outside feature buffer\n");
+            delete[] matrix_ptrs;
             return EI_IMPULSE_DSP_ERROR;
         }
-
-        ei::matrix_t fm(1, block.n_output_features, features_matrix.buffer + out_features_index);
 
 #if EIDSP_SIGNAL_C_FN_POINTER
-        if (block.axes_size != impulse->raw_samples_per_frame) {
+        if (block.axes_size != handle->impulse->raw_samples_per_frame) {
             ei_printf("ERR: EIDSP_SIGNAL_C_FN_POINTER can only be used when all axes are selected for DSP blocks\n");
+            delete[] matrix_ptrs;
             return EI_IMPULSE_DSP_ERROR;
         }
-        int ret = block.extract_fn(signal, &fm, block.config, impulse->frequency);
+        auto internal_signal = signal;
 #else
-        SignalWithAxes swa(signal, block.axes, block.axes_size, impulse);
-        int ret = block.extract_fn(swa.get_signal(), &fm, block.config, impulse->frequency);
+        SignalWithAxes swa(signal, block.axes, block.axes_size, handle->impulse);
+        auto internal_signal = swa.get_signal();
 #endif
+
+        int ret;
+        if (block.factory) { // ie, if we're using state
+            // Msg user
+            static bool has_printed = false;
+            if (!has_printed) {
+                EI_LOGI("Impulse maintains state. Call run_classifier_init() to reset state (e.g. if data stream is interrupted.)\n");
+                has_printed = true;
+            }
+
+            // getter has a lazy init, so we can just call it
+            auto dsp_handle = handle->state.get_dsp_handle(ix);
+            if(dsp_handle) {
+                ret = dsp_handle->extract(internal_signal, features[ix].matrix, block.config, handle->impulse->frequency);
+            } else {
+                return EI_IMPULSE_OUT_OF_MEMORY;
+            }
+        } else {
+            ret = block.extract_fn(internal_signal, features[ix].matrix, block.config, handle->impulse->frequency);
+        }
 
         if (ret != EIDSP_OK) {
             ei_printf("ERR: Failed to run DSP process (%d)\n", ret);
+            delete[] matrix_ptrs;
             return EI_IMPULSE_DSP_ERROR;
         }
 
         if (ei_run_impulse_check_canceled() == EI_IMPULSE_CANCELED) {
+            delete[] matrix_ptrs;
             return EI_IMPULSE_CANCELED;
         }
 
         out_features_index += block.n_output_features;
     }
 
+#if EI_CLASSIFIER_SINGLE_FEATURE_INPUT == 0
+    for (size_t ix = 0; ix < handle->impulse->learning_blocks_size; ix++) {
+        ei_learning_block_t block = handle->impulse->learning_blocks[ix];
+
+        if (block.keep_output) {
+            matrix_ptrs[handle->impulse->dsp_blocks_size + ix] = std::unique_ptr<ei::matrix_t>(new ei::matrix_t(1, block.output_features_count));
+            features[handle->impulse->dsp_blocks_size + ix].matrix = matrix_ptrs[handle->impulse->dsp_blocks_size + ix].get();
+            features[handle->impulse->dsp_blocks_size + ix].blockId = block.blockId;
+        }
+    }
+#endif // EI_CLASSIFIER_SINGLE_FEATURE_INPUT
+
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
     result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
     if (debug) {
         ei_printf("Features (%d ms.): ", result->timing.dsp);
-        for (size_t ix = 0; ix < features_matrix.cols; ix++) {
-            ei_printf_float(features_matrix.buffer[ix]);
-            ei_printf(" ");
+        for (size_t ix = 0; ix < block_num; ix++) {
+            if (features[ix].matrix == nullptr) {
+                continue;
+            }
+            for (size_t jx = 0; jx < features[ix].matrix->cols; jx++) {
+                ei_printf_float(features[ix].matrix->buffer[jx]);
+                ei_printf(" ");
+            }
+            ei_printf("\n");
         }
-        ei_printf("\n");
     }
 
     if (debug) {
         ei_printf("Running impulse...\n");
     }
 
-    return run_inference(impulse, &features_matrix, result, debug);
+    EI_IMPULSE_ERROR res = run_inference(handle, features, result, debug);
+    delete[] matrix_ptrs;
+    return res;
+}
 
+/**
+ * @brief      Opens an impulse
+ *
+ * @param      impulse  struct with information about model and DSP
+ *
+ * @return     A pointer to the impulse handle, or nullptr if memory allocation failed.
+ */
+extern "C" EI_IMPULSE_ERROR init_impulse(ei_impulse_handle_t *handle) {
+    if (!handle) {
+        return EI_IMPULSE_OUT_OF_MEMORY;
+    }
+    handle->state.reset();
+    return EI_IMPULSE_OK;
 }
 
 /**
@@ -280,13 +367,13 @@ extern "C" EI_IMPULSE_ERROR process_impulse(const ei_impulse_t *impulse,
  *
  * @return     The ei impulse error.
  */
-extern "C" EI_IMPULSE_ERROR process_impulse_continuous(const ei_impulse_t *impulse,
+extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *handle,
                                             signal_t *signal,
                                             ei_impulse_result_t *result,
                                             bool debug,
                                             bool enable_maf)
 {
-
+    auto impulse = handle->impulse;
     static ei::matrix_t static_features_matrix(1, impulse->nn_input_frame_size);
     if (!static_features_matrix.buffer) {
         return EI_IMPULSE_ALLOC_FAILED;
@@ -299,9 +386,6 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(const ei_impulse_t *impul
     uint64_t dsp_start_us = ei_read_timer_us();
 
     size_t out_features_index = 0;
-    bool is_mfcc = false;
-    bool is_mfe = false;
-    bool is_spectrogram = false;
 
     for (size_t ix = 0; ix < impulse->dsp_blocks_size; ix++) {
         ei_model_dsp_t block = impulse->dsp_blocks[ix];
@@ -319,15 +403,12 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(const ei_impulse_t *impul
         /* Switch to the slice version of the mfcc feature extract function */
         if (block.extract_fn == extract_mfcc_features) {
             extract_fn_slice = &extract_mfcc_per_slice_features;
-            is_mfcc = true;
         }
         else if (block.extract_fn == extract_spectrogram_features) {
             extract_fn_slice = &extract_spectrogram_per_slice_features;
-            is_spectrogram = true;
         }
         else if (block.extract_fn == extract_mfe_features) {
             extract_fn_slice = &extract_mfe_per_slice_features;
-            is_mfe = true;
         }
         else {
             ei_printf("ERR: Unknown extract function, only MFCC, MFE and spectrogram supported\n");
@@ -375,22 +456,42 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(const ei_impulse_t *impul
 
     if (classifier_continuous_features_written >= impulse->nn_input_frame_size) {
         dsp_start_us = ei_read_timer_us();
-        ei::matrix_t classify_matrix(1, impulse->nn_input_frame_size);
 
-        /* Create a copy of the matrix for normalization */
-        for (size_t m_ix = 0; m_ix < impulse->nn_input_frame_size; m_ix++) {
-            classify_matrix.buffer[m_ix] = static_features_matrix.buffer[m_ix];
+        uint32_t block_num = impulse->dsp_blocks_size + impulse->learning_blocks_size;
+
+        // smart pointer to features array
+        std::unique_ptr<ei_feature_t[]> features_ptr(new ei_feature_t[block_num]);
+        ei_feature_t* features = features_ptr.get();
+        memset(features, 0, sizeof(ei_feature_t) * block_num);
+
+        // have it outside of the loop to avoid going out of scope
+        std::unique_ptr<ei::matrix_t> *matrix_ptrs = new std::unique_ptr<ei::matrix_t>[block_num];
+
+        out_features_index = 0;
+        // iterate over every dsp block and run normalization
+        for (size_t ix = 0; ix < impulse->dsp_blocks_size; ix++) {
+            ei_model_dsp_t block = impulse->dsp_blocks[ix];
+            matrix_ptrs[ix] = std::unique_ptr<ei::matrix_t>(new ei::matrix_t(1, block.n_output_features));
+            features[ix].matrix = matrix_ptrs[ix].get();
+            features[ix].blockId = block.blockId;
+
+            /* Create a copy of the matrix for normalization */
+            for (size_t m_ix = 0; m_ix < block.n_output_features; m_ix++) {
+                features[ix].matrix->buffer[m_ix] = static_features_matrix.buffer[out_features_index + m_ix];
+            }
+
+            if (block.extract_fn == extract_mfcc_features) {
+                calc_cepstral_mean_and_var_normalization_mfcc(features[ix].matrix, block.config);
+            }
+            else if (block.extract_fn == extract_spectrogram_features) {
+                calc_cepstral_mean_and_var_normalization_spectrogram(features[ix].matrix, block.config);
+            }
+            else if (block.extract_fn == extract_mfe_features) {
+                calc_cepstral_mean_and_var_normalization_mfe(features[ix].matrix, block.config);
+            }
+            out_features_index += block.n_output_features;
         }
 
-        if (is_mfcc) {
-            calc_cepstral_mean_and_var_normalization_mfcc(&classify_matrix, impulse->dsp_blocks[0].config);
-        }
-        else if (is_spectrogram) {
-            calc_cepstral_mean_and_var_normalization_spectrogram(&classify_matrix, impulse->dsp_blocks[0].config);
-        }
-        else if (is_mfe) {
-            calc_cepstral_mean_and_var_normalization_mfe(&classify_matrix, impulse->dsp_blocks[0].config);
-        }
         result->timing.dsp_us += ei_read_timer_us() - dsp_start_us;
         result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
@@ -398,7 +499,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(const ei_impulse_t *impul
             ei_printf("Running impulse...\n");
         }
 
-        ei_impulse_error = run_inference(impulse, &classify_matrix, result, debug);
+        ei_impulse_error = run_inference(handle, features, result, debug);
 
 #if EI_CLASSIFIER_CALIBRATION_ENABLED
         if (impulse->sensor == EI_CLASSIFIER_SENSOR_MICROPHONE) {
@@ -442,19 +543,16 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(const ei_impulse_t *impul
             }
         }
 #endif
+        delete[] matrix_ptrs;
     }
     else {
-        if (!impulse->object_detection) {
-            for (int i = 0; i < impulse->label_count; i++) {
-                // set label correctly in the result struct if we have no results (otherwise is nullptr)
-                result->classification[i].label = impulse->categories[(uint32_t)i];
-            }
+        for (int i = 0; i < impulse->label_count; i++) {
+            // set label correctly in the result struct if we have no results (otherwise is nullptr)
+            result->classification[i].label = impulse->categories[(uint32_t)i];
         }
     }
 
     return ei_impulse_error;
-
-
 }
 
 /**
@@ -470,7 +568,8 @@ __attribute__((unused)) static EI_IMPULSE_ERROR can_run_classifier_image_quantiz
         return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
     }
 
-    if (impulse->has_anomaly == 1){
+    // visual anomaly also needs to go through the normal path
+    if (impulse->has_anomaly){
         return EI_IMPULSE_ONLY_SUPPORTED_FOR_IMAGES;
     }
 
@@ -518,6 +617,98 @@ extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(
 /* Thread carefully: public functions are not to be changed
 to preserve backwards compatibility. */
 
+#if EI_CLASSIFIER_LOAD_IMAGE_SCALING
+static const float torch_mean[] = { 0.485, 0.456, 0.406 };
+static const float torch_std[] = { 0.229, 0.224, 0.225 };
+
+EI_IMPULSE_ERROR ei_scale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fmatrix) {
+    if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_TORCH) {
+        // @todo; could we write some faster vector math here?
+        for (size_t ix = 0; ix < fmatrix->rows * fmatrix->cols; ix += 3) {
+            fmatrix->buffer[ix + 0] = (fmatrix->buffer[ix + 0] - torch_mean[0]) / torch_std[0];
+            fmatrix->buffer[ix + 1] = (fmatrix->buffer[ix + 1] - torch_mean[1]) / torch_std[1];
+            fmatrix->buffer[ix + 2] = (fmatrix->buffer[ix + 2] - torch_mean[2]) / torch_std[2];
+        }
+    }
+    else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_0_255) {
+        int scale_res = numpy::scale(fmatrix, 255.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+    }
+    else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_MIN128_127) {
+        int scale_res = numpy::scale(fmatrix, 255.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+        scale_res = numpy::subtract(fmatrix, 128.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+    }
+    else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_MIN1_1) {
+        int scale_res = numpy::scale(fmatrix, 2.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+        scale_res = numpy::subtract(fmatrix, 1.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+    }
+
+    return EI_IMPULSE_OK;
+}
+
+EI_IMPULSE_ERROR ei_unscale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fmatrix) {
+    if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_TORCH) {
+        // @todo; could we write some faster vector math here?
+        for (size_t ix = 0; ix < fmatrix->rows * fmatrix->cols; ix += 3) {
+            fmatrix->buffer[ix + 0] = (fmatrix->buffer[ix + 0] * torch_std[0]) + torch_mean[0];
+            fmatrix->buffer[ix + 1] = (fmatrix->buffer[ix + 1] * torch_std[1]) + torch_mean[1];
+            fmatrix->buffer[ix + 2] = (fmatrix->buffer[ix + 2] * torch_std[2]) + torch_mean[2];
+        }
+    }
+    else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_MIN128_127) {
+        int scale_res = numpy::add(fmatrix, 128.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+        scale_res = numpy::scale(fmatrix, 1 / 255.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+    }
+    else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_MIN1_1) {
+        int scale_res = numpy::add(fmatrix, 1.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+        scale_res = numpy::scale(fmatrix, 1 / 2.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+    }
+    else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_0_255) {
+        int scale_res = numpy::scale(fmatrix, 1 / 255.0f);
+        if (scale_res != EIDSP_OK) {
+            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
+            return EI_IMPULSE_DSP_ERROR;
+        }
+    }
+    return EI_IMPULSE_OK;
+}
+#endif
+
 /**
  * @brief      Init static vars
  */
@@ -526,10 +717,11 @@ extern "C" void run_classifier_init()
 
     classifier_continuous_features_written = 0;
     ei_dsp_clear_continuous_audio_state();
+    init_impulse(&ei_default_impulse);
 
 #if EI_CLASSIFIER_CALIBRATION_ENABLED
 
-    const ei_impulse_t impulse = ei_default_impulse;
+    const auto impulse = ei_default_impulse.impulse;
     const ei_model_performance_calibration_t *calibration = &impulse.calibration;
 
     if(calibration != NULL) {
@@ -542,13 +734,14 @@ extern "C" void run_classifier_init()
 /**
  * @brief      Init static vars, for multi-model support
  */
-__attribute__((unused)) void run_classifier_init(const ei_impulse_t *impulse)
+__attribute__((unused)) void run_classifier_init(ei_impulse_handle_t *handle)
 {
     classifier_continuous_features_written = 0;
     ei_dsp_clear_continuous_audio_state();
+    init_impulse(handle);
 
 #if EI_CLASSIFIER_CALIBRATION_ENABLED
-    const ei_model_performance_calibration_t *calibration = &impulse->calibration;
+    const ei_model_performance_calibration_t *calibration = &handle->impulse->calibration;
 
     if(calibration != NULL) {
         avg_scores = new RecognizeEvents(calibration,
@@ -580,7 +773,7 @@ extern "C" EI_IMPULSE_ERROR run_classifier_continuous(
     bool debug = false,
     bool enable_maf = true)
 {
-    const ei_impulse_t impulse = ei_default_impulse;
+    auto& impulse = ei_default_impulse;
     return process_impulse_continuous(&impulse, signal, result, debug, enable_maf);
 }
 
@@ -596,7 +789,7 @@ extern "C" EI_IMPULSE_ERROR run_classifier_continuous(
  * @return     The ei impulse error.
  */
 __attribute__((unused)) EI_IMPULSE_ERROR run_classifier_continuous(
-    const ei_impulse_t *impulse,
+    ei_impulse_handle_t *impulse,
     signal_t *signal,
     ei_impulse_result_t *result,
     bool debug = false,
@@ -617,8 +810,7 @@ extern "C" EI_IMPULSE_ERROR run_classifier(
     ei_impulse_result_t *result,
     bool debug = false)
 {
-    const ei_impulse_t impulse = ei_default_impulse;
-    return process_impulse(&impulse, signal, result, debug);
+    return process_impulse(&ei_default_impulse, signal, result, debug);
 }
 
 /**
@@ -630,7 +822,7 @@ extern "C" EI_IMPULSE_ERROR run_classifier(
  * @param debug Whether to show debug messages (default: false)
  */
 __attribute__((unused)) EI_IMPULSE_ERROR run_classifier(
-    const ei_impulse_t *impulse,
+    ei_impulse_handle_t *impulse,
     signal_t *signal,
     ei_impulse_result_t *result,
     bool debug = false)
@@ -664,7 +856,7 @@ __attribute__((unused)) EI_IMPULSE_ERROR run_impulse(
 #endif
         bool debug = false) {
 
-    const ei_impulse_t impulse = ei_default_impulse;
+    auto& impulse = *(ei_default_impulse.impulse);
 
     float *x = (float*)calloc(impulse.dsp_input_frame_size, sizeof(float));
     if (!x) {

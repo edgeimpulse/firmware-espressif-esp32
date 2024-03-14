@@ -64,15 +64,16 @@ static camera_config_t camera_config = {
     .ledc_channel = LEDC_CHANNEL_0,
 
     .pixel_format = PIXFORMAT_JPEG, //YUV422,GRAYSCALE,RGB565,JPEG
-    .frame_size = FRAMESIZE_QVGA,    //QQVGA-UXGA Do not use sizes above QVGA when not JPEG 
+    .frame_size = FRAMESIZE_QVGA,    //QQVGA-UXGA Do not use sizes above QVGA when not JPEG
 
     .jpeg_quality = 20, //0-63 lower number means higher quality
     .fb_count = 4,       //if more than one, i2s runs in continuous mode. Use only with JPEG
+    //.fb_location = CAMERA_FB_IN_PSRAM,
     .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
 };
 
 ei_device_snapshot_resolutions_t EiCameraESP32::resolutions[] = {
-        { .width = 160, .height = 120 },        
+        { .width = 160, .height = 120 },
         { .width = 320, .height = 240 },
         { .width = 480, .height = 320 }
     };
@@ -100,7 +101,7 @@ void EiCameraESP32::get_resolutions(ei_device_snapshot_resolutions_t **res, uint
 
 bool EiCameraESP32::set_resolution(const ei_device_snapshot_resolutions_t res) {
 
-    framesize_t frame_size = FRAMESIZE_HVGA; 
+    framesize_t frame_size = FRAMESIZE_HVGA;
 
     switch(res.height) {
 
@@ -121,10 +122,10 @@ bool EiCameraESP32::set_resolution(const ei_device_snapshot_resolutions_t res) {
     break;
 
     case 320:
-    frame_size = FRAMESIZE_HVGA;               
+    frame_size = FRAMESIZE_HVGA;
     break;
 
-    default:     
+    default:
     break;
 
     }
@@ -204,7 +205,7 @@ bool EiCameraESP32::ei_camera_capture_rgb888_packed_big_endian(
         ei_printf("ERR: Conversion failed\n");
         return false;
     }
-    
+
     return true;
 }
 

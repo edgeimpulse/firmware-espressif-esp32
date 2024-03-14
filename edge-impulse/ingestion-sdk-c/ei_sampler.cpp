@@ -127,7 +127,7 @@ static time_t ei_time(time_t *t)
 static void ei_write_last_data(void)
 {
     EiDeviceInfo* dev = EiDeviceInfo::get_device();
-    EiDeviceMemory* mem = dev->get_memory();  
+    EiDeviceMemory* mem = dev->get_memory();
 
     uint8_t fill = ((uint8_t)write_addr & 0x03);
     uint8_t insert_end_address = 0;
@@ -158,7 +158,7 @@ static void ei_write_last_data(void)
 bool ei_sampler_start_sampling(void *v_ptr_payload, starter_callback ei_sample_start, uint32_t sample_size)
 {
     EiDeviceInfo* dev = EiDeviceInfo::get_device();
-    EiDeviceMemory* mem = dev->get_memory();  
+    EiDeviceMemory* mem = dev->get_memory();
 
     sensor_aq_payload_info *payload = (sensor_aq_payload_info *)v_ptr_payload;
 
@@ -180,7 +180,7 @@ bool ei_sampler_start_sampling(void *v_ptr_payload, starter_callback ei_sample_s
         ei_printf("Starting in %d ms... (or until all flash was erased)\n", 2000);
         ei_sleep(2000);
         ESP_LOGD(TAG, "Done waiting\n");
-    } 
+    }
     else {
         ei_printf("Starting in %d ms... (or until all flash was erased)\n",
                     ((sample_buffer_size / mem->block_size) + 1) * mem->block_erase_time);
@@ -199,7 +199,7 @@ bool ei_sampler_start_sampling(void *v_ptr_payload, starter_callback ei_sample_s
     if(ei_sample_start(&sample_data_callback, dev->get_sample_interval_ms()) == false) {
         return false;
     }
-    
+
 	ei_printf("Sampling...\n");
 
     while(current_sample < samples_required) {
@@ -208,7 +208,7 @@ bool ei_sampler_start_sampling(void *v_ptr_payload, starter_callback ei_sample_s
     };
 
     ei_write_last_data();
-    write_addr++;   
+    write_addr++;
 
     uint8_t final_byte[] = {0xff};
     int ctx_err = ei_mic_ctx.signature_ctx->update(ei_mic_ctx.signature_ctx, final_byte, 1);
@@ -219,57 +219,6 @@ bool ei_sampler_start_sampling(void *v_ptr_payload, starter_callback ei_sample_s
     // finish the signing
     ESP_LOGD(TAG, "Finish the signing \n");
     ctx_err = ei_mic_ctx.signature_ctx->finish(ei_mic_ctx.signature_ctx, ei_mic_ctx.hash_buffer.buffer);
-
-    // load the first page in flash...
-    uint8_t *page_buffer = (uint8_t *)malloc(mem->block_size);
-    if (!page_buffer) {
-        ei_printf("Failed to allocate a page buffer to write the hash\n");
-        return false;
-    }
-
-    //DEBUG_PRINT("Reading first page \n");
-    uint32_t j = mem->read_sample_data(page_buffer, 0, mem->block_size);
-    if (j != mem->block_size) {
-        ei_printf("Failed to read first page (%d)\n", j);
-        ei_free(page_buffer);
-        return false;
-    }
-
-    // update the hash
-    uint8_t *hash = ei_mic_ctx.hash_buffer.buffer;
-    // we have allocated twice as much for this data (because we also want to be able to represent
-    // in hex) thus only loop over the first half of the bytes as the signature_ctx has written to
-    // those
-    for (size_t hash_ix = 0; hash_ix < (ei_mic_ctx.hash_buffer.size / 2); hash_ix++) {
-        // this might seem convoluted, but snprintf() with %02x is not always supported e.g. by
-        // newlib-nano we encode as hex... first ASCII char encodes top 4 bytes
-        uint8_t first = (hash[hash_ix] >> 4) & 0xf;
-        // second encodes lower 4 bytes
-        uint8_t second = hash[hash_ix] & 0xf;
-
-        // if 0..9 -> '0' (48) + value, if >10, then use 'a' (97) - 10 + value
-        char first_c = first >= 10 ? 87 + first : 48 + first;
-        char second_c = second >= 10 ? 87 + second : 48 + second;
-
-        page_buffer[ei_mic_ctx.signature_index + (hash_ix * 2) + 0] = first_c;
-        page_buffer[ei_mic_ctx.signature_index + (hash_ix * 2) + 1] = second_c;
-    }
-
-    j = mem->erase_sample_data(0, mem->block_size);
-    if (j != mem->block_size) {
-        ei_printf("Failed to erase first page (%d)\n", j);
-        ei_free(page_buffer);
-        return false;
-    }
-
-    j = mem->write_sample_data(page_buffer, 0, mem->block_size);
-
-    ei_free(page_buffer);
-
-    if (j != mem->block_size) {
-        ei_printf("Failed to write first page with updated hash (%d)\n", j);
-        return false;
-    }
 
     finish_and_upload((char*)dev->get_sample_label().c_str(), dev->get_sample_length_ms());
 
@@ -286,7 +235,7 @@ bool ei_sampler_start_sampling(void *v_ptr_payload, starter_callback ei_sample_s
 static bool create_header(sensor_aq_payload_info *payload)
 {
     EiDeviceInfo* dev = EiDeviceInfo::get_device();
-    EiDeviceMemory* mem = dev->get_memory();   
+    EiDeviceMemory* mem = dev->get_memory();
     sensor_aq_init_mbedtls_hs256_context(&ei_mic_signing_ctx, &ei_mic_hs_ctx, dev->get_sample_hmac_key().c_str());
 
     int tr = sensor_aq_init(&ei_mic_ctx, payload, NULL, true);
@@ -359,7 +308,7 @@ static bool sample_data_callback(const void *sample_buf, uint32_t byteLenght)
 
     if (++current_sample >= samples_required) {
         return true;
-    } 
+    }
     else {
         return false;
     }

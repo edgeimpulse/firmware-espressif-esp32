@@ -37,7 +37,7 @@ rm -rf $SCRIPTPATH/porting/raspberry/
 rm -rf $SCRIPTPATH/porting/himax/
 rm -rf $SCRIPTPATH/porting/synaptics/
 rm -rf $SCRIPTPATH/porting/brickml/
-rm -rf $SCRIPTPATH/porting/renesas-ra6m5/
+rm -rf $SCRIPTPATH/porting/renesas-ra/
 rm -rf $SCRIPTPATH/classifier/ei_run_classifier_c*
 rm -rf $SCRIPTPATH/CMSIS/DSP/Source/TransformFunctions/arm_bitreversal2.S
 rm -rf $SCRIPTPATH/third_party/arc_mli_package/

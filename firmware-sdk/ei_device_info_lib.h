@@ -322,8 +322,29 @@ public:
         return false;
     }
 
+    virtual void set_wifi_config(std::string ssid, std::string password, EiWiFiSecurity security, bool save = true)
+    {
+        wifi_ssid = ssid;
+        wifi_password = password;
+        wifi_security = security;
+
+        if(save) {
+            save_config();
+        }
+    }
+
+    virtual void get_wifi_config(std::string& ssid, std::string& password, EiWiFiSecurity* security)
+    {
+        ssid = wifi_ssid;
+        password = wifi_password;
+        *security = wifi_security;
+    }
+
     virtual void clear_config(void)
     {
+        wifi_ssid = "";
+        wifi_password = "";
+        wifi_security = EI_SECURITY_NONE;
         device_id = "11:22:33:44:55:66";
         management_url = "";
         sample_hmac_key = "";

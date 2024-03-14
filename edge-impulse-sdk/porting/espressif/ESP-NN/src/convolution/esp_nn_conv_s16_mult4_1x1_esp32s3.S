@@ -348,4 +348,11 @@ esp_nn_conv_s16_mult4_1x1_esp32s3:  # 0xa62
 
     .size   esp_nn_conv_s16_mult4_1x1_esp32s3, . - esp_nn_conv_s16_mult4_1x1_esp32s3
 
+#elif defined(WIO_TERMINAL)
+// dummy code, added for old ARM toolchain
+.syntax unified
+.thumb
+.cpu cortex-m0
+
+.section .text
 #endif // EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN && EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN_S3
