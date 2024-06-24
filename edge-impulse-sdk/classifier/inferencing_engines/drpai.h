@@ -455,10 +455,12 @@ EI_IMPULSE_ERROR drpai_close(uint32_t input_frame_size) {
 #if ((EI_CLASSIFIER_OBJECT_DETECTION == 1) && (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI))
 EI_IMPULSE_ERROR drpai_run_yolov5_postprocessing(
     const ei_impulse_t *impulse,
+    ei_learning_block_config_tflite_graph_t *block_config,
     signal_t *signal,
     ei_impulse_result_t *result,
     bool debug = false)
 {
+
     static std::unique_ptr<tflite::FlatBufferModel> model = nullptr;
     static std::unique_ptr<tflite::Interpreter> interpreter = nullptr;
 
@@ -564,7 +566,7 @@ EI_IMPULSE_ERROR drpai_run_yolov5_postprocessing(
     // }
     // printf("\n");
 
-    return fill_result_struct_f32_yolov5(impulse, result, 5, out_data, out_size);
+    return fill_result_struct_f32_yolov5(impulse, block_config, result, 5, out_data, out_size);
 }
 #endif
 
@@ -602,6 +604,8 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     void *config_ptr,
     bool debug = false)
 {
+    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
+
     // this needs to be changed for multi-model, multi-impulse
     static bool first_run = true;
     uint64_t ctx_start_us;
@@ -678,8 +682,8 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 
     EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
 
-    if (impulse->object_detection) {
-        switch (impulse->object_detection_last_layer) {
+    if (block_config->object_detection) {
+        switch (block_config->object_detection_last_layer) {
             case EI_CLASSIFIER_LAST_LAYER_FOMO: {
                 if (debug) {
                     ei_printf("DEBUG: raw drpai output");
@@ -693,6 +697,7 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 
                 fill_res = fill_result_struct_f32_fomo(
                     impulse,
+                    block_config,
                     result,
                     drpai_output_buf,
                     impulse->fomo_output_size,
@@ -701,14 +706,15 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
             }
             case EI_CLASSIFIER_LAST_LAYER_SSD: {
                 ei_printf("ERR: MobileNet SSD models are not implemented for DRP-AI (%d)\n",
-                    impulse->object_detection_last_layer);
+                    block_config->object_detection_last_layer);
                 return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
             }
             case EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI: {
-                #if EI_CLASSIFIER_TFLITE_OUTPUT_QUANTIZED == 1
+                if (block_config->quantized == 1) {
                     ei_printf("ERR: YOLOv5 does not support quantized inference\n");
                     return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-                #else
+                }
+                else {
                   if (debug) {
                       ei_printf("DEBUG: raw drpai output");
                       ei_printf("\n[");
@@ -720,19 +726,17 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
                       }
                       ei_printf("]\n");
                   }
+                }
 
 #if ((EI_CLASSIFIER_OBJECT_DETECTION == 1) && (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI))
                   // do post processing
-                  fill_res = drpai_run_yolov5_postprocessing(impulse, signal, result, debug);
+                  fill_res = drpai_run_yolov5_postprocessing(impulse, block_config, signal, result, debug);
 #endif
-
-                #endif
-
                 break;
             }
             default: {
                 ei_printf("ERR: Unsupported object detection last layer (%d)\n",
-                    impulse->object_detection_last_layer);
+                    block_config->object_detection_last_layer);
                 return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
             }
         }

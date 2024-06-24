@@ -335,37 +335,40 @@ public:
     }
 
     static void transpose_in_place(matrix_t *matrix) {
-        size_t size = matrix->cols * matrix->rows - 1;
-        float temp; // temp for swap
-        size_t next; // next item to swap
-        size_t cycleBegin; // index of start of cycle
-        size_t i; // location in matrix
-        size_t all_done_mark = 1;
-        ei_vector<bool> done(size+1,false);
+        // Don't bother if either dim is one, just need to swap the dimension sizes
+        if( matrix->rows != 1 && matrix->cols != 1) {
+            size_t size = matrix->cols * matrix->rows - 1;
+            float temp; // temp for swap
+            size_t next; // next item to swap
+            size_t cycleBegin; // index of start of cycle
+            size_t i; // location in matrix
+            size_t all_done_mark = 1;
+            ei_vector<bool> done(size+1,false);
 
-        i = 1; // Note that matrix[0] and last element of matrix won't move
-        while (1)
-        {
-            cycleBegin = i;
-            temp = matrix->buffer[i];
-            do
+            i = 1; // Note that matrix[0] and last element of matrix won't move
+            while (1)
             {
-                size_t col = i % matrix->cols;
-                size_t row = i / matrix->cols;
-                // swap row and col to make new idx, b/c we want to know where in the transposed matrix
-                next = col*matrix->rows + row;
-                float temp2 = matrix->buffer[next];
-                matrix->buffer[next] = temp;
-                temp = temp2;
-                done[next] = true;
-                i = next;
-            }
-            while (i != cycleBegin);
+                cycleBegin = i;
+                temp = matrix->buffer[i];
+                do
+                {
+                    size_t col = i % matrix->cols;
+                    size_t row = i / matrix->cols;
+                    // swap row and col to make new idx, b/c we want to know where in the transposed matrix
+                    next = col*matrix->rows + row;
+                    float temp2 = matrix->buffer[next];
+                    matrix->buffer[next] = temp;
+                    temp = temp2;
+                    done[next] = true;
+                    i = next;
+                }
+                while (i != cycleBegin);
 
-            // start next cycle by find next not done
-            for (i = all_done_mark; done[i]; i++) {
-                all_done_mark++; // move the high water mark so we don't look again
-                if(i>=size) { goto LOOP_END; }
+                // start next cycle by find next not done
+                for (i = all_done_mark; done[i]; i++) {
+                    all_done_mark++; // move the high water mark so we don't look again
+                    if(i>=size) { goto LOOP_END; }
+                }
             }
         }
         LOOP_END:

@@ -155,8 +155,8 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     uint32_t out_data_size = 0;
 
-    if (impulse->object_detection) {
-        switch (impulse->object_detection_last_layer) {
+    if (block_config->object_detection) {
+        switch (block_config->object_detection_last_layer) {
             case EI_CLASSIFIER_LAST_LAYER_TAO_SSD:
             case EI_CLASSIFIER_LAST_LAYER_TAO_RETINANET:
             case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV3:
@@ -170,7 +170,7 @@ EI_IMPULSE_ERROR run_nn_inference(
             default: {
                 ei_printf(
                     "ERR: Unsupported object detection last layer (%d)\n",
-                    impulse->object_detection_last_layer);
+                    block_config->object_detection_last_layer);
                 return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
             }
         }
@@ -224,11 +224,12 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
 
-    if (impulse->object_detection) {
-        switch (impulse->object_detection_last_layer) {
+    if (block_config->object_detection) {
+        switch (block_config->object_detection_last_layer) {
             case EI_CLASSIFIER_LAST_LAYER_FOMO: {
                 fill_res = fill_result_struct_f32_fomo(
                     impulse,
+                    block_config,
                     result,
                     out_data,
                     impulse->fomo_output_size,
@@ -237,10 +238,11 @@ EI_IMPULSE_ERROR run_nn_inference(
             }
             case EI_CLASSIFIER_LAST_LAYER_YOLOV5:
             case EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI: {
-                int version = impulse->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI ?
+                int version = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI ?
                     5 : 6;
                 fill_res = fill_result_struct_f32_yolov5(
                     impulse,
+                    block_config,
                     result,
                     version,
                     out_data,
@@ -251,6 +253,7 @@ EI_IMPULSE_ERROR run_nn_inference(
             case EI_CLASSIFIER_LAST_LAYER_TAO_RETINANET: {
                 fill_res = fill_result_struct_f32_tao_decode_detections(
                     impulse,
+                    block_config,
                     result,
                     out_data,
                     impulse->tflite_output_features_count,
@@ -260,6 +263,7 @@ EI_IMPULSE_ERROR run_nn_inference(
             case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV3:
                 fill_res = fill_result_struct_f32_tao_yolov3(
                     impulse,
+                    block_config,
                     result,
                     out_data,
                     impulse->tflite_output_features_count,
@@ -268,6 +272,7 @@ EI_IMPULSE_ERROR run_nn_inference(
             case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV4: {
                 fill_res = fill_result_struct_f32_tao_yolov4(
                     impulse,
+                    block_config,
                     result,
                     out_data,
                     impulse->tflite_output_features_count,
@@ -277,7 +282,7 @@ EI_IMPULSE_ERROR run_nn_inference(
             default: {
                 ei_printf(
                     "ERR: Unsupported object detection last layer (%d)\n",
-                    impulse->object_detection_last_layer);
+                    block_config->object_detection_last_layer);
                 return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
             }
         }

@@ -25,6 +25,10 @@
 #include "edge-impulse-sdk/dsp/ei_flatten.h"
 #include "model-parameters/model_metadata.h"
 
+#if EI_CLASSIFIER_HR_ENABLED
+#include "edge-impulse-sdk/dsp/ei_hr.hpp"
+#endif
+
 #if defined(__cplusplus) && EI_C_LINKAGE == 1
 extern "C" {
     extern void ei_printf(const char *format, ...);
@@ -47,6 +51,23 @@ float ei_dsp_image_buffer[EI_DSP_IMAGE_BUFFER_STATIC_SIZE];
 static float *ei_dsp_cont_current_frame = nullptr;
 static size_t ei_dsp_cont_current_frame_size = 0;
 static int ei_dsp_cont_current_frame_ix = 0;
+
+__attribute__((unused)) int extract_hr_features(
+    signal_t *signal,
+    matrix_t *output_matrix,
+    void *config_ptr,
+    const float frequency)
+{
+#if EI_CLASSIFIER_HR_ENABLED
+    auto handle = hr_class::create(config_ptr, frequency);
+    auto ret = handle->extract(signal, output_matrix, config_ptr, frequency);
+    delete handle;
+    return ret;
+#else
+    ei_printf("ERR: Please contact EI sales to enable heart rate processing in deployment");
+    return EIDSP_NOT_SUPPORTED;
+#endif
+}
 
 __attribute__((unused)) int extract_spectral_analysis_features(
     signal_t *signal,
@@ -137,7 +158,7 @@ __attribute__((unused)) int extract_raw_features(signal_t *signal, matrix_t *out
 }
 
 __attribute__((unused)) int extract_flatten_features(signal_t *signal, matrix_t *output_matrix, void *config_ptr, const float frequency) {
-    auto handle = flatten_class::create(config_ptr);
+    auto handle = flatten_class::create(config_ptr, frequency);
     auto ret = handle->extract(signal, output_matrix, config_ptr, frequency);
     delete handle;
     return ret;

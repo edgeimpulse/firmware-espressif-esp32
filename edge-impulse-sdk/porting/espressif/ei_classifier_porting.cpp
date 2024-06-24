@@ -28,6 +28,10 @@
 
 // for millis and micros
 #include "esp_timer.h"
+#include "esp_idf_version.h"
+
+// memory handling
+#include "esp_heap_caps.h"
 
 #define EI_WEAK_FN __attribute__((weak))
 
@@ -78,13 +82,20 @@ __attribute__((weak)) void ei_printf_float(float f) {
 // due to https://github.com/espressif/esp-nn/issues/7
 __attribute__((weak)) void *ei_malloc(size_t size) {
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 1)
+    return heap_caps_aligned_alloc(16, size, MALLOC_CAP_DEFAULT);
+#else
     return aligned_alloc(16, size);
+#endif
 #endif
     return malloc(size);
 }
 
 __attribute__((weak)) void *ei_calloc(size_t nitems, size_t size) {
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 1)
+    return heap_caps_calloc(nitems, size, MALLOC_CAP_DEFAULT);
+#else
     void *p;
     p = aligned_alloc(16, nitems * size);
     if (p == nullptr)
@@ -92,6 +103,7 @@ __attribute__((weak)) void *ei_calloc(size_t nitems, size_t size) {
 
     memset(p, '\0', nitems * size);
     return p;
+#endif
 #endif
     return calloc(nitems, size);
 }

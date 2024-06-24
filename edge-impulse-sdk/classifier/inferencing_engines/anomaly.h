@@ -214,6 +214,7 @@ EI_IMPULSE_ERROR run_gmm_anomaly(
         .output_data_tensor = 0,
         .output_labels_tensor = 0,
         .output_score_tensor = 0,
+        .threshold = block_config->anomaly_threshold,
         .quantized = 0,
         .compiled = 0,
         .graph_config = block_config->graph_config

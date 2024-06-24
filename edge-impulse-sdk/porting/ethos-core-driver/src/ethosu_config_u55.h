@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited. All rights reserved.
+ * Copyright (c) 2019-2020,2022 Arm Limited.
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -60,12 +60,15 @@
 #ifndef AXI_LIMIT0_MAX_BEATS_BYTES
 #define AXI_LIMIT0_MAX_BEATS_BYTES 0x0
 #endif
+
 #ifndef AXI_LIMIT0_MEM_TYPE
 #define AXI_LIMIT0_MEM_TYPE 0x0
 #endif
+
 #ifndef AXI_LIMIT0_MAX_OUTSTANDING_READS
 #define AXI_LIMIT0_MAX_OUTSTANDING_READS 32
 #endif
+
 #ifndef AXI_LIMIT0_MAX_OUTSTANDING_WRITES
 #define AXI_LIMIT0_MAX_OUTSTANDING_WRITES 16
 #endif
@@ -73,12 +76,15 @@
 #ifndef AXI_LIMIT1_MAX_BEATS_BYTES
 #define AXI_LIMIT1_MAX_BEATS_BYTES 0x0
 #endif
+
 #ifndef AXI_LIMIT1_MEM_TYPE
 #define AXI_LIMIT1_MEM_TYPE 0x0
 #endif
+
 #ifndef AXI_LIMIT1_MAX_OUTSTANDING_READS
 #define AXI_LIMIT1_MAX_OUTSTANDING_READS 32
 #endif
+
 #ifndef AXI_LIMIT1_MAX_OUTSTANDING_WRITES
 #define AXI_LIMIT1_MAX_OUTSTANDING_WRITES 16
 #endif
@@ -86,34 +92,33 @@
 #ifndef AXI_LIMIT2_MAX_BEATS_BYTES
 #define AXI_LIMIT2_MAX_BEATS_BYTES 0x0
 #endif
+
 #ifndef AXI_LIMIT2_MEM_TYPE
 #define AXI_LIMIT2_MEM_TYPE 0x0
 #endif
+
 #ifndef AXI_LIMIT2_MAX_OUTSTANDING_READS
 #define AXI_LIMIT2_MAX_OUTSTANDING_READS 32
 #endif
+
 #ifndef AXI_LIMIT2_MAX_OUTSTANDING_WRITES
 #define AXI_LIMIT2_MAX_OUTSTANDING_WRITES 16
 #endif
+
 #ifndef AXI_LIMIT3_MAX_BEATS_BYTES
 #define AXI_LIMIT3_MAX_BEATS_BYTES 0x0
 #endif
+
 #ifndef AXI_LIMIT3_MEM_TYPE
 #define AXI_LIMIT3_MEM_TYPE 0x0
 #endif
+
 #ifndef AXI_LIMIT3_MAX_OUTSTANDING_READS
 #define AXI_LIMIT3_MAX_OUTSTANDING_READS 32
 #endif
+
 #ifndef AXI_LIMIT3_MAX_OUTSTANDING_WRITES
 #define AXI_LIMIT3_MAX_OUTSTANDING_WRITES 16
-#endif
-
-/*
- * Address offset between the CPU and the NPU. The offset is
- * applied to the QBASE and BASEP registers.
- */
-#ifndef BASE_POINTER_OFFSET
-#define BASE_POINTER_OFFSET 0
 #endif
 
 #endif /* #ifndef ETHOSU_CONFIG_H */

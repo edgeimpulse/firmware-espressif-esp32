@@ -21,7 +21,8 @@
 #include "firmware-sdk/ei_camera_interface.h"
 #include "firmware-sdk/ei_device_info_lib.h"
 
-#if EI_PORTING_SONY_SPRESENSE
+#if (EI_PORTING_SONY_SPRESENSE || ARDUINO_NICLA_VISION)
+#define ALLIGNED_BUFFER 1
 #include "malloc.h" //for memalign
 #endif
 
@@ -87,8 +88,8 @@ static bool ei_camera_take_snapshot_encode_and_output_no_init(size_t width, size
 
     uint32_t size = width * height * pixel_size_B;
 
-#if EI_PORTING_SONY_SPRESENSE
-    // 32 BYTE aligned (for Sony, maybe others too?  Monster vector moves in our future?)
+#if ALLIGNED_BUFFER
+    // 32 BYTE aligned buffer
     auto image_p = std::unique_ptr<uint8_t, decltype(free) *> { reinterpret_cast<uint8_t *>(
                                                                     memalign(32, size)),
                                                                 free };

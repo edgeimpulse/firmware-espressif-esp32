@@ -388,6 +388,7 @@ __attribute__((unused)) int extract_tflite_eon_features(signal_t *signal, matrix
         .output_data_tensor = 0,
         .output_labels_tensor = 255,
         .output_score_tensor = 255,
+        .threshold = 0,
         .quantized = 0,
         .compiled = 1,
         .graph_config = &ei_config_tflite_graph_0

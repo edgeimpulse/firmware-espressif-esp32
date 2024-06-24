@@ -452,6 +452,7 @@ __attribute__((unused)) int extract_tflite_features(signal_t *signal, matrix_t *
         .output_data_tensor = 0,
         .output_labels_tensor = 255,
         .output_score_tensor = 255,
+        .threshold = 0,
         .quantized = 0,
         .compiled = 0,
         .graph_config = &ei_config_tflite_graph_0

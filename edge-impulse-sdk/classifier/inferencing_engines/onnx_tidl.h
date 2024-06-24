@@ -347,6 +347,7 @@ static EI_IMPULSE_ERROR inference_onnx_setup(
  * @return  EI_IMPULSE_OK if successful
  */
 static EI_IMPULSE_ERROR inference_onnx_run(const ei_impulse_t *impulse,
+    void *config_ptr,
     uint64_t ctx_start_us,
     std::vector<Ort::Value>* input_tensors,
     std::vector<Ort::Value>* output_tensors,
@@ -355,6 +356,8 @@ static EI_IMPULSE_ERROR inference_onnx_run(const ei_impulse_t *impulse,
     Ort::IoBinding* binding,
     ei_impulse_result_t *result,
     bool debug) {
+
+    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
 
     session->Run(*run_options, *binding);
 
@@ -381,14 +384,14 @@ static EI_IMPULSE_ERROR inference_onnx_run(const ei_impulse_t *impulse,
     EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
 
     // NOTE: for now only yolox object detection supported
-    if (impulse->object_detection) {
-        switch (impulse->object_detection_last_layer) {
+    if (block_config->object_detection) {
+        switch (block_config->object_detection_last_layer) {
             case EI_CLASSIFIER_LAST_LAYER_YOLOX: {
-                #if EI_CLASSIFIER_TFLITE_OUTPUT_QUANTIZED == 1
+                if (block_config->quantized == 1) {
                     ei_printf("ERR: YOLOX does not support quantized inference\n");
                     return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-                #else
-
+                }
+                else {
                     if (debug) {
                         ei_printf("YOLOX OUTPUT (%d ms.): ", result->timing.classification);
                         for (size_t ix = 0; ix < output_tensor_features_count; ix++) {
@@ -399,21 +402,22 @@ static EI_IMPULSE_ERROR inference_onnx_run(const ei_impulse_t *impulse,
                     }
                     fill_res = fill_result_struct_f32_yolox_detect(
                         impulse,
+                        block_config,
                         result,
                         (float*)out_data,
                         output_tensor_features_count);
-                #endif
+                }
                 break;
             }
             default: {
                 ei_printf("ERR: Unsupported object detection last layer (%d)\n",
-                    impulse->object_detection_last_layer);
+                    block_config->object_detection_last_layer);
                 break;
             }
         }
     }
     else {
-#if EI_CLASSIFIER_TFLITE_OUTPUT_QUANTIZED == 1
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
 
     switch (output_tensor_type) {
         case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8: {
@@ -549,6 +553,7 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     ctx_start_us = ei_read_timer_us();
     EI_IMPULSE_ERROR run_res = inference_onnx_run(impulse,
+        config_ptr,
         ctx_start_us,
         &input_tensors,
         &output_tensors,
@@ -678,6 +683,7 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 
     ctx_start_us = ei_read_timer_us();
     EI_IMPULSE_ERROR run_res = inference_onnx_run(impulse,
+        config_ptr,
         ctx_start_us,
         &input_tensors,
         &output_tensors,
