@@ -26,7 +26,7 @@
 /* Include ----------------------------------------------------------------- */
 #include "firmware-sdk/ei_camera_interface.h"
 
-#define CAMERA_MODEL_ESP_EYE
+#define CAMERA_MODEL_AI_THINKER
 
 /*
  *   Pin definitions for some common ESP-CAM modules
@@ -60,7 +60,7 @@
   #define LED_OFF         HIGH //
   #define LAMP_PIN           4 // LED FloodLamp.
 
-#elif defined(CAMERA_MODEL_ESP_EYE)
+#elif defined(CAMERA_MODEL_AI_THINKER)
   // ESP-EYE
   // https://twitter.com/esp32net/status/1085488403460882437
   //
