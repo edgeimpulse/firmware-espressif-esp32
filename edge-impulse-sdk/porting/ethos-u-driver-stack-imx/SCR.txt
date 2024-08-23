@@ -1,0 +1,39 @@
+NXP Software Content Register
+
+Package:                     ethos-u-driver-stack-imx.git
+Outgoing License:            Apache-2.0 
+License File:                LICENSE.txt
+Type of Content:             source
+Description and comments:    ethos-u-driver-stack is the user space driver library for ethos-u NPU on iMX93 platform
+Release Location:            https://github.com/nxp-imx/ethos-u-driver-stack-imx
+Origin:                      NXP (BSD-3-Clause)
+                             ARM Limited ethos-u-linux-driver-stack v23.08 (Apache-2.0) - https://git.mlplatform.org/ml/ethos-u/ethos-u-linux-driver-stack.git
+
+
+--------------------------------------------
+Included kernel header file
+--------------------------------------------
+Component:                   kernel_driver inteface header file
+Outgoing License:            GPL-2.0-only WITH Linux-syscall-note
+License File:                LICENSE-GPL-2.0.txt and Linux-syscall-note
+Package Category:            Ethos-u Linux kernel driver header file
+Type of Content:             header file
+Description and comments:    Linux kernel driver header file, the driver stack will include this header
+                             file to use linux kernel syscall.
+Origin:                      ARM ethos-u-linux-driver-stack v23.08 (Apache-2.0) - https://git.mlplatform.org/ml/ethos-u/ethos-u-linux-driver-stack.git
+File location:               kernel_driver/include/ethos-u.h
+
+--------------------------------------------
+Auto generated header file by flatbuffers
+--------------------------------------------
+Component:                   flatbuffers header file
+Outgoing License:            Apache-2.0
+License File:                LICENSE.txt
+Package Category:            Auto generated header file by flatbuffers
+Type of Content:             header file
+Description and comments:    FlatBuffers is a cross platform serialization library architected for maximum memory efficiency
+Origin:                      Google flatbuffers 1.12.0 (Apache-2.0) - https://github.com/google/flatbuffers
+File location:               driver_library/src/autogen/tflite_schema.hpp
+
+
+

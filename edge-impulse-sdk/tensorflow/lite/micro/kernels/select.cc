@@ -117,7 +117,6 @@ TfLiteStatus SelectPrepare(TfLiteContext* context, TfLiteNode* node) {
     micro_context->DeallocateTempTfLiteTensor(input_x);
     micro_context->DeallocateTempTfLiteTensor(input_y);
     micro_context->DeallocateTempTfLiteTensor(output);
-
     return kTfLiteOk;
   }
 
@@ -218,6 +217,10 @@ TfLiteStatus SelectEval(TfLiteContext* context, TfLiteNode* node) {
       break;
     case kTfLiteInt16:
       CallSelect<int16_t>(input_condition, input_x, input_y, output,
+                          data->requires_broadcast);
+      break;
+    case kTfLiteInt32:
+      CallSelect<int32_t>(input_condition, input_x, input_y, output,
                           data->requires_broadcast);
       break;
     default:

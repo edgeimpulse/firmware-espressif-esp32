@@ -39,3 +39,5 @@
 /.vscode
 .DS_Store
 /copy-sdk.sh
+create-arduino-library.sh
+

@@ -441,6 +441,16 @@ class MicroMutableOpResolver : public MicroOpResolver {
                       tflite::Register_READ_VARIABLE(), ParseReadVariable);
   }
 
+  TfLiteStatus AddReduceAny() {
+    return AddBuiltin(BuiltinOperator_REDUCE_ANY, Register_REDUCE_ANY(),
+                      ParseReducer);
+  }
+
+  TfLiteStatus AddReduceAll() {
+    return AddBuiltin(BuiltinOperator_REDUCE_ALL, Register_REDUCE_ALL(),
+                      ParseReducer);
+  }
+
   TfLiteStatus AddReduceMax() {
     return AddBuiltin(BuiltinOperator_REDUCE_MAX, Register_REDUCE_MAX(),
                       ParseReducer);
@@ -489,6 +499,11 @@ class MicroMutableOpResolver : public MicroOpResolver {
   TfLiteStatus AddRsqrt() {
     return AddBuiltin(BuiltinOperator_RSQRT,
                       tflite::ops::micro::Register_RSQRT(), ParseRsqrt);
+  }
+
+  TfLiteStatus AddScatterNd() {
+    return AddBuiltin(BuiltinOperator_SCATTER_ND,
+                      Register_SCATTER_ND(), ParseScatterNd);
   }
 
 #ifndef TF_LITE_STATIC_MEMORY
@@ -582,6 +597,16 @@ class MicroMutableOpResolver : public MicroOpResolver {
   TfLiteStatus AddTanh() {
     return AddBuiltin(BuiltinOperator_TANH, tflite::ops::micro::Register_TANH(),
                       ParseTanh);
+  }
+
+  TfLiteStatus AddTile() {
+    return AddBuiltin(BuiltinOperator_TILE, tflite::Register_TILE(),
+                      ParseTile);
+  }
+
+  TfLiteStatus AddTopkV2() {
+    return AddBuiltin(BuiltinOperator_TOPK_V2, tflite::Register_TOPK_V2(),
+                      ParseTopk);
   }
 
   TfLiteStatus AddTransposeConv() {

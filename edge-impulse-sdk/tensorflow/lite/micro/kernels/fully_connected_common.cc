@@ -69,7 +69,8 @@ TfLiteStatus CalculateOpDataFullyConnected(
     // int8 quantization. See
     // https://github.com/tensorflow/tensorflow/issues/44912 for additional
     // context.
-    TFLITE_DCHECK(filter->params.zero_point == 0);
+    // this is removed to fix #7125
+    // TFLITE_DCHECK(filter->params.zero_point == 0);
     data->filter_zero_point = filter->params.zero_point;
     data->output_zero_point = output->params.zero_point;
 

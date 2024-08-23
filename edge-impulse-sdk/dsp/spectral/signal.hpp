@@ -38,7 +38,7 @@ class signal {
 public:
     using fvec = ei_vector<float>;
 
-    static void scale(fvec &x, float a)
+    static void scale(fvec& x, float a)
     {
         for (size_t ix = 0; ix < x.size(); ix++) {
             x[ix] *= a;
@@ -58,12 +58,12 @@ public:
      * @param zi Initial conditions
      */
     static void decimate_simple(
-        const fvec &input,
-        fvec &output,
+        const fvec& input,
+        fvec& output,
         size_t factor,
-        const fvec &b,
-        const fvec &a,
-        const fvec &zi)
+        const fvec& b,
+        const fvec& a,
+        const fvec& zi)
     {
         fvec d = zi;
         scale(d, input[0]);
@@ -85,20 +85,31 @@ public:
     }
 
     struct sosfilt {
-        const float *coeff; // 6 * num_sections coefficients
-        float* zi;
+        const float* coeff = nullptr; // 6 * num_sections coefficients
         fvec zi_vec; // 2 * num_sections initial conditions
-        size_t num_sections;
+        size_t num_sections = 0;
 
-        sosfilt(const float *coeff_, const float *zi_, size_t num_sections_)
+        sosfilt(const float* coeff_, const float* zi_, size_t num_sections_)
             : coeff(coeff_),
-              zi_vec(zi_, zi_ + (num_sections_ * 2)),
-              num_sections(num_sections_)
+            zi_vec(zi_, zi_ + (num_sections_ * 2)),
+            num_sections(num_sections_)
         {
         }
 
-        void update(const float *coeff_, const float *zi_)
+        sosfilt()
         {
+        }
+
+        void update(const float* coeff_, const float* zi_)
+        {
+            assert(num_sections > 0);
+            coeff = coeff_;
+            zi_vec.assign(zi_, zi_ + (num_sections * 2));
+        }
+
+        void update(const float* coeff_, const float* zi_, size_t num_sections_)
+        {
+            num_sections = num_sections_;
             coeff = coeff_;
             zi_vec.assign(zi_, zi_ + (num_sections * 2));
         }
@@ -110,7 +121,7 @@ public:
          * @param output Output signal. Can be the same as input for in place
          * @param x_size Minimum size of input and output signal
          */
-        void run(const float *input, const size_t size, float* output)
+        void run(const float* input, const size_t size, float* output)
         {
             assert(num_sections > 0);
 
@@ -130,8 +141,8 @@ public:
         void init(float x0)
         {
             for (size_t sect = 0; sect < num_sections; sect++) {
-                zi_vec.data()[sect * 2] *= x0;
-                zi_vec.data()[sect * 2 + 1] *= x0;
+                zi_vec[sect * 2] *= x0;
+                zi_vec[sect * 2 + 1] *= x0;
             }
         }
     };
@@ -145,12 +156,12 @@ public:
      * @param sos Second-order section
      */
     static void decimate_simple(
-        const float *input,
+        const float* input,
         const size_t input_size,
-        float *output,
+        float* output,
         const size_t output_size,
         size_t factor,
-        sosfilt &sos)
+        sosfilt& sos)
     {
         sos.init(input[0]);
 
@@ -176,7 +187,7 @@ public:
      * @param a Denominator coefficients
      * @param zi Initial conditions
      */
-    static void lfilter(const fvec &b, const fvec &a, const fvec &x, fvec &y, fvec &d)
+    static void lfilter(const fvec& b, const fvec& a, const fvec& x, fvec& y, fvec& d)
     {
         /*
          a[0]*y[n] = b[0] * x[n]               + d[0][n-1]
@@ -205,7 +216,7 @@ public:
         }
     }
 
-    static void iir2(const float *x, float *y, size_t n, const float *b, const float *a, float *d)
+    static void iir2(const float* x, float* y, size_t n, const float* b, const float* a, float* d)
     {
         /*
          a[0]*y[n] = b[0] * x[n]               + d[0][n-1]
@@ -236,7 +247,7 @@ public:
      * @param y Output signal
      * @param h FIR coefficients
      */
-    static void upfirdn(const float * x, size_t x_size, fvec &y, int up, int down, const fvec &h)
+    static void upfirdn(const float* x, size_t x_size, fvec& y, int up, int down, const fvec& h)
     {
         assert(up > 0);
         assert(down > 0);
@@ -296,7 +307,7 @@ public:
      * @param output Output signal, will be moved from an internal vector sized correctly.
      * @param window FIR coefficients. e.g. signal.firwin(2 * half_len + 1, f_c, window=('kaiser', 5.0))
      */
-    static void resample_poly(const float* input, size_t input_size, fvec &output, int up, int down, const fvec &window)
+    static void resample_poly(const float* input, size_t input_size, fvec& output, int up, int down, const fvec& window)
     {
         assert(up > 0);
         assert(down > 0);
@@ -323,28 +334,31 @@ public:
     }
 
     static void calc_decimation_ratios(
-        const char *filter_type,
+        const char* filter_type,
         float filter_cutoff,
         float sample_rate,
-        std::vector<int> &ratios)
+        std::vector<int>& ratios)
     {
         if (strcmp(filter_type, "low") == 0) {
-            ratios = {1};
+            ratios = { 1 };
             return;
         }
 
-        static const std::vector<int> supported = {1000, 100, 30, 10, 3};
+        static const std::vector<int> supported = { 1000, 100, 30, 10, 3 };
         for (size_t i = 0; i < supported.size(); i++) {
             const int r = supported[i];
             if (sample_rate * 0.5f / r > filter_cutoff) {
                 if (r == 3 || r == 10) {
-                    ratios = {r};
-                } else if (r == 30) {
-                    ratios = {3, 10};
-                } else if (r == 100) {
-                    ratios = {10, 10};
-                } else if (r == 1000) {
-                    ratios = {10, 10, 10};
+                    ratios = { r };
+                }
+                else if (r == 30) {
+                    ratios = { 3, 10 };
+                }
+                else if (r == 100) {
+                    ratios = { 10, 10 };
+                }
+                else if (r == 1000) {
+                    ratios = { 10, 10, 10 };
                 }
                 return;
             }

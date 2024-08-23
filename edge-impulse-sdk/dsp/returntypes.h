@@ -41,6 +41,8 @@ typedef enum {
     EI_IMPULSE_INVALID_SIZE = -24, /**<The shape of data does not match the shape of input layer. */
     EI_IMPULSE_ONNX_ERROR = -25, /**< Error in ONNX inference engine */
     EI_IMPULSE_MEMRYX_ERROR = -26, /**< Error in Memryx inference engine */
+    EI_IMPULSE_DEVICE_INIT_ERROR = -27, /**< Device initialization (usually NPU accelerator) failed */
+    EI_IMPULSE_LAST_LAYER_NOT_SUPPORTED = -28, /**< The last layer is not supported by inferencing engine. */
 } EI_IMPULSE_ERROR;
 
 #endif // _EIDSP_RETURN_TYPES_H_

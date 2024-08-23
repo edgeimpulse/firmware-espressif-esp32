@@ -261,8 +261,6 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     graph_config->model_reset(ei_aligned_free);
 
-    result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
-
     if (run_res != EI_IMPULSE_OK) {
         return run_res;
     }
@@ -360,8 +358,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     if (run_res != EI_IMPULSE_OK) {
         return run_res;
     }
-
-    result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
 
     return EI_IMPULSE_OK;
 }

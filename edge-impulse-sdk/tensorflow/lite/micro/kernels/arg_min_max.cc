@@ -74,6 +74,9 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node, bool is_arg_max) {
         case kTfLiteInt8:
           TF_LITE_ARG_MIN_MAX(int8_t, int32_t, int32_t);
           break;
+        case kTfLiteInt32:
+          TF_LITE_ARG_MIN_MAX(int32_t, int32_t, int32_t);
+          break;
         default:
           MicroPrintf(
               "Only float32, uint8_t and int8_t are "

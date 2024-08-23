@@ -26,7 +26,15 @@
 #include "model-parameters/model_metadata.h"
 
 #if EI_CLASSIFIER_HR_ENABLED
+#if EI_CLASSIFIER_HR_LIB
+// Forward declare only the part of the class we need to link later
+class hr_class {
+public:
+    static DspHandle* create(void* config, float frequency);
+};
+#else
 #include "edge-impulse-sdk/dsp/ei_hr.hpp"
+#endif
 #endif
 
 #if defined(__cplusplus) && EI_C_LINKAGE == 1

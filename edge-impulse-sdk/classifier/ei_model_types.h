@@ -42,6 +42,7 @@
 #define EI_CLASSIFIER_SYNTIANT                   10
 #define EI_CLASSIFIER_ONNX_TIDL                  11
 #define EI_CLASSIFIER_MEMRYX                     12
+#define EI_CLASSIFIER_ETHOS_LINUX                13
 
 #define EI_CLASSIFIER_SENSOR_UNKNOWN             -1
 #define EI_CLASSIFIER_SENSOR_MICROPHONE          1
@@ -108,7 +109,7 @@ typedef struct {
     extract_fn_t extract_fn;
     void *config;
     uint8_t *axes;
-    size_t axes_size;
+    uint32_t axes_size;
     int version;  // future proof, can easily add to this struct now
     DspHandle* (*factory)(void* config, float sampling_freq); // nullptr means no state
     // v1 ends here
@@ -126,7 +127,7 @@ typedef struct {
     void *config;
     int image_scaling;
     const uint32_t* input_block_ids;
-    const uint32_t input_block_ids_size;
+    const uint8_t input_block_ids_size;
     uint32_t output_features_count;
 } ei_learning_block_t;
 
@@ -148,6 +149,21 @@ typedef struct {
     size_t model_size;
     size_t arena_size;
 } ei_config_tflite_graph_t;
+
+typedef struct {
+    uint16_t implementation_version;
+    uint8_t input_datatype;
+    bool input_quantized;
+    float input_scale;
+    float input_zeropoint;
+    uint8_t output_datatype;
+    bool output_quantized;
+    float output_scale;
+    float output_zeropoint;
+    const unsigned char *model;
+    size_t model_size;
+    size_t arena_size;
+} ei_config_ethos_graph_t;
 
 typedef struct {
     uint16_t implementation_version;
@@ -208,7 +224,9 @@ typedef struct ei_impulse {
     uint32_t project_id;
     const char *project_owner;
     const char *project_name;
-    uint32_t deploy_version;
+    uint16_t impulse_id;
+    const char *impulse_name;
+    uint16_t deploy_version;
 
     /* DSP details */
     uint32_t nn_input_frame_size;
@@ -220,7 +238,7 @@ typedef struct ei_impulse {
     uint32_t input_frames;
     float interval_ms;
     float frequency;
-    size_t dsp_blocks_size;
+    uint8_t dsp_blocks_size;
     ei_model_dsp_t *dsp_blocks;
 
     /* object detection */
@@ -229,20 +247,20 @@ typedef struct ei_impulse {
     uint32_t tflite_output_features_count;
 
     /* learning blocks */
-    const size_t learning_blocks_size;
+    const uint8_t learning_blocks_size;
     const ei_learning_block_t *learning_blocks;
 
     /* inference parameters */
-    uint32_t inferencing_engine;
+    uint8_t inferencing_engine;
 
     /* sensors and on-device inference */
-    uint32_t sensor;
+    uint8_t sensor;
     const char *fusion_string;
     uint32_t slice_size;
-    uint32_t slices_per_model_window;
+    uint8_t slices_per_model_window;
 
     /* output details */
-    uint16_t has_anomaly;
+    uint8_t has_anomaly;
     uint16_t label_count;
     const ei_model_performance_calibration_t calibration;
     const char **categories;

@@ -15,21 +15,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef __EIDSP_IMAGE_PROCESSING__H__
-#define __EIDSP_IMAGE_PROCESSING__H__
-
 #include "edge-impulse-sdk/dsp/ei_utils.h"
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/dsp/returntypes.hpp"
 #include "edge-impulse-sdk/dsp/image/processing.hpp"
 
 namespace ei { namespace image { namespace processing {
-
-enum YUV_OPTIONS
-{
-    BIG_ENDIAN_ORDER = 1, //RGB reading from low to high memory.  Otherwise, uses native encoding
-    PAD_4B = 2, // pad 0x00 on the high B. ie 0x00RRGGBB
-};
 
 /**
  * @brief Convert YUV to RGB
@@ -406,4 +397,3 @@ int crop_and_interpolate_image(
 }
 
 }}} //namespaces
-#endif //!__EI_IMAGE_PROCESSING__H__

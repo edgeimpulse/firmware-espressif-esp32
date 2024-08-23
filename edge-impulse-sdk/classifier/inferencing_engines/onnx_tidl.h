@@ -77,15 +77,15 @@ int printTensorInfo(Ort::Session *session, std::vector<const char *> *input_node
     Ort::TypeInfo type_info = (*session).GetInputTypeInfo(0);
     auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
     std::vector<int64_t> input_node_dims = tensor_info.GetShape();
-    ei_printf("LOG_INFO: number of inputs:%d \n", num_input_nodes);
-    ei_printf("LOG_INFO: number of outputs: %d\n", num_output_nodes);
+    ei_printf("LOG_INFO: number of inputs: %d\n", (int)num_input_nodes);
+    ei_printf("LOG_INFO: number of outputs: %d\n", (int)num_output_nodes);
     ei_printf("LOG_INFO: input(0) name: %s\n", (*input_node_names)[0]);
 
     Ort::TypeInfo type_info_out = (*session).GetOutputTypeInfo(0);
     auto tensor_info_out = type_info_out.GetTensorTypeAndShapeInfo();
     std::vector<int64_t> output_node_dims = tensor_info_out.GetShape();
     /* iterate over all input nodes */
-    for (int i = 0; i < num_input_nodes; i++)
+    for (int i = 0; i < (int)num_input_nodes; i++)
     {
         /* print input node names */
         ei_printf("LOG_INFO: Input %d : name=%s\n", i, (*input_node_names)[i]);
@@ -110,7 +110,7 @@ int printTensorInfo(Ort::Session *session, std::vector<const char *> *input_node
         return EI_IMPULSE_ONNX_ERROR;
     }
 
-    for (int i = 0; i < num_output_nodes; i++)
+    for (int i = 0; i < (int)num_output_nodes; i++)
     {
         /* print output node names */
         ei_printf("LOG_INFO: Output %d : name=%s\n", i, (*output_node_names)[i]);
@@ -124,7 +124,7 @@ int printTensorInfo(Ort::Session *session, std::vector<const char *> *input_node
         /* print output shapes/dims */
         output_node_dims = tensor_info.GetShape();
         ei_printf("LOG_INFO: Output %d : num_dims=%zu\n", i, output_node_dims.size());
-        for (int j = 0; j < output_node_dims.size(); j++)
+        for (int j = 0; j < (int)output_node_dims.size(); j++)
         {
             ei_printf("LOG_INFO: Output %d : dim %d=%jd\n", i, j, output_node_dims[j]);
         }
@@ -243,11 +243,11 @@ static EI_IMPULSE_ERROR inference_onnx_setup(
     /* output information */
     size_t num_output_nodes = session->GetOutputCount();
     std::vector<const char *> output_node_names(num_output_nodes);
-    for (int i = 0; i < num_output_nodes; i++)
+    for (int i = 0; i < (int)num_output_nodes; i++)
     {
         output_node_names[i] = session->GetOutputName(i, allocator);
     }
-    for (int i = 0; i < num_input_nodes; i++)
+    for (int i = 0; i < (int)num_input_nodes; i++)
     {
         input_node_names[i] = session->GetInputName(i, allocator);
     }
@@ -296,7 +296,7 @@ static EI_IMPULSE_ERROR inference_onnx_setup(
     *binding_ptr = binding;
     binding->BindInput(input_node_names[0], (*input_tensors)[0]);
 
-    for(int idx=0; idx < num_output_nodes; idx++)
+    for(int idx=0; idx < (int)num_output_nodes; idx++)
     {
         auto node_dims = output_tensors_warm_up[idx].GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
         size_t tensor_size = 1;

@@ -32,7 +32,7 @@
 const char* ei_classifier_inferencing_categories[] = { "helloworld", "noise", "unknown" };
 
 uint8_t ei_dsp_config_12_axes[] = { 0 };
-const uint32_t ei_dsp_config_12_axes_size = 1;
+const uint8_t ei_dsp_config_12_axes_size = 1;
 ei_dsp_config_mfcc_t ei_dsp_config_12 = {
     12, // uint32_t blockId
     4, // int implementationVersion
@@ -49,7 +49,7 @@ ei_dsp_config_mfcc_t ei_dsp_config_12 = {
     1 // int pre_shift
 };
 
-const size_t ei_dsp_blocks_size = 1;
+const uint8_t ei_dsp_blocks_size = 1;
 ei_model_dsp_t ei_dsp_blocks[ei_dsp_blocks_size] = {
     { // DSP block 12
         12,
@@ -86,9 +86,9 @@ const ei_learning_block_config_tflite_graph_t ei_learning_block_config_13 = {
     .graph_config = (void*)&ei_config_tflite_graph_13
 };
 
-const size_t ei_learning_blocks_size = 1;
+const uint8_t ei_learning_blocks_size = 1;
 const uint32_t ei_learning_block_13_inputs[1] = { 12 };
-const uint32_t ei_learning_block_13_inputs_size = 1;
+const uint8_t ei_learning_block_13_inputs_size = 1;
 const ei_learning_block_t ei_learning_blocks[ei_learning_blocks_size] = {
     {
         13,
@@ -115,6 +115,8 @@ const ei_impulse_t impulse_87_0 = {
     .project_id = 87,
     .project_owner = "Edge Impulse Profiling",
     .project_name = "Demo: Keyword Spotting",
+    .impulse_id = 1,
+    .impulse_name = "",
     .deploy_version = 1,
 
     .nn_input_frame_size = 650,

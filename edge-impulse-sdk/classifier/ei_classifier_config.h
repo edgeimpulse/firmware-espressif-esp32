@@ -49,17 +49,6 @@
 #endif
 #endif // EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN
 
-// CMSIS-NN falls back to reference kernels when __ARM_FEATURE_DSP and __ARM_FEATURE_MVE are not defined
-// we should never use those... So disable CMSIS-NN in that case and throw a warning
-#if EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN == 1
-    #if !defined(__ARM_FEATURE_DSP) && !defined(__ARM_FEATURE_MVE)
-        #pragma message( \
-            "CMSIS-NN enabled, but neither __ARM_FEATURE_DSP nor __ARM_FEATURE_MVE defined. Falling back.")
-        #undef EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN
-        #define EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN 0
-    #endif
-#endif // EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN == 1
-
 #if EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN == 1
 #define CMSIS_NN                                     1
 #define EI_CLASSIFIER_TFLITE_LOAD_CMSIS_NN_SOURCES   1

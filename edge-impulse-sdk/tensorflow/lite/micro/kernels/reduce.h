@@ -21,6 +21,9 @@ limitations under the License.
 #include "edge-impulse-sdk/tensorflow/lite/c/builtin_op_data.h"
 #include "edge-impulse-sdk/tensorflow/lite/c/common.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/internal/types.h"
+#include "edge-impulse-sdk/tensorflow/lite/kernels/internal/reduce_common.h"
+
+using ReduceType = tflite::ops::builtin::reduce::ReduceType;
 
 namespace tflite {
 
@@ -37,23 +40,19 @@ struct OpDataReduce {
   int output_zp;
   float output_scale;
   int num_output_elements;
-  int num_axis;
 };
 
-TfLiteStatus PrepareMinMaxHelper(TfLiteContext* context, TfLiteNode* node,
+TfLiteStatus PrepareReduceHelper(TfLiteContext* context, TfLiteNode* node,
                               OpDataReduce* op_data);
+
+TfLiteStatus EvalReduceHelper(TfLiteContext* context, TfLiteNode* node,
+                              OpDataReduce* op_data, ReduceType reduce_type);
 
 TfLiteStatus PrepareMeanOrSumHelper(TfLiteContext* context, TfLiteNode* node,
                                     OpDataReduce* op_data);
 
-TfLiteStatus EvalMaxHelper(TfLiteContext* context, TfLiteNode* node,
-                           OpDataReduce* op_data);
-
-TfLiteStatus EvalMinHelper(TfLiteContext* context, TfLiteNode* node,
-                           OpDataReduce* op_data);
-
 TfLiteStatus EvalMeanHelper(TfLiteContext* context, TfLiteNode* node,
-                            OpDataReduce* op_data);
+                           OpDataReduce* op_data);
 
 TfLiteStatus EvalSumHelper(TfLiteContext* context, TfLiteNode* node,
                            OpDataReduce* op_data);
@@ -62,6 +61,8 @@ void ReduceResolveAxis(const int* axis_data, int axis_count,
                        MeanParams* op_params);
 
 TfLiteRegistration Register_MEAN();
+TfLiteRegistration Register_REDUCE_ANY();
+TfLiteRegistration Register_REDUCE_ALL();
 TfLiteRegistration Register_REDUCE_MAX();
 TfLiteRegistration Register_REDUCE_MIN();
 TfLiteRegistration Register_SUM();

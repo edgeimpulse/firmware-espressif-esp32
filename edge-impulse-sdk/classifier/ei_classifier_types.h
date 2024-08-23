@@ -28,32 +28,32 @@
 
 /**
  * @defgroup ei_structs Structs
- * 
+ *
  * Public-facing structs for Edge Impulse C++ SDK.
- * 
+ *
  * @addtogroup ei_structs
  * @{
  */
 
 /**
  * @brief Holds the output of inference, anomaly results, and timing information.
- * 
+ *
  * `ei_impulse_result_t` holds the output of `run_classifier()`. If object detection is
  * enabled, then the output results is a
  * pointer to an array of bounding boxes of size `bounding_boxes_count`, as given by
  * [ei_impulse_result_bounding_box_t](https://docs.edgeimpulse.com/reference/ei_impulse_result_bounding_box_t).
  * Otherwise, results are stored as an array of classification scores, as given by
  * [ei_impulse_result_classification_t](https://docs.edgeimpulse.com/reference/ei_impulse_result_classification_t).
- * 
+ *
  * If anomaly detection is enabled (e.g. `EI_CLASSIFIER_HAS_ANOMALY == 1`), then the
  * anomaly score will be stored as a floating point value in `anomaly`.
- * 
- * Timing information is stored in an 
+ *
+ * Timing information is stored in an
  * [ei_impulse_result_timing_t](https://docs.edgeimpulse.com/reference/ei_impulse_result_timing_t)
  * struct.
- * 
+ *
  * **Source**: [classifier/ei_classifier_types.h](https://github.com/edgeimpulse/inferencing-sdk-cpp/blob/master/classifier/ei_classifier_types.h)
- * 
+ *
  * **Example**: [standalone inferencing main.cpp](https://github.com/edgeimpulse/example-standalone-inferencing/blob/master/source/main.cpp)
  */
 typedef struct {
@@ -70,16 +70,16 @@ typedef struct {
 
 /**
  * @brief Holds the output of visual anomaly detection (FOMO-AD)
- * 
+ *
  * If visual anomaly detection is enabled (e.g. `EI_CLASSIFIER_HAS_VISUAL_ANOMALY ==
- * 1`), then the output results will be a pointer to an array of grid cells of size 
- * `visual_ad_count`, as given by 
+ * 1`), then the output results will be a pointer to an array of grid cells of size
+ * `visual_ad_count`, as given by
  * [ei_impulse_result_bounding_box_t](https://docs.edgeimpulse.com/reference/ei_impulse_result_bounding_box_t).
- * 
+ *
  * The visual anomaly detection result is stored in `visual_ad_result`, which contains the mean and max values of the grid cells.
- * 
+ *
  * **Source**: [classifier/ei_classifier_types.h](https://github.com/edgeimpulse/inferencing-sdk-cpp/blob/master/classifier/ei_classifier_types.h)
- * 
+ *
  * **Example**: [standalone inferencing main.cpp](https://github.com/edgeimpulse/example-standalone-inferencing/blob/master/source/main.cpp)
 */
 typedef struct {
@@ -96,7 +96,7 @@ typedef struct {
 
 /**
  * @brief Holds information for a single bounding box.
- * 
+ *
  * If object detection is enabled (i.e. `EI_CLASSIFIER_OBJECT_DETECTION == 1`), then
  * inference results will be one or more bounding boxes. The bounding boxes with the
  * highest confidence scores (assuming those scores are equal to or greater than
@@ -105,20 +105,20 @@ typedef struct {
  * least `EI_CLASSIFIER_OBJECT_DETECTION_COUNT`. The exact number of bounding boxes
  * is stored in `bounding_boxes_count` field of [ei_impulse_result_t]/C++ Inference
  * SDK Library/structs/ei_impulse_result_t.md).
- * 
- * A bounding box is a rectangle that ideally surrounds the identified object. The 
+ *
+ * A bounding box is a rectangle that ideally surrounds the identified object. The
  * (`x`, `y`) coordinates in the struct identify the top-left corner of the box.
  * `label` is the predicted class with the highest confidence score. `value` is the
  * confidence score between [0.0..1.0] of the given `label`.
- * 
+ *
  * **Source**: [classifier/ei_classifier_types.h](https://github.com/edgeimpulse/inferencing-sdk-cpp/blob/master/classifier/ei_classifier_types.h)
- * 
+ *
  * **Example**: [standalone inferencing main.cpp](https://github.com/edgeimpulse/example-standalone-inferencing/blob/master/source/main.cpp)
 */
 typedef struct {
     /**
-     * Pointer to a character array describing the associated class of the given 
-     * bounding box. Taken from one of the elements of 
+     * Pointer to a character array describing the associated class of the given
+     * bounding box. Taken from one of the elements of
      * `ei_classifier_inferencing_categories[]`.
      */
     const char *label;
@@ -151,19 +151,19 @@ typedef struct {
 
 /**
  * @brief Holds timing information about the processing (DSP) and inference blocks.
- * 
+ *
  * Records timing information during the execution of the preprocessing (DSP) and
  * inference blocks. Can be used to determine if inference will meet timing requirements
  * on your particular platform.
- * 
+ *
  * **Source**: [classifier/ei_classifier_types.h](https://github.com/edgeimpulse/inferencing-sdk-cpp/blob/master/classifier/ei_classifier_types.h)
- * 
+ *
  * **Example**: [standalone inferencing main.cpp](https://github.com/edgeimpulse/example-standalone-inferencing/blob/master/source/main.cpp)
  */
 typedef struct {
     /**
      * If using `run_impulse()` to perform sampling and inference, it is the amount of
-     * time (in milliseconds) it took to fetch raw samples. Not used for 
+     * time (in milliseconds) it took to fetch raw samples. Not used for
      * `run_classifier()`.
      */
     int sampling;
@@ -185,12 +185,12 @@ typedef struct {
     int anomaly;
 
     /**
-     * Amount of time (in milliseconds) it took to run the post-processing block
+     * Amount of time (in microseconds) it took to run the post-processing block
      */
     int64_t dsp_us;
 
     /**
-     * Amount of time (in milliseconds) it took to run the inference block
+     * Amount of time (in microseconds) it took to run the inference block
      */
     int64_t classification_us;
 
@@ -203,23 +203,23 @@ typedef struct {
 
 /**
  * @brief Holds the output of inference, anomaly results, and timing information.
- * 
+ *
  * `ei_impulse_result_t` holds the output of `run_classifier()`. If object detection is
  * enabled (e.g. `EI_CLASSIFIER_OBJECT_DETECTION == 1`), then the output results is a
  * pointer to an array of bounding boxes of size `bounding_boxes_count`, as given by
- * [ei_impulse_result_bounding_box_t](https://docs.edgeimpulse.com/reference/ei_impulse_result_bounding_box_t). 
+ * [ei_impulse_result_bounding_box_t](https://docs.edgeimpulse.com/reference/ei_impulse_result_bounding_box_t).
  * Otherwise, results are stored as an array of classification scores, as given by
  * [ei_impulse_result_classification_t](https://docs.edgeimpulse.com/reference/ei_impulse_result_classification_t).
- * 
+ *
  * If anomaly detection is enabled (e.g. `EI_CLASSIFIER_HAS_ANOMALY == 1`), then the
  * anomaly score will be stored as a floating point value in `anomaly`.
- * 
- * Timing information is stored in an 
- * [ei_impulse_result_timing_t](https://docs.edgeimpulse.com/reference/ei_impulse_result_timing_t) 
+ *
+ * Timing information is stored in an
+ * [ei_impulse_result_timing_t](https://docs.edgeimpulse.com/reference/ei_impulse_result_timing_t)
  * struct.
- * 
+ *
  * **Source**: [classifier/ei_classifier_types.h](https://github.com/edgeimpulse/inferencing-sdk-cpp/blob/master/classifier/ei_classifier_types.h)
- * 
+ *
  * **Example**: [standalone inferencing main.cpp](https://github.com/edgeimpulse/example-standalone-inferencing/blob/master/source/main.cpp)
  */
 typedef struct {
@@ -238,13 +238,18 @@ typedef struct {
      * Array of classification results. If object detection is enabled, this will be
      * empty.
      */
+#ifdef EI_DSP_RESULT_OVERRIDE
+    // For CI only.  We will create the array to hold results
+    ei_impulse_result_classification_t* classification;
+#else
 #if EI_CLASSIFIER_LABEL_COUNT == 0
     // EI_CLASSIFIER_LABEL_COUNT can be 0 for anomaly only models
     // to prevent compiler warnings/errors, we need to have at least one element
     ei_impulse_result_classification_t classification[1];
 #else
     ei_impulse_result_classification_t classification[EI_CLASSIFIER_LABEL_COUNT];
-#endif
+#endif // EI_CLASSIFIER_LABEL_COUNT == 0
+#endif // EI_DSP_RESULT_OVERRIDE else
 
     /**
      * Anomaly score. If anomaly detection is not enabled, this will be 0. A higher
@@ -282,6 +287,10 @@ typedef struct {
      */
     ei_impulse_visual_ad_result_t visual_ad_result;
 #endif // EI_CLASSIFIER_HAS_VISUAL_ANOMALY
+
+#if EI_DSP_ENABLE_RUNTIME_HR == 1
+    float heart_rate;
+#endif
 } ei_impulse_result_t;
 
 /** @} */

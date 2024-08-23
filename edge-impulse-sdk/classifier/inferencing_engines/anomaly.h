@@ -163,7 +163,7 @@ EI_IMPULSE_ERROR run_kmeans_anomaly(
 {
     ei_learning_block_config_anomaly_kmeans_t *block_config = (ei_learning_block_config_anomaly_kmeans_t*)config_ptr;
 
-    uint64_t anomaly_start_ms = ei_read_timer_ms();
+    uint64_t anomaly_start_us = ei_read_timer_us();
 
     float *input = (float*)ei_malloc(block_config->anom_axes_size * sizeof(float));
     if (!input) {
@@ -177,15 +177,16 @@ EI_IMPULSE_ERROR run_kmeans_anomaly(
     float anomaly = get_min_distance_to_cluster(
         input, block_config->anom_axes_size, block_config->anom_clusters, block_config->anom_cluster_count);
 
-    uint64_t anomaly_end_ms = ei_read_timer_ms();
+    uint64_t anomaly_end_us = ei_read_timer_us();
 
     if (debug) {
-        ei_printf("Anomaly score (time: %d ms.): ", static_cast<int>(anomaly_end_ms - anomaly_start_ms));
+        ei_printf("Anomaly score (time: %d ms.): ", static_cast<int>(anomaly_end_us - anomaly_start_us));
         ei_printf_float(anomaly);
         ei_printf("\n");
     }
 
-    result->timing.anomaly = anomaly_end_ms - anomaly_start_ms;
+    result->timing.anomaly_us = anomaly_end_us - anomaly_start_us;
+    result->timing.anomaly = (int)(result->timing.anomaly_us/1000);
     result->anomaly = anomaly;
     ei_free(input);
 
@@ -258,6 +259,7 @@ EI_IMPULSE_ERROR run_gmm_anomaly(
         ei_printf("\n");
     }
 
+    result->timing.anomaly_us = anomaly_result.timing.classification_us;
     result->timing.anomaly = anomaly_result.timing.classification;
 
     if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY) {

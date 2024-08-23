@@ -21,7 +21,7 @@
 #include "firmware-sdk/ei_camera_interface.h"
 #include "firmware-sdk/ei_device_info_lib.h"
 
-#if (EI_PORTING_SONY_SPRESENSE || ARDUINO_NICLA_VISION)
+#if (EI_PORTING_SONY_SPRESENSE)
 #define ALLIGNED_BUFFER 1
 #include "malloc.h" //for memalign
 #endif

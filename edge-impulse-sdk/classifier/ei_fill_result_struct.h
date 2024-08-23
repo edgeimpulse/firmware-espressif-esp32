@@ -374,7 +374,13 @@ __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_struct_f32(const ei_
                                                                        ei_impulse_result_t *result,
                                                                        float *data,
                                                                        bool debug) {
-    for (uint32_t ix = 0; ix < impulse->label_count; ix++) {
+#ifdef EI_DSP_RESULT_OVERRIDE
+    uint32_t stop_count = EI_DSP_RESULT_OVERRIDE;
+#else
+    uint32_t stop_count = impulse->label_count;
+#endif
+    for (uint32_t ix = 0; ix < stop_count; ix++) {
+
         float value = data[ix];
 
         if (debug) {
@@ -382,7 +388,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_struct_f32(const ei_
             ei_printf_float(value);
             ei_printf("\n");
         }
+// For testing purposes, we will have more values than labels
+#ifndef EI_DSP_RESULT_OVERRIDE
         result->classification[ix].label = impulse->categories[ix];
+#endif
         result->classification[ix].value = value;
     }
 

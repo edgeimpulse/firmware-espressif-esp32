@@ -81,7 +81,7 @@ int cropImage(
     uint8_t *dstImage,
     int iBpp)
  */
-void crop_image_rgb888_packed(
+int crop_image_rgb888_packed(
     const uint8_t *srcImage,
     int srcWidth,
     int srcHeight,
@@ -108,7 +108,7 @@ constexpr int MONO_B_SIZE = 1;
  * @param dstImage Output buffer, can be same as input buffer
  * @param pixel_size_B Size of pixels in Bytes.  3 for RGB, 1 for mono
  */
-void resize_image(
+int resize_image(
     const uint8_t *srcImage,
     int srcWidth,
     int srcHeight,

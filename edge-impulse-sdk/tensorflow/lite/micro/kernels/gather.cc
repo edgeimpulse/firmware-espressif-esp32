@@ -118,6 +118,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 
   switch (coords->type) {
     case kTfLiteInt32:
+    case kTfLiteInt64:
       break;
     default:
       MicroPrintf("Positions of type '%s' are not supported by gather.",
@@ -198,7 +199,6 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       tflite::micro::GetEvalInput(context, node, kInputPositions);
   TfLiteEvalTensor* output =
       tflite::micro::GetEvalOutput(context, node, kOutputTensor);
-
   if (coords->type == kTfLiteInt32) {
     switch (input->type) {
       case kTfLiteFloat32:
@@ -206,6 +206,21 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
         break;
       case kTfLiteInt8:
         return Gather<int8_t, int32_t>(params, input, coords, output);
+        break;
+      default:
+        MicroPrintf("Type '%s' is not supported by gather.",
+                    TfLiteTypeGetName(input->type));
+        return kTfLiteError;
+        break;
+    }
+  }
+  else if (coords->type == kTfLiteInt64) {
+    switch (input->type) {
+      case kTfLiteFloat32:
+        return Gather<float, int64_t>(params, input, coords, output);
+        break;
+      case kTfLiteInt8:
+        return Gather<int8_t, int64_t>(params, input, coords, output);
         break;
       default:
         MicroPrintf("Type '%s' is not supported by gather.",

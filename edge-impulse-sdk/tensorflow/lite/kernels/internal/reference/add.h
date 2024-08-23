@@ -194,6 +194,50 @@ inline void Add(const ArithmeticParams& params,
   }
 }
 
+inline void Add(const ArithmeticParams& params,
+                const RuntimeShape& input1_shape, const int32_t* input1_data,
+                const RuntimeShape& input2_shape, const int32_t* input2_data,
+                const RuntimeShape& output_shape, int32_t* output_data,
+                bool pot_scale = true) {
+  // if (!pot_scale) {
+  //   AddGeneralParamScale(params, input1_shape, input1_data, input2_shape,
+  //                        input2_data, output_shape, output_data);
+  //   return;
+  // }
+
+  TFLITE_DCHECK_LE(params.quantized_activation_min,
+                   params.quantized_activation_max);
+
+  const int input1_shift = params.input1_shift;
+  const int flat_size =
+      MatchingElementsSize(input1_shape, input2_shape, output_shape);
+  const int32_t output_activation_min = params.quantized_activation_min;
+  const int32_t output_activation_max = params.quantized_activation_max;
+
+  TFLITE_DCHECK(input1_shift == 0 || params.input2_shift == 0);
+  TFLITE_DCHECK_LE(input1_shift, 0);
+  TFLITE_DCHECK_LE(params.input2_shift, 0);
+  const int32_t* not_shift_input =
+      input1_shift == 0 ? input1_data : input2_data;
+  const int32_t* shift_input = input1_shift == 0 ? input2_data : input1_data;
+  const int input_right_shift =
+      input1_shift == 0 ? -params.input2_shift : -input1_shift;
+
+  for (int i = 0; i < flat_size; i++) {
+    // F0 uses 0 integer bits, range [-1, 1].
+    using F0 = gemmlowp::FixedPoint<std::int16_t, 0>;
+
+    F0 input_ready_scaled = F0::FromRaw(not_shift_input[i]);
+    F0 scaled_input = F0::FromRaw(
+        gemmlowp::RoundingDivideByPOT(shift_input[i], input_right_shift));
+    F0 result = gemmlowp::SaturatingAdd(scaled_input, input_ready_scaled);
+    const int32_t raw_output = result.raw();
+    const int32_t clamped_output = std::min(
+        output_activation_max, std::max(output_activation_min, raw_output));
+    output_data[i] = clamped_output;
+  }
+}
+
 template <typename T>
 inline typename std::enable_if<!is_small_integer<T>::value, void>::type
 BroadcastAdd4DSlow(const ArithmeticParams& params,

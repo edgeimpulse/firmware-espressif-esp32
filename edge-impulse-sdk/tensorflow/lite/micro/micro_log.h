@@ -33,17 +33,7 @@ void MicroPrintf(const char* format, ...);
 #else
 // We use a #define to ensure that the strings are completely stripped, to
 // prevent an unnecessary increase in the binary size.
-#define MicroPrintf(...) tflite::Unused(__VA_ARGS__)
+#define MicroPrintf(...)
 #endif
-
-namespace tflite {
-
-// From
-// https://stackoverflow.com/questions/23235910/variadic-unused-function-macro
-template <typename... Args>
-void Unused(Args&&... args) {
-  (void)(sizeof...(args));
-}
-}  // namespace tflite
 
 #endif  // TENSORFLOW_LITE_MICRO_MICRO_LOG_H_

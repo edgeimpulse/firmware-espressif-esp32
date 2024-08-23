@@ -243,6 +243,43 @@ TfLiteStatus EvalAddQuantized(TfLiteContext* context, TfLiteNode* node,
                             output);
       break;
     }
+    case kTfLiteInt32: {
+      tflite::ArithmeticParams op_params;
+      op_params.left_shift = data->left_shift;
+      op_params.input1_offset = data->input1_offset;
+      op_params.input1_multiplier = data->input1_multiplier;
+      op_params.input1_shift = data->input1_shift;
+      op_params.input2_offset = data->input2_offset;
+      op_params.input2_multiplier = data->input2_multiplier;
+      op_params.input2_shift = data->input2_shift;
+      op_params.output_offset = data->output_offset;
+      op_params.output_multiplier = data->output_multiplier;
+      op_params.output_shift = data->output_shift;
+      SetActivationParams(data->output_activation_min, data->output_activation_max,
+                          &op_params);
+      bool need_broadcast = reference_ops::ProcessBroadcastShapes(
+          tflite::micro::GetTensorShape(input1),
+          tflite::micro::GetTensorShape(input2), &op_params);
+
+      if (need_broadcast) {
+        reference_ops::BroadcastAdd4DSlow(
+            op_params, tflite::micro::GetTensorShape(input1),
+            tflite::micro::GetTensorData<int32_t>(input1),
+            tflite::micro::GetTensorShape(input2),
+            tflite::micro::GetTensorData<int32_t>(input2),
+            tflite::micro::GetTensorShape(output),
+            tflite::micro::GetTensorData<int32_t>(output));
+      } else {
+        reference_ops::Add(op_params, tflite::micro::GetTensorShape(input1),
+                           tflite::micro::GetTensorData<int32_t>(input1),
+                           tflite::micro::GetTensorShape(input2),
+                           tflite::micro::GetTensorData<int32_t>(input2),
+                           tflite::micro::GetTensorShape(output),
+                           tflite::micro::GetTensorData<int32_t>(output),
+                           false);
+      }
+      break;
+    }
     default:
       MicroPrintf("Type %s (%d) not supported.",
                   TfLiteTypeGetName(output->type), output->type);
@@ -309,7 +346,7 @@ TfLiteStatus EvalAdd(TfLiteContext* context, TfLiteNode* node) {
 
   if (output->type == kTfLiteFloat32) {
     EvalAddFloat(context, node, params, data, input1, input2, output);
-  } else if (output->type == kTfLiteInt8 || output->type == kTfLiteInt16) {
+  } else if (output->type == kTfLiteInt8 || output->type == kTfLiteInt16 || output->type == kTfLiteInt32) {
     TF_LITE_ENSURE_OK(context, EvalAddQuantized(context, node, params, data,
                                                 input1, input2, output));
   } else {
@@ -1333,6 +1370,26 @@ TfLiteStatus EvalAddQuantized(TfLiteContext* context, TfLiteNode* node,
       }
       break;
     }
+    case kTfLiteInt32: {
+      if (need_broadcast) {
+        reference_ops::BroadcastAdd4DSlow(
+            op_params, tflite::micro::GetTensorShape(input1),
+            tflite::micro::GetTensorData<int32_t>(input1),
+            tflite::micro::GetTensorShape(input2),
+            tflite::micro::GetTensorData<int32_t>(input2),
+            tflite::micro::GetTensorShape(output),
+            tflite::micro::GetTensorData<int32_t>(output));
+      } else {
+        reference_ops::Add(op_params, tflite::micro::GetTensorShape(input1),
+                           tflite::micro::GetTensorData<int32_t>(input1),
+                           tflite::micro::GetTensorShape(input2),
+                           tflite::micro::GetTensorData<int32_t>(input2),
+                           tflite::micro::GetTensorShape(output),
+                           tflite::micro::GetTensorData<int32_t>(output),
+                           false);
+      }
+      break;
+    }
     default:
       MicroPrintf("Type %s (%d) not supported.",
                   TfLiteTypeGetName(output->type), output->type);
@@ -1362,7 +1419,7 @@ TfLiteStatus AddEval(TfLiteContext* context, TfLiteNode* node) {
 
   if (output->type == kTfLiteFloat32) {
     EvalAdd(context, node, params, data, input1, input2, output);
-  } else if (output->type == kTfLiteInt8 || output->type == kTfLiteInt16) {
+  } else if (output->type == kTfLiteInt8 || output->type == kTfLiteInt16 || output->type == kTfLiteInt32) {
     TF_LITE_ENSURE_OK(context, EvalAddQuantized(context, node, params, data,
                                                 input1, input2, output));
   } else {
