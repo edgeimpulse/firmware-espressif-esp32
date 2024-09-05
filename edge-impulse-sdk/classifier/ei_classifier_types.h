@@ -287,6 +287,7 @@ typedef struct {
      */
     ei_impulse_visual_ad_result_t visual_ad_result;
 #endif // EI_CLASSIFIER_HAS_VISUAL_ANOMALY
+    ei_post_processing_output_t postprocessed_output;
 
 #if EI_DSP_ENABLE_RUNTIME_HR == 1
     float heart_rate;

@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2022 EdgeImpulse Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS
+ * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language
+ * governing permissions and limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#ifndef EI_POSTPROCESSING_H
+#define EI_POSTPROCESSING_H
+
+#include "edge-impulse-sdk/classifier/ei_model_types.h"
+
+#if EI_CLASSIFIER_CALIBRATION_ENABLED
+#include "edge-impulse-sdk/classifier/postprocessing/ei_performance_calibration.h"
+#endif
+
+#if EI_CLASSIFIER_OBJECT_COUNTING_ENABLED
+#include "edge-impulse-sdk/classifier/postprocessing/ei_object_counting.h"
+#endif
+
+extern "C" EI_IMPULSE_ERROR init_postprocessing(ei_impulse_handle_t *handle) {
+    if (!handle) {
+        return EI_IMPULSE_OUT_OF_MEMORY;
+    }
+    auto impulse = handle->impulse;
+
+    for (size_t i = 0; i < impulse->postprocessing_blocks_size; i++) {
+
+        EI_IMPULSE_ERROR res = impulse->postprocessing_blocks[i].init_fn(handle, impulse->postprocessing_blocks[i].config);
+        if (res != EI_IMPULSE_OK) {
+            return res;
+        }
+    }
+
+    return EI_IMPULSE_OK;
+}
+
+extern "C" EI_IMPULSE_ERROR deinit_postprocessing(ei_impulse_handle_t *handle) {
+    if (!handle) {
+        return EI_IMPULSE_OUT_OF_MEMORY;
+    }
+    auto impulse = handle->impulse;
+
+    for (size_t i = 0; i < impulse->postprocessing_blocks_size; i++) {
+
+        EI_IMPULSE_ERROR res = impulse->postprocessing_blocks[i].deinit_fn(handle, impulse->postprocessing_blocks[i].config);
+        if (res != EI_IMPULSE_OK) {
+            return res;
+        }
+    }
+
+    return EI_IMPULSE_OK;
+}
+
+extern "C" EI_IMPULSE_ERROR run_postprocessing(ei_impulse_handle_t *handle,
+                                               ei_impulse_result_t *result,
+                                               bool debug) {
+    if (!handle) {
+        return EI_IMPULSE_OUT_OF_MEMORY;
+    }
+    auto impulse = handle->impulse;
+
+    for (size_t i = 0; i < impulse->postprocessing_blocks_size; i++) {
+
+        EI_IMPULSE_ERROR res = impulse->postprocessing_blocks[i].postprocess_fn(handle, result, impulse->postprocessing_blocks[i].config, debug);
+        if (res != EI_IMPULSE_OK) {
+            return res;
+        }
+    }
+
+    return EI_IMPULSE_OK;
+}
+
+#endif

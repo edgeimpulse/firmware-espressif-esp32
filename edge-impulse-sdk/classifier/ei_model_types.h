@@ -86,6 +86,7 @@
 #define EI_CLASSIFIER_CLASSIFICATION_MODE_DSP                 7
 
 struct ei_impulse;
+class ei_impulse_handle_t;
 
 typedef struct {
     ei::matrix_t* matrix;
@@ -130,6 +131,14 @@ typedef struct {
     const uint8_t input_block_ids_size;
     uint32_t output_features_count;
 } ei_learning_block_t;
+
+typedef struct {
+    uint32_t block_id;
+    EI_IMPULSE_ERROR (*init_fn)(ei_impulse_handle_t *handle, void *config);
+    EI_IMPULSE_ERROR (*deinit_fn)(ei_impulse_handle_t *handle, void *config);
+    EI_IMPULSE_ERROR (*postprocess_fn)(ei_impulse_handle_t *handle, ei_impulse_result_t *result, void *config, bool debug);
+    void *config;
+} ei_postprocessing_block_t;
 
 typedef struct {
     uint16_t implementation_version;
@@ -250,6 +259,10 @@ typedef struct ei_impulse {
     const uint8_t learning_blocks_size;
     const ei_learning_block_t *learning_blocks;
 
+    /* postprocessing blocks */
+    const size_t postprocessing_blocks_size;
+    const ei_postprocessing_block_t *postprocessing_blocks;
+
     /* inference parameters */
     uint8_t inferencing_engine;
 
@@ -262,7 +275,6 @@ typedef struct ei_impulse {
     /* output details */
     uint8_t has_anomaly;
     uint16_t label_count;
-    const ei_model_performance_calibration_t calibration;
     const char **categories;
     ei_object_detection_nms_config_t object_detection_nms;
 } ei_impulse_t;
@@ -327,6 +339,7 @@ class ei_impulse_handle_t {
 public:
     ei_impulse_handle_t(const ei_impulse_t *impulse)
         : state(impulse), impulse(impulse) {};
+    void* post_processing_state;
     ei_impulse_state_t state;
     const ei_impulse_t *impulse;
 };

@@ -24,7 +24,7 @@
 #include "ei_run_dsp.h"
 #include "ei_classifier_types.h"
 #include "ei_signal_with_axes.h"
-#include "ei_performance_calibration.h"
+#include "postprocessing/ei_postprocessing.h"
 
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/porting/ei_logging.h"
@@ -86,13 +86,11 @@ EI_IMPULSE_ERROR ei_unscale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fm
 /* Private variables ------------------------------------------------------- */
 
 static uint64_t classifier_continuous_features_written = 0;
-static RecognizeEvents *avg_scores = NULL;
 
 /* Private functions ------------------------------------------------------- */
 
 /* These functions (up to Public functions section) are not exposed to end-user,
 therefore changes are allowed. */
-
 
 /**
  * @brief      Display the results of the inference
@@ -355,6 +353,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
 
     EI_IMPULSE_ERROR res = run_inference(handle, features, result, debug);
     delete[] matrix_ptrs;
+    res = run_postprocessing(handle, result, debug);
     return res;
 }
 
@@ -376,18 +375,17 @@ extern "C" EI_IMPULSE_ERROR init_impulse(ei_impulse_handle_t *handle) {
 /**
  * @brief      Process a complete impulse for continuous inference
  *
- * @param      impulse  struct with information about model and DSP
- * @param      signal   Sample data
- * @param      result   Output classifier results
- * @param[in]  debug    Debug output enable
+ * @param      handle               struct with information about model and DSP
+ * @param      signal               Sample data
+ * @param      result               Output classifier results
+ * @param[in]  debug                Debug output enable
  *
  * @return     The ei impulse error.
  */
 extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *handle,
                                             signal_t *signal,
                                             ei_impulse_result_t *result,
-                                            bool debug,
-                                            bool enable_maf)
+                                            bool debug)
 {
     auto impulse = handle->impulse;
     static ei::matrix_t static_features_matrix(1, impulse->nn_input_frame_size);
@@ -461,6 +459,11 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
     result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
+    for (int i = 0; i < impulse->label_count; i++) {
+        // set label correctly in the result struct if we have no results (otherwise is nullptr)
+        result->classification[i].label = impulse->categories[(uint32_t)i];
+    }
+
     if (classifier_continuous_features_written >= impulse->nn_input_frame_size) {
         dsp_start_us = ei_read_timer_us();
 
@@ -513,56 +516,8 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
         }
 
         ei_impulse_error = run_inference(handle, features, result, debug);
-
-#if EI_CLASSIFIER_CALIBRATION_ENABLED
-        if (impulse->sensor == EI_CLASSIFIER_SENSOR_MICROPHONE) {
-            if((void *)avg_scores != NULL && enable_maf == true) {
-                if (enable_maf && !impulse->calibration.is_configured) {
-                    // perfcal is not configured, print msg first time
-                    static bool has_printed_msg = false;
-
-                    if (!has_printed_msg) {
-                        ei_printf("WARN: run_classifier_continuous, enable_maf is true, but performance calibration is not configured.\n");
-                        ei_printf("       Previously we'd run a moving-average filter over your outputs in this case, but this is now disabled.\n");
-                        ei_printf("       Go to 'Performance calibration' in your Edge Impulse project to configure post-processing parameters.\n");
-                        ei_printf("       (You can enable this from 'Dashboard' if it's not visible in your project)\n");
-                        ei_printf("\n");
-
-                        has_printed_msg = true;
-                    }
-                }
-                else {
-                    // perfcal is configured
-                    static bool has_printed_msg = false;
-
-                    if (!has_printed_msg) {
-                        ei_printf("\nPerformance calibration is configured for your project. If no event is detected, all values are 0.\r\n\n");
-                        has_printed_msg = true;
-                    }
-
-                    int label_detected = avg_scores->trigger(result->classification);
-
-                    if (avg_scores->should_boost()) {
-                        for (int i = 0; i < impulse->label_count; i++) {
-                            if (i == label_detected) {
-                                result->classification[i].value = 1.0f;
-                            }
-                            else {
-                                result->classification[i].value = 0.0f;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-#endif
         delete[] matrix_ptrs;
-    }
-    else {
-        for (int i = 0; i < impulse->label_count; i++) {
-            // set label correctly in the result struct if we have no results (otherwise is nullptr)
-            result->classification[i].label = impulse->categories[(uint32_t)i];
-        }
+        ei_impulse_error = run_postprocessing(handle, result, debug);
     }
 
     return ei_impulse_error;
@@ -782,17 +737,7 @@ extern "C" void run_classifier_init(void)
     classifier_continuous_features_written = 0;
     ei_dsp_clear_continuous_audio_state();
     init_impulse(&ei_default_impulse);
-
-#if EI_CLASSIFIER_CALIBRATION_ENABLED
-
-    const auto impulse = ei_default_impulse.impulse;
-    const ei_model_performance_calibration_t *calibration = &impulse->calibration;
-
-    if(calibration != NULL) {
-        avg_scores = new RecognizeEvents(calibration,
-            impulse->label_count, impulse->slice_size, impulse->interval_ms);
-    }
-#endif
+    init_postprocessing(&ei_default_impulse);
 }
 
 /**
@@ -814,16 +759,7 @@ __attribute__((unused)) void run_classifier_init(ei_impulse_handle_t *handle)
     classifier_continuous_features_written = 0;
     ei_dsp_clear_continuous_audio_state();
     init_impulse(handle);
-
-#if EI_CLASSIFIER_CALIBRATION_ENABLED
-    auto impulse = handle->impulse;
-    const ei_model_performance_calibration_t *calibration = &impulse->calibration;
-
-    if(calibration != NULL) {
-        avg_scores = new RecognizeEvents(calibration,
-            impulse->label_count, impulse->slice_size, impulse->interval_ms);
-    }
-#endif
+    init_postprocessing(handle);
 }
 
 /**
@@ -839,9 +775,12 @@ __attribute__((unused)) void run_classifier_init(ei_impulse_handle_t *handle)
  */
 extern "C" void run_classifier_deinit(void)
 {
-    if((void *)avg_scores != NULL) {
-        delete avg_scores;
-    }
+    deinit_postprocessing(&ei_default_impulse);
+}
+
+__attribute__((unused)) void run_classifier_deinit(ei_impulse_handle_t *handle)
+{
+    deinit_postprocessing(handle);
 }
 
 /**
@@ -888,7 +827,7 @@ extern "C" void run_classifier_deinit(void)
  *  results from inference after run_classifier() returns.
  * @param[in]  debug Print internal preprocessing and inference debugging information via
  *  `ei_printf()`.
- * @param[in]  enable_maf Enable the moving average filter (MAF) for the classifier.
+ * @param[in]  enable_maf_unused Enable the moving average filter (MAF) for the classifier - deprecated, replaced with Performance Calibration
  *
  * @return Error code as defined by `EI_IMPULSE_ERROR` enum. Will be `EI_IMPULSE_OK` if inference
  *  completed successfully.
@@ -897,10 +836,10 @@ extern "C" EI_IMPULSE_ERROR run_classifier_continuous(
     signal_t *signal,
     ei_impulse_result_t *result,
     bool debug = false,
-    bool enable_maf = true)
+    bool enable_maf_unused = true)
 {
     auto& impulse = ei_default_impulse;
-    return process_impulse_continuous(&impulse, signal, result, debug, enable_maf);
+    return process_impulse_continuous(&impulse, signal, result, debug);
 }
 
 /**
@@ -948,7 +887,7 @@ extern "C" EI_IMPULSE_ERROR run_classifier_continuous(
  *  results from inference after run_classifier() returns.
  * @param[in] debug Print internal preprocessing and inference debugging information via
  *  `ei_printf()`.
- * @param[in] enable_maf Enable the moving average filter (MAF) for the classifier.
+ * @param[in] enable_maf_unused Enable the moving average filter (MAF) for the classifier - deprecated, replaced with Performance Calibration
  *
  * @return Error code as defined by `EI_IMPULSE_ERROR` enum. Will be `EI_IMPULSE_OK` if inference
  *  completed successfully.
@@ -958,9 +897,9 @@ __attribute__((unused)) EI_IMPULSE_ERROR run_classifier_continuous(
     signal_t *signal,
     ei_impulse_result_t *result,
     bool debug = false,
-    bool enable_maf = true)
+    bool enable_maf_unused = true)
 {
-    return process_impulse_continuous(impulse, signal, result, debug, enable_maf);
+    return process_impulse_continuous(impulse, signal, result, debug);
 }
 
 /**
