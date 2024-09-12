@@ -139,10 +139,12 @@ const ei_impulse_t impulse_168_0 = {
     .frequency = 16000,
     .dsp_blocks_size = ei_dsp_blocks_size,
     .dsp_blocks = ei_dsp_blocks,
-    
+
     .object_detection_count = 0,
     .fomo_output_size = 0,
-    
+    .visual_ad_grid_size_x = 0,
+    .visual_ad_grid_size_y = 0,
+
     .tflite_output_features_count = 3,
     .learning_blocks_size = ei_learning_blocks_size,
     .learning_blocks = ei_learning_blocks,

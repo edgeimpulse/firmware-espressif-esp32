@@ -404,17 +404,13 @@ __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_struct_f32(const ei_
 __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_visual_ad_struct_f32(const ei_impulse_t *impulse,
                                                                        ei_impulse_result_t *result,
                                                                        float *data,
-                                                                       float threshold,
+                                                                       ei_learning_block_config_tflite_graph_t* block_config,
                                                                        bool debug) {
 #if EI_CLASSIFIER_HAS_VISUAL_ANOMALY
     float max_val = 0;
     float sum_val = 0;
-    // the feature extractor output will be 1/8 of input
-    // due to the cut-off layer chosen in MobileNetV2
-    uint32_t grid_size_x = (impulse->input_width / 8) / 2 - 1;
-    uint32_t grid_size_y = (impulse->input_height / 8) / 2 - 1;
 
-    for (uint32_t ix = 0; ix < grid_size_x * grid_size_y; ix++) {
+    for (uint32_t ix = 0; ix < impulse->visual_ad_grid_size_x * impulse->visual_ad_grid_size_y; ix++) {
         float value = data[ix];
         sum_val += value;
         if (value > max_val) {
@@ -422,7 +418,7 @@ __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_visual_ad_struct_f32
         }
     }
 
-    result->visual_ad_result.mean_value = sum_val / (grid_size_x * grid_size_y);
+    result->visual_ad_result.mean_value = sum_val / (impulse->visual_ad_grid_size_x * impulse->visual_ad_grid_size_y);
     result->visual_ad_result.max_value = max_val;
 
     static ei_vector<ei_impulse_result_bounding_box_t> results;
@@ -430,16 +426,16 @@ __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_visual_ad_struct_f32
     int added_boxes_count = 0;
     results.clear();
 
-    for (uint32_t x = 0; x <= grid_size_x - 1; x++) {
-        for (uint32_t y = 0; y <= grid_size_y - 1; y++) {
-            if (data[x * grid_size_x + y] >= threshold) {
+    for (uint32_t x = 0; x <= impulse->visual_ad_grid_size_x - 1; x++) {
+        for (uint32_t y = 0; y <= impulse->visual_ad_grid_size_y - 1; y++) {
+            if (data[x * impulse->visual_ad_grid_size_x + y] >= block_config->threshold) {
                 ei_impulse_result_bounding_box_t tmp = {
                     .label = "anomaly",
-                    .x = static_cast<uint32_t>(y * (static_cast<float>(impulse->input_height) / grid_size_y)),
-                    .y = static_cast<uint32_t>(x * (static_cast<float>(impulse->input_width) / grid_size_x)),
-                    .width = (impulse->input_width / grid_size_x),
-                    .height = (impulse->input_height / grid_size_y),
-                    .value = data[x * grid_size_x + y]
+                    .x = static_cast<uint32_t>(y * (static_cast<float>(impulse->input_height) / impulse->visual_ad_grid_size_y)),
+                    .y = static_cast<uint32_t>(x * (static_cast<float>(impulse->input_width) / impulse->visual_ad_grid_size_x)),
+                    .width = (impulse->input_width / impulse->visual_ad_grid_size_x),
+                    .height = (impulse->input_height / impulse->visual_ad_grid_size_y),
+                    .value = data[x * impulse->visual_ad_grid_size_x + y]
                 };
 
                 results.push_back(tmp);

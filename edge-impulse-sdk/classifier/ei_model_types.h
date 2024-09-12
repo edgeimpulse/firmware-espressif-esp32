@@ -253,6 +253,8 @@ typedef struct ei_impulse {
     /* object detection */
     uint16_t object_detection_count;
     uint32_t fomo_output_size;
+    uint16_t visual_ad_grid_size_x;
+    uint16_t visual_ad_grid_size_y;
     uint32_t tflite_output_features_count;
 
     /* learning blocks */

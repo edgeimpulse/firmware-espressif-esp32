@@ -550,7 +550,7 @@ EI_IMPULSE_ERROR fill_result_struct_from_output_tensor_tflite(
     else if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY)
     {
         if (!result->copy_output) {
-            fill_res = fill_result_visual_ad_struct_f32(impulse, result, output->data.f, block_config->threshold, debug);
+            fill_res = fill_result_visual_ad_struct_f32(impulse, result, output->data.f, block_config, debug);
         }
     }
     // if we copy the output, we don't need to process it as classification
