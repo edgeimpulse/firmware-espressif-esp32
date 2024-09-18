@@ -28,8 +28,8 @@
 #include <string>
 #include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
-#include "edge-impulse-sdk/porting/ethos-u-driver-stack-imx/driver_library/include/ethosu.hpp"
-#include "edge-impulse-sdk/porting/ethos-u-driver-stack-imx/kernel_driver/include/uapi/ethosu.h"
+#include "ethos-u-driver-stack-imx/driver_library/include/ethosu.hpp"
+#include "ethos-u-driver-stack-imx/kernel_driver/include/uapi/ethosu.h"
 
 std::shared_ptr<EthosU::Network> network;
 // by default Device uses /dev/ethosu0
