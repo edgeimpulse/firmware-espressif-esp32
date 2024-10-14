@@ -15,12 +15,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "edge-impulse-sdk/dsp/ei_utils.h"
-#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
-#include "edge-impulse-sdk/dsp/returntypes.hpp"
 #include "edge-impulse-sdk/dsp/image/processing.hpp"
+#include "edge-impulse-sdk/dsp/ei_utils.h"
+#include "edge-impulse-sdk/dsp/returntypes.hpp"
+#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
+#include "edge-impulse-sdk/porting/ei_logging.h"
+#include "edge-impulse-sdk/classifier/ei_constants.h"
+#include <string.h>
+#include <stddef.h>
 
-namespace ei { namespace image { namespace processing {
+namespace ei {
+namespace image {
+namespace processing {
 
 /**
  * @brief Convert YUV to RGB
@@ -37,13 +43,13 @@ int yuv422_to_rgb888(
     YUV_OPTIONS opts)
 {
 
-    // Clamp out of range values
-    #define EI_CLAMP(t) (((t) > 255) ? 255 : (((t) < 0) ? 0 : (t)))
+// Clamp out of range values
+#define EI_CLAMP(t) (((t) > 255) ? 255 : (((t) < 0) ? 0 : (t)))
 
-    // Color space conversion for RGB
-    #define EI_GET_R_FROM_YUV(y, u, v) ((298 * y + 409 * v + 128) >> 8)
-    #define EI_GET_G_FROM_YUV(y, u, v) ((298 * y - 100 * u - 208 * v + 128) >> 8)
-    #define EI_GET_B_FROM_YUV(y, u, v) ((298 * y + 516 * u + 128) >> 8)
+// Color space conversion for RGB
+#define EI_GET_R_FROM_YUV(y, u, v) ((298 * y + 409 * v + 128) >> 8)
+#define EI_GET_G_FROM_YUV(y, u, v) ((298 * y - 100 * u - 208 * v + 128) >> 8)
+#define EI_GET_B_FROM_YUV(y, u, v) ((298 * y + 516 * u + 128) >> 8)
 
     unsigned int in_size_pixels = in_size_B / 4;
     yuv_in += in_size_B - 1;
@@ -238,9 +244,9 @@ int resize_image(
     int dstHeight,
     int pixel_size_B)
 {
-// Copied from ei_camera.cpp in firmware-eta-compute
-// Modified for RGB888
-// This needs to be < 16 or it won't fit. Cortex-M4 only has SIMD for signed multiplies
+    // Copied from ei_camera.cpp in firmware-eta-compute
+    // Modified for RGB888
+    // This needs to be < 16 or it won't fit. Cortex-M4 only has SIMD for signed multiplies
     constexpr int FRAC_BITS = 14;
     constexpr int FRAC_VAL = (1 << FRAC_BITS);
     constexpr int FRAC_MASK = (FRAC_VAL - 1);
@@ -253,8 +259,7 @@ int resize_image(
         return EIDSP_PARAMETER_INVALID;
     }
 
-    // start at 1/2 pixel in to account for integer downsampling which might miss pixels
-    src_y_accum = FRAC_VAL / 2;
+    src_y_accum = 0;
     const uint32_t src_x_frac = (srcWidth * FRAC_VAL) / dstWidth;
     const uint32_t src_y_frac = (srcHeight * FRAC_VAL) / dstHeight;
 
@@ -276,8 +281,7 @@ int resize_image(
 
         s = &srcImage[ty * srcWidth];
         d = &dstImage[y * dstWidth * pixel_size_B]; //not scaled above
-        // start at 1/2 pixel in to account for integer downsampling which might miss pixels
-        src_x_accum = FRAC_VAL / 2;
+        src_x_accum = 0;
         for (x = 0; x < dstWidth; x++) {
             uint32_t tx, p00, p01, p10, p11;
             // do indexing computations
@@ -360,7 +364,9 @@ int crop_and_interpolate_rgb888(
         cropWidth,
         cropHeight);
 
-    if( res != EIDSP_OK) { return res; }
+    if (res != EIDSP_OK) {
+        return res;
+    }
     // Finally, interpolate down to desired dimensions, in place
     return resize_image(dstImage, cropWidth, cropHeight, dstImage, dstWidth, dstHeight, 3);
 }
@@ -379,7 +385,7 @@ int crop_and_interpolate_image(
     calculate_crop_dims(srcWidth, srcHeight, dstWidth, dstHeight, cropWidth, cropHeight);
 
     // Now crop to that dimension
-    int res =  cropImage(
+    int res = cropImage(
         srcImage,
         srcWidth * pixel_size_B,
         srcHeight,
@@ -390,10 +396,141 @@ int crop_and_interpolate_image(
         cropHeight,
         8);
 
-    if( res != EIDSP_OK) { return res; }
+    if (res != EIDSP_OK) {
+        return res;
+    }
 
     // Finally, interpolate down to desired dimensions, in place
     return resize_image(dstImage, cropWidth, cropHeight, dstImage, dstWidth, dstHeight, pixel_size_B);
 }
 
-}}} //namespaces
+int resize_image_using_mode(
+    const uint8_t *srcImage,
+    int srcWidth,
+    int srcHeight,
+    uint8_t *dstImage,
+    int dstWidth,
+    int dstHeight,
+    int pixel_size_B,
+    int mode)
+{
+
+    if (srcWidth == dstWidth && srcHeight == dstHeight) {
+        EI_LOGI("Source and destination sizes are the same. No resizing needed.\n");
+        if (srcImage != dstImage) {
+            memcpy(dstImage, srcImage, srcWidth * srcHeight * pixel_size_B);
+        }
+        return -1; // Return an error code
+    }
+
+    if (srcImage == dstImage && mode == EI_CLASSIFIER_RESIZE_FIT_LONGEST) {
+        EI_LOGI("FIT LONGEST in place, make sure source is oversized to fit destination size\n");
+    }
+
+    if (mode == EI_CLASSIFIER_RESIZE_FIT_SHORTEST) {
+        int res = crop_and_interpolate_image(
+            srcImage,
+            srcWidth,
+            srcHeight,
+            dstImage,
+            dstWidth,
+            dstHeight,
+            pixel_size_B);
+
+        if (res != 0) {
+            EI_LOGE("Error in crop_and_interpolate_image: %d\n", res);
+            return res;
+        }
+        return 0;
+    }
+
+    if (mode == EI_CLASSIFIER_RESIZE_SQUASH) {
+        int res =
+            resize_image(srcImage, srcWidth, srcHeight, dstImage, dstWidth, dstHeight, pixel_size_B);
+
+        if (res != 0) {
+            EI_LOGE("Error in resize_image: %d\n", res);
+            return res;
+        }
+        return 0;
+    }
+
+    if (mode == EI_CLASSIFIER_RESIZE_FIT_LONGEST) {
+        // Calculate aspect ratios
+        float srcAspect = static_cast<float>(srcWidth) / srcHeight;
+        float dstAspect = static_cast<float>(dstWidth) / dstHeight;
+
+        // Calculate new dimensions
+        int resizeWidth, resizeHeight;
+        if (srcAspect > dstAspect) {
+            resizeWidth = dstWidth;
+            resizeHeight = static_cast<int>(dstWidth / srcAspect);
+        }
+        else {
+            resizeHeight = dstHeight;
+            resizeWidth = static_cast<int>(dstHeight * srcAspect);
+        }
+
+        // Calculate the start position for the resized image in the destination buffer
+        int startX = (dstWidth - resizeWidth) / 2;
+        int startY = (dstHeight - resizeHeight) / 2;
+
+        // First, resize in place.  We can't resize into the middle as this may destroy source pixels needed later
+        int res = resize_image(
+            srcImage,
+            srcWidth,
+            srcHeight,
+            dstImage,
+            resizeWidth,
+            resizeHeight,
+            pixel_size_B);
+
+        if (res != 0) {
+            EI_LOGE("Error in resize_image: %d\n", res);
+            return res;
+        }
+        // Zero out top and bottom easily
+        if (resizeWidth == dstWidth) {
+            // Now move the image to the correct location
+            size_t dstStart = (startY * dstWidth + startX) * pixel_size_B;
+            memmove(
+                dstImage + dstStart,
+                dstImage,
+                resizeWidth * resizeHeight * pixel_size_B);
+            // Zero out the right points before and after the new image
+            memset(dstImage, 0, dstStart);
+            // Zero out the bottom part
+            // Can just use the start addr as size again b/c it's symmetrical
+            memset(
+                dstImage + dstStart + resizeWidth * resizeHeight * pixel_size_B,
+                0,
+                dstStart);
+        }
+        // Sides are more work
+        else {
+            size_t resizeIndex = (dstWidth * dstHeight - resizeWidth * resizeHeight) * pixel_size_B;
+
+            // Move the image to the end of the dstBuffer
+            memmove(dstImage + resizeIndex, dstImage, resizeWidth * resizeHeight * pixel_size_B);
+
+            // Now move one row at a time, zero padding sides along the way
+            for (int y = 0; y < resizeHeight; y++) {
+                memmove(
+                    dstImage + ((startY + y) * dstWidth + startX) * pixel_size_B,
+                    dstImage + resizeIndex,
+                    resizeWidth * pixel_size_B);
+                resizeIndex += resizeWidth * pixel_size_B;
+                // Zero out the left and right sides
+                memset(dstImage + (startY + y) * dstWidth * pixel_size_B, 0, startX * pixel_size_B);
+                memset(dstImage + ((startY + y) * dstWidth + startX + resizeWidth) * pixel_size_B, 0, (dstWidth - startX - resizeWidth) * pixel_size_B);
+            }
+        }
+        return 0;
+    } // fit longest
+
+    // shouldn't get here
+    return -2;
+}
+} //namespaces
+}
+}

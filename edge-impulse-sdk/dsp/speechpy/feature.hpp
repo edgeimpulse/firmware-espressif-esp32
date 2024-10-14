@@ -260,9 +260,10 @@ public:
         // num_filter+2 point.
         float *mels;
         const int MELS_SIZE = num_filters + 2;
-        mels = (float*)ei_calloc(MELS_SIZE, sizeof(float));
+        const size_t mem_size = MELS_SIZE * sizeof(float);
+        mels = (float*)ei_dsp_calloc(MELS_SIZE, sizeof(float));
         EI_ERR_AND_RETURN_ON_NULL(mels, EIDSP_OUT_OF_MEM);
-        ei_unique_ptr_t __ptr__(mels,ei_free);
+        ei_unique_ptr_t __ptr__(mels,[mem_size](void* ptr){ei::ei_dsp_free_func(ptr, mem_size);});
         uint16_t* bins = reinterpret_cast<uint16_t*>(mels); // alias the mels array so we can reuse the space
 
         numpy::linspace(

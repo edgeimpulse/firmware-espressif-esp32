@@ -67,12 +67,15 @@ typedef struct {
     EiWiFiSecurity wifi_security;
     float sample_interval_ms;
     uint32_t sample_length_ms;
+    char sensor_label[64];
     char sample_label[128];
     char sample_hmac_key[33];
     char upload_host[128];
     char upload_path[128];
     char upload_api_key[128];
     char mgmt_url[128];
+    uint32_t long_recording_length_ms;
+    uint32_t long_recording_interval_ms;
     uint32_t magic;
 } EiConfig;
 
@@ -98,9 +101,13 @@ protected:
     std::string management_url = "path";
 
     std::string sample_hmac_key = "please-set-me";
+    std::string sensor_label = "sensor";
     std::string sample_label = "test";
     float sample_interval_ms;
     uint32_t sample_length_ms;
+
+    uint32_t long_recording_length_ms;
+    uint32_t long_recording_interval_ms;
 
     std::string upload_host = "host";
     std::string upload_path = "path";
@@ -132,8 +139,11 @@ public:
         buf->wifi_security = wifi_security;
         buf->sample_interval_ms = sample_interval_ms;
         buf->sample_length_ms = sample_length_ms;
+        buf->long_recording_interval_ms = long_recording_interval_ms;
+        buf->long_recording_length_ms = long_recording_length_ms;
         strncpy(buf->sample_label, sample_label.c_str(), 128);
         strncpy(buf->sample_hmac_key, sample_hmac_key.c_str(), 33);
+        strncpy(buf->sensor_label, sensor_label.c_str(), 128);
         strncpy(buf->upload_host, upload_host.c_str(), 128);
         strncpy(buf->upload_path, upload_path.c_str(), 128);
         strncpy(buf->upload_api_key, upload_api_key.c_str(), 128);
@@ -169,6 +179,9 @@ public:
             upload_path = std::string(buf->upload_path, 128);
             upload_api_key = std::string(buf->upload_api_key, 128);
             management_url = std::string(buf->mgmt_url, 128);
+            sensor_label = std::string(buf->sensor_label, 128);
+            long_recording_interval_ms = buf->long_recording_interval_ms;
+            long_recording_length_ms = buf->long_recording_length_ms;
         }
 
         ei_free((void *)buf);
@@ -233,6 +246,20 @@ public:
         }
     }
 
+    virtual const std::string& get_sensor_label(void)
+    {
+        return sensor_label;
+    }
+
+    virtual void set_sensor_label(std::string label, bool save = true)
+    {
+        sensor_label = label;
+
+        if(save) {
+            save_config();
+        }
+    }
+
     virtual const std::string& get_sample_label(void)
     {
         return sample_label;
@@ -269,6 +296,34 @@ public:
     virtual void set_sample_length_ms(uint32_t length_ms, bool save = true)
     {
         sample_length_ms = length_ms;
+
+        if(save) {
+            save_config();
+        }
+    }
+
+    virtual uint32_t get_long_recording_length_ms(void)
+    {
+        return long_recording_length_ms;
+    }
+
+    virtual void set_long_recording_length_ms(uint32_t length_ms, bool save = true)
+    {
+        long_recording_length_ms = length_ms;
+
+        if(save) {
+            save_config();
+        }
+    }
+
+    virtual uint32_t get_long_recording_interval_ms(void)
+    {
+        return long_recording_interval_ms;
+    }
+
+    virtual void set_long_recording_interval_ms(uint32_t interval_ms, bool save = true)
+    {
+        long_recording_interval_ms = interval_ms;
 
         if(save) {
             save_config();
@@ -348,12 +403,15 @@ public:
         device_id = "11:22:33:44:55:66";
         management_url = "";
         sample_hmac_key = "";
+        sensor_label = "";
         sample_label = "";
         sample_interval_ms = 0;
         sample_length_ms = 0;
         upload_host = "";
         upload_path = "";
         upload_api_key = "";
+        long_recording_length_ms = 0;
+        long_recording_interval_ms = 0;
 
         this->init_device_id();
     }

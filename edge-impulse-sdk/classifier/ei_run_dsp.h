@@ -1152,6 +1152,9 @@ __attribute__((unused)) int extract_image_features(signal_t *signal, matrix_t *o
 
 #if (EI_CLASSIFIER_QUANTIZATION_ENABLED == 1) && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)
 
+/*
+ * Since we run the preprocessing on the DRP we pass the input buffer (mostly) as-is.
+*/
 __attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, matrix_u8_t *output_matrix, void *config_ptr, const float frequency) {
     ei_dsp_config_image_t config = *((ei_dsp_config_image_t*)config_ptr);
 
@@ -1193,7 +1196,14 @@ __attribute__((unused)) int extract_drpai_features_quantized(signal_t *signal, m
                 output_matrix->buffer[output_ix++] = b;
             }
             else {
-                //NOTE: not implementing greyscale yet
+                float r = static_cast<float>(pixel >> 16 & 0xff);
+                float g = static_cast<float>(pixel >> 8 & 0xff);
+                float b = static_cast<float>(pixel & 0xff);
+
+                // ITU-R 601-2 luma transform
+                // see: https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.convert
+                float v = (0.299f * r) + (0.587f * g) + (0.114f * b);
+                output_matrix->buffer[output_ix++] = v;
             }
         }
         bytes_left -= elements_to_read;

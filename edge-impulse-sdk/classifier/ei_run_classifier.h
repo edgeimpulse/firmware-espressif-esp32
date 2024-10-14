@@ -294,7 +294,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
                 ret = dsp_handle->extract(internal_signal, features[ix].matrix, block.config, handle->impulse->frequency);
                 #if EI_DSP_ENABLE_RUNTIME_HR == 1
                 hr_class* hr = static_cast<hr_class*>(dsp_handle);
-                result->heart_rate = hr->get_last_hr();
+                result->hr_calcs.heart_rate = hr->get_last_hr();
                 #endif
             }
             else {

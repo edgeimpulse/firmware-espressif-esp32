@@ -50,10 +50,10 @@ EI_IMPULSE_ERROR run_nn_inference(
     void *config_ptr,
     bool debug);
 
-int extract_tflite_eon_features(signal_t *signal, matrix_t *output_matrix,
+int extract_tflite_eon_features(ei::signal_t *signal, ei::matrix_t *output_matrix,
                                 void *config_ptr, const float frequency);
 
-int extract_tflite_features(signal_t *signal, matrix_t *output_matrix,
+int extract_tflite_features(ei::signal_t *signal, ei::matrix_t *output_matrix,
                             void *config_ptr, const float frequency);
 
 #endif // _EI_CLASSIFIER_ENGINES_H_s

@@ -18,13 +18,20 @@
 #ifndef AT_COMMAND_SET_H
 #define AT_COMMAND_SET_H
 
-/* Edge Impulse CLi is supporting AT Command set version up to currently locked major/minor.
- * If you upgrading major/minor here without upgrading CLI tools, they won't work with the changed firmware.
+/* Edge Impulse CLI is supporting AT Command set version up to currently locked major/minor version.
+ * If you are upgrading the major/minor here without upgrading CLI tools, they won't work with the changed firmware.
+ *
+ * If you are adding or modifying REQUIRED commands,
+ * upgrade the minor or major version AND update the CLI tools.
+ *
+ * If you are adding or modifying OPTIONAL commands,
+ * just upgrade the release version.
  */
 #define AT_COMMAND_VERSION "1.8.0"
 
 /*************************************************************************************************/
-/* mandatory commands required by Edge Impulse CLI Tools*/
+/* Required commands by Edge Impulse CLI Tools        */
+/* Any changes here requires upgrade of the CLI tools */
 #define AT_CLEARCONFIG               "CLEARCONFIG"
 #define AT_CLEARCONFIG_HELP_TEXT     "Clears complete config and resets system"
 #define AT_CONFIG                    "CONFIG"
@@ -66,8 +73,14 @@
 #define AT_RUNIMPULSESTATIC          "RUNIMPULSESTATIC"
 #define AT_RUNIMPULSESTATIC_ARGS     "DEBUG,LENGTH"
 #define AT_RUNIMPULSESTATIC_HELP_TEXT "Run the impulse on static data (base64 encoded)"
+#define AT_INGESTIONCYCLESETTINGS            "INGESTIONCYCLESETTINGS"
+#define AT_INGESTIONCYCLESETTINGS_ARGS       "SENSOR_LABEL,TOTAL_INGESTION_TIME_MS,INTERVAL_TIME_MS"
+#define AT_INGESTIONCYCLESETTINGS_HELP_TEXT  "Set ingestion cycle settings"
+#define AT_STARTINGESTIONCYCLE               "STARTINGESTIONCYCLE"
+#define AT_STARTINGESTIONCYCLE_HELP_TEXT     "Start ingestion cycle and stores sample on sd"
+
 /*************************************************************************************************/
-/* platform specific commands */
+/* Optional commands (not required by Edge Impulse CLI Tools) */
 #define AT_WIFI                     "WIFI"
 #define AT_WIFI_ARGS                "SSID,PASSWORD,SECURITY"
 #define AT_WIFI_HELP_TEXT           "Lists or sets WiFi credentials"
@@ -79,26 +92,23 @@
 #define AT_SNAPSHOTSTREAM           "SNAPSHOTSTREAM"
 #define AT_SNAPSHOTSTREAM_ARGS      "WIDTH,HEIGHT,[USEMAXRATE]"
 #define AT_SNAPSHOTSTREAM_HELP_TEXT "Take a stream of snapshot stream"
-
-/*************************************************************************************************/
-/* optional commands (not required by Edge Impulse CLI Tools) */
-#define AT_CLEARFILES           "CLEARFILES"
-#define AT_CLEARFILES_HELP_TEXT "Clears all files from the file system, this does not clear config"
-#define AT_DEVICEINFO           "DEVICEINFO"
-#define AT_DEVICEINFO_HELP_TEXT "Lists device information"
-#define AT_SENSORS              "SENSORS"
-#define AT_SENSORS_HELP_TEXT    "Lists sensors"
-#define AT_RESET                "RESET"
-#define AT_RESET_HELP_TEXT      "Reset the system"
-#define AT_LISTFILES            "LISTFILES"
-#define AT_LISTFILES_HELP_TEXT  "Lists all files on the device"
-#define AT_READRAW              "READRAW"
-#define AT_READRAW_ARS          "START,LENGTH"
-#define AT_READRAW_HELP_TEXT    "Read raw from flash"
-#define AT_BOOTMODE             "BOOTMODE"
-#define AT_BOOTMODE_HELP_TEXT   "Jump to bootloader"
-#define AT_INFO                 "INFO"
-#define AT_INFO_HELP_TEXT       "Prints details about compiled firmware and ML model"
+#define AT_CLEARFILES               "CLEARFILES"
+#define AT_CLEARFILES_HELP_TEXT     "Clears all files from the file system, this does not clear config"
+#define AT_DEVICEINFO               "DEVICEINFO"
+#define AT_DEVICEINFO_HELP_TEXT     "Lists device information"
+#define AT_SENSORS                  "SENSORS"
+#define AT_SENSORS_HELP_TEXT        "Lists sensors"
+#define AT_RESET                    "RESET"
+#define AT_RESET_HELP_TEXT          "Reset the system"
+#define AT_LISTFILES                "LISTFILES"
+#define AT_LISTFILES_HELP_TEXT      "Lists all files on the device"
+#define AT_READRAW                  "READRAW"
+#define AT_READRAW_ARS              "START,LENGTH"
+#define AT_READRAW_HELP_TEXT        "Read raw from flash"
+#define AT_BOOTMODE                 "BOOTMODE"
+#define AT_BOOTMODE_HELP_TEXT       "Jump to bootloader"
+#define AT_INFO                     "INFO"
+#define AT_INFO_HELP_TEXT           "Prints details about compiled firmware and ML model"
 
 /*************************************************************************************************/
 /* HELP is not necessary as it is built-in into ATServer and

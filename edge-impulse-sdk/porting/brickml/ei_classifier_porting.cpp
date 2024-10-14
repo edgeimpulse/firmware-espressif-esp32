@@ -30,8 +30,6 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-static void *pvPortCalloc(size_t sNb, size_t sSize);
-
 __attribute__((weak)) EI_IMPULSE_ERROR ei_run_impulse_check_canceled() {
     return EI_IMPULSE_OK;
 }
@@ -142,17 +140,6 @@ extern "C"
 #endif
 __attribute__((weak)) void DebugLog(const char* s) {
     ei_printf("%s", s);
-}
-
-static void *pvPortCalloc(size_t sNb, size_t sSize)
-{
-    void *vPtr = NULL;
-    if (sSize > 0) {
-        vPtr = pvPortMalloc(sSize * sNb); // Call FreeRTOS or other standard API
-        if(vPtr)
-           memset(vPtr, 0, (sSize * sNb)); // Must required
-    }
-    return vPtr;
 }
 
 void * operator new( size_t size )

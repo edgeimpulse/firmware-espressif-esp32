@@ -426,8 +426,8 @@ __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_visual_ad_struct_f32
     int added_boxes_count = 0;
     results.clear();
 
-    for (uint32_t x = 0; x <= impulse->visual_ad_grid_size_x - 1; x++) {
-        for (uint32_t y = 0; y <= impulse->visual_ad_grid_size_y - 1; y++) {
+    for (uint16_t x = 0; x <= impulse->visual_ad_grid_size_x - 1; x++) {
+        for (uint16_t y = 0; y <= impulse->visual_ad_grid_size_y - 1; y++) {
             if (data[x * impulse->visual_ad_grid_size_x + y] >= block_config->threshold) {
                 ei_impulse_result_bounding_box_t tmp = {
                     .label = "anomaly",

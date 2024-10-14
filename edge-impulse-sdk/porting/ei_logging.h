@@ -31,7 +31,6 @@
 
 // if we do not want ANY logging, setting EI_LOG_LEVEL to EI_LOG_LEVEL_NONE
 // will not generate any code according to
-// https://stackoverflow.com/a/25021889
 
 #define EI_LOGE(format, ...) (void)0
 #define EI_LOGW(format, ...) (void)0

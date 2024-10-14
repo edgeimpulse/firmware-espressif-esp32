@@ -179,5 +179,29 @@ int crop_and_interpolate_image(
     int dstHeight,
     int pixel_size_B);
 
+
+
+/**
+ * @brief Resize an image to a new width and height.
+ *
+ * @param srcImage Input image buffer
+ * @param srcWidth Input width in pixels
+ * @param srcHeight Input height in pixels
+ * @param dstImage Output image buffer, can be same as input buffer
+ * @param dstWidth Desired new width in pixels
+ * @param dstHeight Desired new height in pixels
+ * @param pixel_size_B Size of pixels in Bytes. 3 for RGB, 1 for mono
+ * @param mode Resizing mode (FIT_SHORTEST=1, FIT_LONGEST=2, SQUASH=3)
+ * @return int Status code (0 for success, non-zero for failure)
+ */
+int resize_image_using_mode(
+    const uint8_t *srcImage,
+    int srcWidth,
+    int srcHeight,
+    uint8_t *dstImage,
+    int dstWidth,
+    int dstHeight,
+    int pixel_size_B,
+    int mode);
 }}} //namespaces
 #endif //!__EI_IMAGE_PROCESSING__H__

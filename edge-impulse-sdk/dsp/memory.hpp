@@ -19,6 +19,7 @@
 #define _EIDSP_MEMORY_H_
 
 // clang-format off
+#include <functional>
 #include <stdio.h>
 #include <memory>
 #include "../porting/ei_classifier_porting.h"
@@ -34,7 +35,10 @@ extern size_t ei_memory_peak_use;
 #define ei_dsp_printf           (void)
 #endif
 
-typedef std::unique_ptr<void, void(*)(void*)> ei_unique_ptr_t;
+typedef std::unique_ptr<void, std::function<void(void*)>> ei_unique_ptr_t;
+
+// deprecated, use the class ei_tracked_unique_ptr below instead
+// this version will NOT track memory usage
 #define EI_ALLOCATE_AUTO_POINTER(ptr, size) \
     ptr = static_cast<decltype(ptr)>(ei_calloc(size,sizeof(*ptr))); \
     ei_unique_ptr_t __ptr__(ptr,ei_free);
@@ -111,6 +115,7 @@ namespace ei {
     #define ei_dsp_malloc(...) memory::ei_wrapped_malloc(__func__, __FILE__, __LINE__, __VA_ARGS__)
     #define ei_dsp_calloc(...) memory::ei_wrapped_calloc(__func__, __FILE__, __LINE__, __VA_ARGS__)
     #define ei_dsp_free(...) memory::ei_wrapped_free(__func__, __FILE__, __LINE__, __VA_ARGS__)
+
     #define EI_DSP_MATRIX(name, ...) matrix_t name(__VA_ARGS__, NULL, __func__, __FILE__, __LINE__); if (!name.buffer) { EIDSP_ERR(EIDSP_OUT_OF_MEM); }
     #define EI_DSP_MATRIX_B(name, ...) matrix_t name(__VA_ARGS__, __func__, __FILE__, __LINE__); if (!name.buffer) { EIDSP_ERR(EIDSP_OUT_OF_MEM); }
     #define EI_DSP_QUANTIZED_MATRIX(name, ...) quantized_matrix_t name(__VA_ARGS__, NULL, __func__, __FILE__, __LINE__); if (!name.buffer) { EIDSP_ERR(EIDSP_OUT_OF_MEM); }
@@ -171,6 +176,57 @@ public:
     }
 };
 #endif // #if EIDSP_TRACK_ALLOCATIONS
+
+// This needs to be a real function so I can bind with a lambda
+__attribute__((unused)) static void ei_dsp_free_func(void *ptr, size_t size) {
+    ei_free(ptr);
+#if EIDSP_TRACK_ALLOCATIONS
+    ei_dsp_register_free_internal("unique_ptr free", "", 0, size, ptr);
+#endif
+}
+
+#if EIDSP_TRACK_ALLOCATIONS
+/**
+* @brief Get the tracked unique ptr object NOTE EI_MAKE_TRACKED_POINTER is easier to use (it wraps this func)
+*
+* @param ptr_in The type is a hack.  It should be void**,
+                but then you'd have to typecast something like float** explicitly.
+                This is a pointer to a pointer where we should right the malloc'd addr
+* @param size Desired size of the memory block, in BYTES.
+* @return ei_tracked_unique_ptr
+*/
+static ei_unique_ptr_t make_tracked_unique_ptr(void* ptr_in, size_t size) {
+    auto ptr = reinterpret_cast<void**>(ptr_in);
+    *ptr = ei_dsp_malloc(size);
+    return ei_unique_ptr_t(*ptr, [size](void *ptr) {
+        ei_free(ptr);
+        ei_dsp_register_free_internal("unique_ptr", "", 0, size, ptr);
+    });
+}
+#else
+
+/**
+* @brief Get the tracked unique ptr object. NOTE EI_MAKE_TRACKED_POINTER is easier to use (it wraps this func)
+*
+* @param ptr_in The type is a hack.  It should be void**,
+                but then you'd have to typecast something like float** explicitly.
+                This is a pointer to a pointer where we should right the malloc'd addr
+* @param size Desired size of the memory block, in BYTES.
+* @return ei_tracked_unique_ptr
+*/
+__attribute__((unused)) static ei_unique_ptr_t make_tracked_unique_ptr(void* ptr_in, size_t size) {
+    auto ptr = reinterpret_cast<void**>(ptr_in);
+    *ptr = ei_malloc(size);
+    return ei_unique_ptr_t(*ptr, ei_free);
+}
+#endif
+
+/*
+ * @brief Make a unique ptr that supports memory tracking
+ * @param ptr A pointer that will be written with the malloc'd address
+ * @param size Desired size of the memory block, in ITEMS.
+ */
+#define EI_MAKE_TRACKED_POINTER(ptr, size) ei::make_tracked_unique_ptr(&ptr, sizeof(*ptr)*size);
 
 } // namespace ei
 

@@ -39,12 +39,18 @@
 #include "ei_utils.h"
 #include "dct/fast-dct-fft.h"
 #include "kissfft/kiss_fftr.h"
+#include "edge-impulse-sdk/porting/ei_logging.h"
+
 #if __has_include("model-parameters/model_metadata.h")
 #include "model-parameters/model_metadata.h"
 #endif
-#if EIDSP_USE_CMSIS_DSP
-#include "edge-impulse-sdk/CMSIS/DSP/Include/arm_math.h"
-#include "edge-impulse-sdk/CMSIS/DSP/Include/arm_const_structs.h"
+
+#if EIDSP_USE_CEVA_DSP
+// TODO
+#elif EIDSP_USE_CMSIS_DSP
+#include "edge-impulse-sdk/dsp/dsp_engines/ei_arm_cmsis_dsp.h"
+#else
+#include "edge-impulse-sdk/dsp/dsp_engines/ei_no_hw_dsp.h"
 #endif
 
 // For the following CMSIS includes, we want to use the C fallback, so include whether or not we set the CMSIS flag
@@ -57,6 +63,10 @@
 #endif // __MBED__
 
 #define EI_MAX_UINT16 65535
+
+#ifndef M_PI
+#define M_PI 3.1415926
+#endif
 
 namespace ei {
 
@@ -494,6 +504,59 @@ public:
         return EIDSP_OK;
     }
 
+    static int dct_transform(float vector[], size_t len)
+    {
+        const size_t fft_data_out_size = (len / 2 + 1) * sizeof(ei::fft_complex_t);
+        const size_t fft_data_in_size = len * sizeof(float);
+
+        // Allocate KissFFT input / output buffer
+        fft_complex_t *fft_data_out =
+            (ei::fft_complex_t*)ei_dsp_calloc(fft_data_out_size, 1);
+        if (!fft_data_out) {
+            return ei::EIDSP_OUT_OF_MEM;
+        }
+
+        float *fft_data_in = (float*)ei_dsp_calloc(fft_data_in_size, 1);
+        if (!fft_data_in) {
+            ei_dsp_free(fft_data_out, fft_data_out_size);
+            return ei::EIDSP_OUT_OF_MEM;
+        }
+
+        // Preprocess the input buffer with the data from the vector
+        size_t halfLen = len / 2;
+        for (size_t i = 0; i < halfLen; i++) {
+            fft_data_in[i] = vector[i * 2];
+            fft_data_in[len - 1 - i] = vector[i * 2 + 1];
+        }
+        if (len % 2 == 1) {
+            fft_data_in[halfLen] = vector[len - 1];
+        }
+
+        int r = ei::numpy::rfft(fft_data_in, len, fft_data_out, (len / 2 + 1), len);
+        if (r != 0) {
+            ei_dsp_free(fft_data_in, fft_data_in_size);
+            ei_dsp_free(fft_data_out, fft_data_out_size);
+            return r;
+        }
+
+        size_t i = 0;
+        for (; i < len / 2 + 1; i++) {
+            float temp = i * M_PI / (len * 2);
+            vector[i] = fft_data_out[i].r * cos(temp) + fft_data_out[i].i * sin(temp);
+        }
+        //take advantage of hermetian symmetry to calculate remainder of signal
+        for (; i < len; i++) {
+            float temp = i * M_PI / (len * 2);
+            int conj_idx = len-i;
+            // second half bins not calculated would have just been the conjugate of the first half (note minus of imag)
+            vector[i] = fft_data_out[conj_idx].r * cos(temp) - fft_data_out[conj_idx].i * sin(temp);
+        }
+        ei_dsp_free(fft_data_in, fft_data_in_size);
+        ei_dsp_free(fft_data_out, fft_data_out_size);
+
+        return 0;
+    }
+
     /**
      * Return the Discrete Cosine Transform of arbitrary type sequence 2.
      * @param input Input array (of size N)
@@ -505,7 +568,7 @@ public:
             return EIDSP_OK;
         }
 
-        int ret = ei::dct::transform(input, N);
+        int ret = dct_transform(input, N);
         if (ret != EIDSP_OK) {
             EIDSP_ERR(ret);
         }
@@ -1231,47 +1294,14 @@ public:
         // pad to the rigth with zeros
         memset(fft_input.buffer + src_size, 0, (n_fft - src_size) * sizeof(kiss_fft_scalar));
 
-#if EIDSP_USE_CMSIS_DSP
-        if (n_fft != 32 && n_fft != 64 && n_fft != 128 && n_fft != 256 &&
-            n_fft != 512 && n_fft != 1024 && n_fft != 2048 && n_fft != 4096) {
-            int ret = software_rfft(fft_input.buffer, output, n_fft, n_fft_out_features);
-            if (ret != EIDSP_OK) {
-                EIDSP_ERR(ret);
+        auto res = hw_r2r_fft( fft_input.buffer, output, n_fft );
+        if(res != EIDSP_OK ) {
+            if(res != EIDSP_NO_HW_ACCEL) {
+               EI_LOGI("HW RFFT failed, falling back to SW");
             }
+            // fallback to software
+            return software_rfft(fft_input.buffer, output, n_fft, n_fft_out_features);
         }
-        else {
-            // hardware acceleration only works for the powers above...
-            arm_rfft_fast_instance_f32 rfft_instance;
-            int status = cmsis_rfft_init_f32(&rfft_instance, n_fft);
-            if (status != ARM_MATH_SUCCESS) {
-                return status;
-            }
-
-            EI_DSP_MATRIX(fft_output, 1, n_fft);
-            if (!fft_output.buffer) {
-                EIDSP_ERR(EIDSP_OUT_OF_MEM);
-            }
-
-            arm_rfft_fast_f32(&rfft_instance, fft_input.buffer, fft_output.buffer, 0);
-
-            output[0] = fft_output.buffer[0];
-            output[n_fft_out_features - 1] = fft_output.buffer[1];
-
-            size_t fft_output_buffer_ix = 2;
-            for (size_t ix = 1; ix < n_fft_out_features - 1; ix += 1) {
-                float rms_result;
-                arm_rms_f32(fft_output.buffer + fft_output_buffer_ix, 2, &rms_result);
-                output[ix] = rms_result * sqrt(2);
-
-                fft_output_buffer_ix += 2;
-            }
-        }
-#else
-        int ret = software_rfft(fft_input.buffer, output, n_fft, n_fft_out_features);
-        if (ret != EIDSP_OK) {
-            EIDSP_ERR(ret);
-        }
-#endif
 
         return EIDSP_OK;
     }
@@ -1300,15 +1330,16 @@ public:
 
         // declare input and output arrays
         float *fft_input_buffer = NULL;
-        if (src_size == n_fft) {
+        if (src_size >= n_fft) {
             fft_input_buffer = (float*)src;
-        }
+        } // else we need to copy over and pad
 
         EI_DSP_MATRIX_B(fft_input, 1, n_fft, fft_input_buffer);
         if (!fft_input.buffer) {
             EIDSP_ERR(EIDSP_OUT_OF_MEM);
         }
 
+        // If the buffer wasn't assigned to source above, let's copy and pad
         if (!fft_input_buffer) {
             // copy from src to fft_input
             memcpy(fft_input.buffer, src, src_size * sizeof(float));
@@ -1316,48 +1347,14 @@ public:
             memset(fft_input.buffer + src_size, 0, (n_fft - src_size) * sizeof(float));
         }
 
-#if EIDSP_USE_CMSIS_DSP
-        if (n_fft != 32 && n_fft != 64 && n_fft != 128 && n_fft != 256 &&
-            n_fft != 512 && n_fft != 1024 && n_fft != 2048 && n_fft != 4096) {
-            int ret = software_rfft(fft_input.buffer, output, n_fft, n_fft_out_features);
-            if (ret != EIDSP_OK) {
-                EIDSP_ERR(ret);
+        auto res = hw_r2c_fft( fft_input.buffer, output, n_fft );
+        if(res != EIDSP_OK ) {
+            if(res != EIDSP_NO_HW_ACCEL) {
+               EI_LOGI("HW RFFT failed, falling back to SW");
             }
+            // fallback to software
+            return software_rfft(fft_input.buffer, output, n_fft, n_fft_out_features);
         }
-        else {
-            // hardware acceleration only works for the powers above...
-            arm_rfft_fast_instance_f32 rfft_instance;
-            int status = cmsis_rfft_init_f32(&rfft_instance, n_fft);
-            if (status != ARM_MATH_SUCCESS) {
-                return status;
-            }
-
-            EI_DSP_MATRIX(fft_output, 1, n_fft);
-            if (!fft_output.buffer) {
-                EIDSP_ERR(EIDSP_OUT_OF_MEM);
-            }
-
-            arm_rfft_fast_f32(&rfft_instance, fft_input.buffer, fft_output.buffer, 0);
-
-            output[0].r = fft_output.buffer[0];
-            output[0].i = 0.0f;
-            output[n_fft_out_features - 1].r = fft_output.buffer[1];
-            output[n_fft_out_features - 1].i = 0.0f;
-
-            size_t fft_output_buffer_ix = 2;
-            for (size_t ix = 1; ix < n_fft_out_features - 1; ix += 1) {
-                output[ix].r = fft_output.buffer[fft_output_buffer_ix];
-                output[ix].i = fft_output.buffer[fft_output_buffer_ix + 1];
-
-                fft_output_buffer_ix += 2;
-            }
-        }
-#else
-        int ret = software_rfft(fft_input.buffer, output, n_fft, n_fft_out_features);
-        if (ret != EIDSP_OK) {
-            EIDSP_ERR(ret);
-        }
-#endif
 
         return EIDSP_OK;
     }
@@ -1886,7 +1883,7 @@ public:
         /* Create transposed matrix */
         arm_transposed_matrix.numRows = input_matrix->cols;
         arm_transposed_matrix.numCols = input_matrix->rows;
-        arm_transposed_matrix.pData = (float *)ei_calloc(input_matrix->cols * input_matrix->rows * sizeof(float), 1);
+        auto alloc = EI_MAKE_TRACKED_POINTER(arm_transposed_matrix.pData, input_matrix->cols * input_matrix->rows);
 
         if (arm_transposed_matrix.pData == NULL) {
             EIDSP_ERR(EIDSP_OUT_OF_MEM);
@@ -1907,8 +1904,6 @@ public:
 
             output_matrix->buffer[row] = std;
         }
-
-        ei_free(arm_transposed_matrix.pData);
 
         return EIDSP_OK;
     }
@@ -2052,141 +2047,6 @@ public:
       return count;
     }
 
-#if EIDSP_USE_CMSIS_DSP
-    /**
-     * Initialize a CMSIS-DSP fast rfft structure
-     * We do it this way as this means we can compile out fast_init calls which hints the compiler
-     * to which tables can be removed
-     */
-    static int cmsis_rfft_init_f32(arm_rfft_fast_instance_f32 *rfft_instance, const size_t n_fft)
-    {
-// ARM cores (ex M55) with Helium extensions (MVEF) need special treatment (Issue 2843)
-#if EI_CLASSIFIER_HAS_FFT_INFO == 1 && !defined(ARM_MATH_MVEF) && !defined(EI_CLASSIFIER_LOAD_ALL_FFTS)
-        arm_status status;
-        switch (n_fft) {
-#if EI_CLASSIFIER_LOAD_FFT_32 == 1
-            case 32: {
-                arm_cfft_instance_f32 *S = &(rfft_instance->Sint);
-                S->fftLen = 16U;
-                S->pTwiddle = NULL;
-                S->bitRevLength = arm_cfft_sR_f32_len16.bitRevLength;
-                S->pBitRevTable = arm_cfft_sR_f32_len16.pBitRevTable;
-                S->pTwiddle = arm_cfft_sR_f32_len16.pTwiddle;
-                rfft_instance->fftLenRFFT = 32U;
-                rfft_instance->pTwiddleRFFT = (float32_t *) twiddleCoef_rfft_32;
-                status = ARM_MATH_SUCCESS;
-                break;
-            }
-#endif
-#if EI_CLASSIFIER_LOAD_FFT_64 == 1
-            case 64: {
-                arm_cfft_instance_f32 *S = &(rfft_instance->Sint);
-                S->fftLen = 32U;
-                S->pTwiddle = NULL;
-                S->bitRevLength = arm_cfft_sR_f32_len32.bitRevLength;
-                S->pBitRevTable = arm_cfft_sR_f32_len32.pBitRevTable;
-                S->pTwiddle = arm_cfft_sR_f32_len32.pTwiddle;
-                rfft_instance->fftLenRFFT = 64U;
-                rfft_instance->pTwiddleRFFT = (float32_t *) twiddleCoef_rfft_64;
-                status = ARM_MATH_SUCCESS;
-                break;
-            }
-#endif
-#if EI_CLASSIFIER_LOAD_FFT_128 == 1
-            case 128: {
-                arm_cfft_instance_f32 *S = &(rfft_instance->Sint);
-                S->fftLen = 64U;
-                S->pTwiddle = NULL;
-                S->bitRevLength = arm_cfft_sR_f32_len64.bitRevLength;
-                S->pBitRevTable = arm_cfft_sR_f32_len64.pBitRevTable;
-                S->pTwiddle = arm_cfft_sR_f32_len64.pTwiddle;
-                rfft_instance->fftLenRFFT = 128U;
-                rfft_instance->pTwiddleRFFT = (float32_t *) twiddleCoef_rfft_128;
-                status = ARM_MATH_SUCCESS;
-                break;
-            }
-#endif
-#if EI_CLASSIFIER_LOAD_FFT_256 == 1
-            case 256: {
-                arm_cfft_instance_f32 *S = &(rfft_instance->Sint);
-                S->fftLen = 128U;
-                S->pTwiddle = NULL;
-                S->bitRevLength = arm_cfft_sR_f32_len128.bitRevLength;
-                S->pBitRevTable = arm_cfft_sR_f32_len128.pBitRevTable;
-                S->pTwiddle = arm_cfft_sR_f32_len128.pTwiddle;
-                rfft_instance->fftLenRFFT = 256U;
-                rfft_instance->pTwiddleRFFT = (float32_t *) twiddleCoef_rfft_256;
-                status = ARM_MATH_SUCCESS;
-                break;
-            }
-#endif
-#if EI_CLASSIFIER_LOAD_FFT_512 == 1
-            case 512: {
-                arm_cfft_instance_f32 *S = &(rfft_instance->Sint);
-                S->fftLen = 256U;
-                S->pTwiddle = NULL;
-                S->bitRevLength = arm_cfft_sR_f32_len256.bitRevLength;
-                S->pBitRevTable = arm_cfft_sR_f32_len256.pBitRevTable;
-                S->pTwiddle = arm_cfft_sR_f32_len256.pTwiddle;
-                rfft_instance->fftLenRFFT = 512U;
-                rfft_instance->pTwiddleRFFT = (float32_t *) twiddleCoef_rfft_512;
-                status = ARM_MATH_SUCCESS;
-                break;
-            }
-#endif
-#if EI_CLASSIFIER_LOAD_FFT_1024 == 1
-            case 1024: {
-                arm_cfft_instance_f32 *S = &(rfft_instance->Sint);
-                S->fftLen = 512U;
-                S->pTwiddle = NULL;
-                S->bitRevLength = arm_cfft_sR_f32_len512.bitRevLength;
-                S->pBitRevTable = arm_cfft_sR_f32_len512.pBitRevTable;
-                S->pTwiddle = arm_cfft_sR_f32_len512.pTwiddle;
-                rfft_instance->fftLenRFFT = 1024U;
-                rfft_instance->pTwiddleRFFT = (float32_t *) twiddleCoef_rfft_1024;
-                status = ARM_MATH_SUCCESS;
-                break;
-            }
-#endif
-#if EI_CLASSIFIER_LOAD_FFT_2048 == 1
-            case 2048: {
-                arm_cfft_instance_f32 *S = &(rfft_instance->Sint);
-                S->fftLen = 1024U;
-                S->pTwiddle = NULL;
-                S->bitRevLength = arm_cfft_sR_f32_len1024.bitRevLength;
-                S->pBitRevTable = arm_cfft_sR_f32_len1024.pBitRevTable;
-                S->pTwiddle = arm_cfft_sR_f32_len1024.pTwiddle;
-                rfft_instance->fftLenRFFT = 2048U;
-                rfft_instance->pTwiddleRFFT = (float32_t *) twiddleCoef_rfft_2048;
-                status = ARM_MATH_SUCCESS;
-                break;
-            }
-#endif
-#if EI_CLASSIFIER_LOAD_FFT_4096 == 1
-            case 4096: {
-                arm_cfft_instance_f32 *S = &(rfft_instance->Sint);
-                S->fftLen = 2048U;
-                S->pTwiddle = NULL;
-                S->bitRevLength = arm_cfft_sR_f32_len2048.bitRevLength;
-                S->pBitRevTable = arm_cfft_sR_f32_len2048.pBitRevTable;
-                S->pTwiddle = arm_cfft_sR_f32_len2048.pTwiddle;
-                rfft_instance->fftLenRFFT = 4096U;
-                rfft_instance->pTwiddleRFFT = (float32_t *) twiddleCoef_rfft_4096;
-                status = ARM_MATH_SUCCESS;
-                break;
-            }
-#endif
-            default:
-                return EIDSP_FFT_TABLE_NOT_LOADED;
-        }
-
-        return status;
-#else
-        return arm_rfft_fast_init_f32(rfft_instance, n_fft);
-#endif
-    }
-#endif // #if EIDSP_USE_CMSIS_DSP
-
     /**
      * Power spectrum of a frame
      * @param frame Row of a frame
@@ -2234,9 +2094,10 @@ public:
         bool do_saved_point = false;
         size_t fft_out_size = fft_points / 2 + 1;
         float *fft_out;
-        ei_unique_ptr_t p_fft_out(nullptr, ei_free);
+        const size_t size = fft_out_size * sizeof(float);
+        ei_unique_ptr_t p_fft_out(nullptr, [size](void* ptr){ei::ei_dsp_free_func(ptr, size);});
         if (input_size < fft_points) {
-            fft_out = (float *)ei_calloc(fft_out_size, sizeof(float));
+            fft_out = (float *)ei_dsp_calloc(fft_out_size, sizeof(float));
             p_fft_out.reset(fft_out);
         }
         else {

@@ -306,6 +306,7 @@ namespace processing {
         }
 
         info->frame_ixs.clear();
+        info->frame_ixs.reserve(numframes); //limit the memory allocation
 
         int frame_count = 0;
 

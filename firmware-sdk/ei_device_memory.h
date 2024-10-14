@@ -195,6 +195,24 @@ public:
     {
         return 0;
     }
+
+    /**
+     * @brief Set the up sampling, required for SD card device
+     * 
+     */
+    virtual bool setup_sampling(const char* sensor_name, const char* lable_name)
+    {
+        return true;
+    }
+
+    /**
+     * @brief 
+     * 
+     */
+    virtual void finalize_samplig(void)
+    {
+        
+    }
 };
 
 template <int BLOCK_SIZE = 1024, int MEMORY_BLOCKS = 4> class EiDeviceRAM : public EiDeviceMemory {
