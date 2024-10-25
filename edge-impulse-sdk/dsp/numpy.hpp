@@ -50,8 +50,20 @@
 #elif EIDSP_USE_CMSIS_DSP
 #include "edge-impulse-sdk/dsp/dsp_engines/ei_arm_cmsis_dsp.h"
 #else
+#define EIDSP_INCLUDE_KISSFFT 1
 #include "edge-impulse-sdk/dsp/dsp_engines/ei_no_hw_dsp.h"
 #endif
+
+// More decisions on kissfft
+#ifndef EIDSP_INCLUDE_KISSFFT
+
+#if defined(EI_CLASSIFIER_NON_STANDARD_FFT_SIZES) && !EI_CLASSIFIER_NON_STANDARD_FFT_SIZES
+#define EIDSP_INCLUDE_KISSFFT 0
+#else
+#define EIDSP_INCLUDE_KISSFFT 1
+#endif // EI_CLASSIFIER_NON_STANDARD_FFT_SIZES
+
+#endif // EIDSP_INCLUDE_KISSFFT
 
 // For the following CMSIS includes, we want to use the C fallback, so include whether or not we set the CMSIS flag
 #include "edge-impulse-sdk/CMSIS/DSP/Include/dsp/statistics_functions.h"
@@ -1723,6 +1735,7 @@ public:
     }
 
     static int software_rfft(float *fft_input, float *output, size_t n_fft, size_t n_fft_out_features) {
+    #if EIDSP_INCLUDE_KISSFFT || !defined(EIDSP_INCLUDE_KISSFFT)
         kiss_fft_cpx *fft_output = (kiss_fft_cpx*)ei_dsp_malloc(n_fft_out_features * sizeof(kiss_fft_cpx));
         if (!fft_output) {
             EIDSP_ERR(EIDSP_OUT_OF_MEM);
@@ -1751,10 +1764,14 @@ public:
         ei_dsp_free(fft_output, n_fft_out_features * sizeof(kiss_fft_cpx));
 
         return EIDSP_OK;
+    #else
+        return EIDSP_NOT_SUPPORTED;
+    #endif
     }
 
     static int software_rfft(float *fft_input, fft_complex_t *output, size_t n_fft, size_t n_fft_out_features)
     {
+    #if EIDSP_INCLUDE_KISSFFT || !defined(EIDSP_INCLUDE_KISSFFT)
         // create fftr context
         size_t kiss_fftr_mem_length;
 
@@ -1771,6 +1788,9 @@ public:
         ei_dsp_free(cfg, kiss_fftr_mem_length);
 
         return EIDSP_OK;
+    #else
+        return EIDSP_NOT_SUPPORTED;
+    #endif
     }
 
     static int signal_get_data(const float *in_buffer, size_t offset, size_t length, float *out_ptr)

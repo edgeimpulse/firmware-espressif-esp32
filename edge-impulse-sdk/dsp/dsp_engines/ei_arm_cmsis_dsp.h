@@ -194,7 +194,7 @@ static int hw_r2c_fft(const float *input, ei::fft_complex_t *output, size_t n_ff
 
 static int hw_r2r_fft(const float *input, float *output, size_t n_fft)
 {
-    if(!can_do_fft(n_fft)) { EIDSP_ERR(ei::EIDSP_NOT_SUPPORTED); }
+    if(!can_do_fft(n_fft)) { return ei::EIDSP_NOT_SUPPORTED; }
 
     float *arm_fft_out;
     auto allocator = EI_MAKE_TRACKED_POINTER(arm_fft_out, n_fft);
