@@ -25,6 +25,8 @@
 #include "edge-impulse-sdk/dsp/returntypes.hpp"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "model-parameters/model_metadata.h"
+#include "edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_common.h"
+#include "edge-impulse-sdk/porting/ei_logging.h"
 
 /* Private const types ----------------------------------------------------- */
 #define MEM_ERROR   "ERR: Failed to allocate memory for performance calibration\r\n"
@@ -39,10 +41,9 @@ typedef struct {
 } ei_perf_cal_params_t;
 
 class PerfCal {
-
 public:
     PerfCal(
-        const ei_model_performance_calibration_t *config,
+        const ei_performance_calibration_config_t *config,
         uint32_t n_labels,
         uint32_t sample_length,
         float sample_interval_ms)
@@ -70,7 +71,7 @@ public:
 
         /* Detection threshold should be high enough to only classify 1 possible output */
         if (this->_detection_threshold <= (1.f / this->_n_labels)) {
-            ei_printf("ERR: Classifier detection threshold too low\r\n");
+            EI_LOGE("Classifier detection threshold too low\r\n");
             return;
         }
 
@@ -215,39 +216,39 @@ private:
     uint32_t _n_scores_in_array;
 };
 
-EI_IMPULSE_ERROR init_perfcal(ei_impulse_handle_t *handle, void *config)
+EI_IMPULSE_ERROR init_perfcal(ei_impulse_handle_t *handle, void **state, void *config)
 {
     const ei_impulse_t *impulse = handle->impulse;
-    const ei_model_performance_calibration_t *calibration = (ei_model_performance_calibration_t*)config;
+    const ei_performance_calibration_config_t *calibration = (ei_performance_calibration_config_t*)config;
 
     if(calibration != NULL) {
         PerfCal *perf_cal = new PerfCal(calibration, impulse->label_count, impulse->slice_size,
                                             impulse->interval_ms);
-        handle->post_processing_state = (void *)perf_cal;
+        *state = (void *)perf_cal;
 
     }
     return EI_IMPULSE_OK;
 }
 
-EI_IMPULSE_ERROR deinit_perfcal(ei_impulse_handle_t *handle, void *config)
+EI_IMPULSE_ERROR deinit_perfcal(void *state, void *config)
 {
-    PerfCal *perf_cal = (PerfCal*)handle->post_processing_state;
+    PerfCal *perf_cal = (PerfCal*)state;
 
     if((void *)perf_cal != NULL) {
         delete perf_cal;
     }
 
-    handle->post_processing_state = NULL;
+    state = NULL;
     return EI_IMPULSE_OK;
 }
 
 EI_IMPULSE_ERROR process_perfcal(ei_impulse_handle_t *handle,
                                  ei_impulse_result_t *result,
                                  void *config,
-                                 bool debug) {
-
+                                 void *state)
+{
     const ei_impulse_t *impulse = handle->impulse;
-    PerfCal *perf_cal = (PerfCal*)handle->post_processing_state;
+    PerfCal *perf_cal = (PerfCal*)state;
 
     if (impulse->sensor == EI_CLASSIFIER_SENSOR_MICROPHONE) {
         if((void *)perf_cal != NULL) {
@@ -280,13 +281,23 @@ EI_IMPULSE_ERROR process_perfcal(ei_impulse_handle_t *handle,
 }
 
 EI_IMPULSE_ERROR set_post_process_params(ei_impulse_handle_t* handle, ei_perf_cal_params_t* params) {
-    PerfCal *perf_cal = (PerfCal*)handle->post_processing_state;
+    int16_t block_number = get_block_number(handle, (void*)init_perfcal);
+    if (block_number == -1) {
+        return EI_IMPULSE_POSTPROCESSING_ERROR;
+    }
+    PerfCal *perf_cal = (PerfCal*)handle->post_processing_state[block_number];
+
     perf_cal->set_detection_threshold(params->detection_threshold);
     return EI_IMPULSE_OK;
 }
 
 EI_IMPULSE_ERROR get_post_process_params(ei_impulse_handle_t* handle, ei_perf_cal_params_t* params) {
-    PerfCal *perf_cal = (PerfCal*)handle->post_processing_state;
+    int16_t block_number = get_block_number(handle, (void*)init_perfcal);
+    if (block_number == -1) {
+        return EI_IMPULSE_POSTPROCESSING_ERROR;
+    }
+    PerfCal *perf_cal = (PerfCal*)handle->post_processing_state[block_number];
+
     params->detection_threshold = perf_cal->get_detection_threshold();
     return EI_IMPULSE_OK;
 }

@@ -15,16 +15,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef EI_POSTPROCESSING_TYPES_H
-#define EI_POSTPROCESSING_TYPES_H
+#ifndef EI_POSTPROCESSING_COMMON_H
+#define EI_POSTPROCESSING_COMMON_H
 
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 
-EI_IMPULSE_ERROR init_perfcal(ei_impulse_handle_t *handle, void *config);
-EI_IMPULSE_ERROR deinit_perfcal(ei_impulse_handle_t *handle, void *config);
-EI_IMPULSE_ERROR process_perfcal(ei_impulse_handle_t *handle,
-                                 ei_impulse_result_t *result,
-                                 void *config,
-                                 bool debug);
+int16_t get_block_number(ei_impulse_handle_t *handle, void *init_func)
+{
+    for (size_t i = 0; i < handle->impulse->postprocessing_blocks_size; i++) {
+        if (handle->impulse->postprocessing_blocks[i].init_fn == init_func) {
+            return i;
+        }
+    }
+    return -1;
+}
 
-#endif // EI_POSTPROCESSING_TYPES_H
+#endif // EI_POSTPROCESSING_COMMON_H

@@ -8,6 +8,11 @@
 #include "edge-impulse-sdk/dsp/numpy_types.h"
 #include "edge-impulse-sdk/dsp/returntypes.hpp"
 
+
+namespace ei {
+
+namespace fft {
+
 /**
 * Initialize a CMSIS-DSP fast rfft structure
 * We do it this way as this means we can compile out fast_init calls which hints the compiler
@@ -163,7 +168,7 @@ static int arm_rfft(const float *input, float *output, size_t n_fft)
 
 static int hw_r2c_fft(const float *input, ei::fft_complex_t *output, size_t n_fft)
 {
-    if(!can_do_fft(n_fft)) { EIDSP_ERR(ei::EIDSP_NOT_SUPPORTED); }
+    if(!can_do_fft(n_fft)) { EIDSP_ERR(ei::EIDSP_FFT_SIZE_NOT_SUPPORTED); }
 
     float *arm_fft_out;
     auto allocator = EI_MAKE_TRACKED_POINTER(arm_fft_out, n_fft);
@@ -221,5 +226,12 @@ static int hw_r2r_fft(const float *input, float *output, size_t n_fft)
     }
     return ei::EIDSP_OK;
 }
+
+constexpr int MIN_FFT_SIZE = 32;
+constexpr int MAX_FFT_SIZE = 4096;
+
+} // namespace fft
+
+} // namespace ei
 
 #endif //!__EI_ARM_CMSIS_DSP__H__

@@ -68,7 +68,7 @@ __attribute__((unused)) int extract_hr_features(
 {
 #if EI_CLASSIFIER_HR_ENABLED
     auto handle = hr_class::create(config_ptr, frequency);
-    auto ret = handle->extract(signal, output_matrix, config_ptr, frequency);
+    auto ret = handle->extract(signal, output_matrix, config_ptr, frequency, nullptr);
     delete handle;
     return ret;
 #else
@@ -167,7 +167,7 @@ __attribute__((unused)) int extract_raw_features(signal_t *signal, matrix_t *out
 
 __attribute__((unused)) int extract_flatten_features(signal_t *signal, matrix_t *output_matrix, void *config_ptr, const float frequency) {
     auto handle = flatten_class::create(config_ptr, frequency);
-    auto ret = handle->extract(signal, output_matrix, config_ptr, frequency);
+    auto ret = handle->extract(signal, output_matrix, config_ptr, frequency, nullptr);
     delete handle;
     return ret;
 }

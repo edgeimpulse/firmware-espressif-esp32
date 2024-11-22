@@ -19,9 +19,6 @@
 #define _EDGE_IMPULSE_NMS_H_
 
 #include "model-parameters/model_metadata.h"
-#if EI_CLASSIFIER_HAS_MODEL_VARIABLES == 1
-#include "model-parameters/model_variables.h"
-#endif
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "edge-impulse-sdk/classifier/ei_classifier_types.h"
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
@@ -370,21 +367,6 @@ EI_IMPULSE_ERROR ei_run_nms(
     std::vector<ei_impulse_result_bounding_box_t> *results,
     bool debug = false) {
   return ei_run_nms(impulse, results, true, debug);
-}
-
-/**
- * Run non-max suppression over the results array (for bounding boxes)
- */
-EI_IMPULSE_ERROR ei_run_nms(std::vector<ei_impulse_result_bounding_box_t> *results, bool debug = false) {
-#if EI_CLASSIFIER_HAS_MODEL_VARIABLES == 1
-  auto& impulse = *ei_default_impulse.impulse;
-#else
-  const ei_impulse_t impulse = {
-    .object_detection_nms.confidence_threshold = 0.0f,
-    .object_detection_nms.iou_threshold = 0.2f
-  };
-#endif
-  return ei_run_nms(&impulse, results, debug);
 }
 
 #endif // #if (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOV5) || (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI) || (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOX) || (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_TAO_RETINANET) || (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_TAO_SSD) || (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV3) || (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV4)

@@ -56,7 +56,13 @@ public:
         return ei::EIDSP_OK;
     }
 
-    int extract(ei::signal_t *signal, ei::matrix_t *output_matrix, void *config_ptr, const float frequency) override {
+    int extract(
+        ei::signal_t *signal,
+        ei::matrix_t *output_matrix,
+        void *config_ptr,
+        const float frequency,
+        ei_impulse_result_t *result) override
+    {
         using namespace ei;
 
         // Using reference avoids a copy
@@ -74,6 +80,9 @@ public:
             matrix_t temp(ppg.win_inc_samples, ppg.axes);
             signal->get_data(i, floats_per_inc, temp.buffer);
             auto hr = ppg.stream(&temp);
+            if (result) {
+                result->hr_calcs.heart_rate = hr;
+            }
             if(!hrv || (hrv && config.include_hr)) {
                 output_matrix->buffer[out_idx++] = hr;
             }

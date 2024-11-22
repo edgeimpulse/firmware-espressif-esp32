@@ -100,7 +100,19 @@ typedef struct {
     float detection_threshold;
     uint32_t suppression_ms;
     uint32_t suppression_flags;
-} ei_model_performance_calibration_t;
+} ei_performance_calibration_config_t;
+
+typedef struct {
+    uint16_t implementation_version;
+    uint32_t keep_grace;
+    uint16_t max_observations;
+    float iou_threshold;
+} ei_object_tracking_config_t;
+
+typedef struct {
+    uint16_t implementation_version;
+    std::vector<std::tuple<int, int, int, int>> segments;
+} ei_object_counting_config_t;
 
 typedef int (*extract_fn_t)(ei::signal_t *signal, ei::matrix_t *output_matrix, void *config, float frequency);
 
@@ -134,9 +146,9 @@ typedef struct {
 
 typedef struct {
     uint32_t block_id;
-    EI_IMPULSE_ERROR (*init_fn)(ei_impulse_handle_t *handle, void *config);
-    EI_IMPULSE_ERROR (*deinit_fn)(ei_impulse_handle_t *handle, void *config);
-    EI_IMPULSE_ERROR (*postprocess_fn)(ei_impulse_handle_t *handle, ei_impulse_result_t *result, void *config, bool debug);
+    EI_IMPULSE_ERROR (*init_fn)(ei_impulse_handle_t *handle, void **state, void *config);
+    EI_IMPULSE_ERROR (*deinit_fn)(void *state, void *config);
+    EI_IMPULSE_ERROR (*postprocess_fn)(ei_impulse_handle_t *handle, ei_impulse_result_t *result, void *config, void* state);
     void *config;
 } ei_postprocessing_block_t;
 
@@ -340,10 +352,10 @@ public:
 class ei_impulse_handle_t {
 public:
     ei_impulse_handle_t(const ei_impulse_t *impulse)
-        : state(impulse), impulse(impulse) {};
-    void* post_processing_state;
+        : state(impulse), impulse(impulse), post_processing_state(nullptr) {};
     ei_impulse_state_t state;
     const ei_impulse_t *impulse;
+    void** post_processing_state;
 };
 
 typedef struct {

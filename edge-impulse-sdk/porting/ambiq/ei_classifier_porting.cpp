@@ -94,6 +94,19 @@ void ei_putchar(char c)
     ei_printf("%c", c);
 }
 
+char ei_getchar(void)
+{
+    char c = 0xFF;
+
+    c = ei_get_serial_byte(false);
+
+    if (c == 0xFF ) { 
+        return 0; //weird ei convention
+    }
+
+    return c;
+}
+
 #if defined(__cplusplus) && EI_C_LINKAGE == 1
 extern "C"
 #endif

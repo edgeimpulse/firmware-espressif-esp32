@@ -297,7 +297,7 @@ typedef struct {
 #endif // EI_CLASSIFIER_HAS_VISUAL_ANOMALY
     ei_post_processing_output_t postprocessed_output;
 
-#if EI_DSP_ENABLE_RUNTIME_HR == 1
+#if EI_CLASSIFIER_HR_ENABLED == 1
     ei_impulse_result_hr_t hr_calcs;
 #endif
 } ei_impulse_result_t;

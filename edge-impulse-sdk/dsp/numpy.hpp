@@ -1306,11 +1306,8 @@ public:
         // pad to the rigth with zeros
         memset(fft_input.buffer + src_size, 0, (n_fft - src_size) * sizeof(kiss_fft_scalar));
 
-        auto res = hw_r2r_fft( fft_input.buffer, output, n_fft );
-        if(res != EIDSP_OK ) {
-            if(res != EIDSP_NO_HW_ACCEL) {
-               EI_LOGI("HW RFFT failed, falling back to SW");
-            }
+        auto res = ei::fft::hw_r2r_fft(fft_input.buffer, output, n_fft);
+        if (handle_fft_hw_failure(res, n_fft)) {
             // fallback to software
             return software_rfft(fft_input.buffer, output, n_fft, n_fft_out_features);
         }
@@ -1359,11 +1356,8 @@ public:
             memset(fft_input.buffer + src_size, 0, (n_fft - src_size) * sizeof(float));
         }
 
-        auto res = hw_r2c_fft( fft_input.buffer, output, n_fft );
-        if(res != EIDSP_OK ) {
-            if(res != EIDSP_NO_HW_ACCEL) {
-               EI_LOGI("HW RFFT failed, falling back to SW");
-            }
+        auto res = ei::fft::hw_r2c_fft(fft_input.buffer, output, n_fft);
+        if (handle_fft_hw_failure(res, n_fft)) {
             // fallback to software
             return software_rfft(fft_input.buffer, output, n_fft, n_fft_out_features);
         }
@@ -2498,6 +2492,33 @@ public:
         auto ret = data;
         detrend(ret.data(), ret.size());
         return ret;
+    }
+
+private:
+    /**
+     * Helper function to handle FFT hardware acceleration failures and logging
+     * @param res Result code from hardware FFT attempt
+     * @param n_fft FFT size that was attempted
+     * @returns true if should fallback to software FFT
+     */
+    static bool handle_fft_hw_failure(int res, size_t n_fft) {
+        static bool first_time = true;
+        if (res == EIDSP_OK) {
+            return false;
+        }
+
+        // don't warn if we didn't include a DSP library
+        if (res != EIDSP_NO_HW_ACCEL && first_time) {
+            first_time = false; // only warn once
+            if (res == EIDSP_FFT_SIZE_NOT_SUPPORTED) {
+                EI_LOGI("HW RFFT failed, FFT size not supported. Must be a power of 2 between %d and %d, (size was %d)",
+                    ei::fft::MIN_FFT_SIZE, ei::fft::MAX_FFT_SIZE, n_fft);
+            }
+            else {
+                EI_LOGI("HW RFFT failed, falling back to SW");
+            }
+        }
+        return true;
     }
 
 };

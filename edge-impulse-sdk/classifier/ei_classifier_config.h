@@ -71,6 +71,9 @@
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
         #define EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN_S3      1
     #endif // ESP32S3 check
+    #if defined(CONFIG_IDF_TARGET_ESP32P4)
+        #define EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN_P4      1
+    #endif // ESP32S3 check
 #else
     #define ESP_NN                                  1
 #endif

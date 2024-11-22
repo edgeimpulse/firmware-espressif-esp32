@@ -44,7 +44,13 @@ public:
         return ei::EIDSP_OK;
     }
 
-    int extract(ei::signal_t *signal, ei::matrix_t *output_matrix, void *config_ptr, const float frequency) override {
+    int extract(
+        ei::signal_t *signal,
+        ei::matrix_t *output_matrix,
+        void *config_ptr,
+        const float frequency,
+        ei_impulse_result_t *result) override
+    {
         using namespace ei;
 
         ei_dsp_config_flatten_t config = *((ei_dsp_config_flatten_t*)config_ptr);
