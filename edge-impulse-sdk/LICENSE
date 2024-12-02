@@ -3,7 +3,6 @@ Unless specifically indicated otherwise in a file, files are licensed under the 
 Folders containing third party code and libraries are listed below. Each folder contains its own license specified for its files.
 
 * CMSIS - Apache 2.0
-* dsp/dct - MIT
 * dsp/kissfft - BSD-3-Clause
 * porting/espressif/ESP-NN - Apache 2.0
 * porting/ethos-core-driver - Apache 2.0

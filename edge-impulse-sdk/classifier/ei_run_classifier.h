@@ -97,7 +97,7 @@ therefore changes are allowed. */
  *
  * @param      result  The result
  */
-__attribute__((unused)) void display_results(ei_impulse_result_t* result)
+__attribute__((unused)) void display_results(ei_impulse_handle_t *handle, ei_impulse_result_t* result)
 {
     // print the predictions
     ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n",
@@ -154,6 +154,7 @@ __attribute__((unused)) void display_results(ei_impulse_result_t* result)
     ei_printf_float(result->anomaly);
     ei_printf("\r\n");
 #endif
+    display_postprocessing(handle, result);
 }
 
 /**
@@ -237,7 +238,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
         if (res != EI_IMPULSE_OK) {
             return res;
         }
-        res = run_postprocessing(handle, result, debug);
+        res = run_postprocessing(handle, result);
         return res;
     }
 #endif
@@ -361,7 +362,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     if (res != EI_IMPULSE_OK) {
         return res;
     } else {
-        return run_postprocessing(handle, result, debug);
+        return run_postprocessing(handle, result);
     }
 #endif
 }
@@ -526,7 +527,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
 
         ei_impulse_error = run_inference(handle, features, result, debug);
         delete[] matrix_ptrs;
-        ei_impulse_error = run_postprocessing(handle, result, debug);
+        ei_impulse_error = run_postprocessing(handle, result);
     }
 
     return ei_impulse_error;

@@ -33,7 +33,7 @@ But those are not always available or use a restricted set
 of intrinsics.
 
 */
- 
+
 #ifndef _NONE_H_
 #define _NONE_H_
 
@@ -44,7 +44,7 @@ extern "C"
 {
 #endif
 
- 
+
 
 /*
 
@@ -205,8 +205,7 @@ __STATIC_FORCEINLINE uint32_t __ROR(uint32_t op1, uint32_t op2)
 #define mult_32x32_keep32(a, x, y) \
     a = (q31_t) (((q63_t) x * y ) >> 32)
 
-// Patched by Edge Impulse, don't redefine these macros on Arm cores
-#if defined ( _MSC_VER ) || defined(__GNUC_PYTHON__)
+#if !defined (ARM_MATH_DSP) || defined ( _MSC_VER ) || defined(__GNUC_PYTHON__)
   /**
    * @brief definition to pack two 16 bit values.
    */
@@ -231,7 +230,6 @@ __STATIC_FORCEINLINE uint32_t __ROR(uint32_t op1, uint32_t op2)
 
     return ((uint32_t)((s << 16) | (r      )));
   }
-// Patched by Edge Impulse, don't redefine these macros on Arm cores
 #endif
 
    /**
@@ -250,7 +248,7 @@ __STATIC_FORCEINLINE uint32_t __ROR(uint32_t op1, uint32_t op2)
 #endif
 
 
- 
+
 
 // Patched by Edge Impulse, remove `!defined (ARM_MATH_DSP)` check
 /*

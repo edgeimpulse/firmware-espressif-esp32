@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 EdgeImpulse Inc.
+ * Copyright (c) 2024 EdgeImpulse Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,6 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
 #ifndef _EIDSP_NUMPY_H_
 #define _EIDSP_NUMPY_H_
 

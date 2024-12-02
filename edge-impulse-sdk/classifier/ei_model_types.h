@@ -106,7 +106,8 @@ typedef struct {
     uint16_t implementation_version;
     uint32_t keep_grace;
     uint16_t max_observations;
-    float iou_threshold;
+    float threshold;
+    bool use_iou;
 } ei_object_tracking_config_t;
 
 typedef struct {
@@ -149,6 +150,7 @@ typedef struct {
     EI_IMPULSE_ERROR (*init_fn)(ei_impulse_handle_t *handle, void **state, void *config);
     EI_IMPULSE_ERROR (*deinit_fn)(void *state, void *config);
     EI_IMPULSE_ERROR (*postprocess_fn)(ei_impulse_handle_t *handle, ei_impulse_result_t *result, void *config, void* state);
+    EI_IMPULSE_ERROR (*display_fn)(ei_impulse_result_t *result, void *config);
     void *config;
 } ei_postprocessing_block_t;
 

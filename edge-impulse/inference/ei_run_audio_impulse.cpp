@@ -92,12 +92,12 @@ void ei_run_impulse(void)
 
     if(continuous_mode == true) {
         if(++print_results >= (EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW >> 1)) {
-            display_results(&result);
+            display_results(&ei_default_impulse, &result);
             print_results = 0;
         }
     }
     else {
-        display_results(&result);
+        display_results(&ei_default_impulse, &result);
     }
 
     if(continuous_mode == true) {

@@ -75,8 +75,7 @@ extern "C" EI_IMPULSE_ERROR deinit_postprocessing(ei_impulse_handle_t *handle) {
 }
 
 extern "C" EI_IMPULSE_ERROR run_postprocessing(ei_impulse_handle_t *handle,
-                                               ei_impulse_result_t *result,
-                                               bool debug) {
+                                               ei_impulse_result_t *result) {
     if (!handle) {
         return EI_IMPULSE_OUT_OF_MEMORY;
     }
@@ -92,6 +91,28 @@ extern "C" EI_IMPULSE_ERROR run_postprocessing(ei_impulse_handle_t *handle,
                                                                                 result,
                                                                                 impulse->postprocessing_blocks[i].config,
                                                                                 state);
+        if (res != EI_IMPULSE_OK) {
+            return res;
+        }
+    }
+
+    return EI_IMPULSE_OK;
+}
+
+extern "C" EI_IMPULSE_ERROR display_postprocessing(ei_impulse_handle_t *handle,
+                                                   ei_impulse_result_t *result) {
+    if (!handle) {
+        return EI_IMPULSE_OUT_OF_MEMORY;
+    }
+    auto impulse = handle->impulse;
+
+    for (size_t i = 0; i < impulse->postprocessing_blocks_size; i++) {
+
+        if (impulse->postprocessing_blocks[i].display_fn == nullptr) {
+            continue;
+        }
+
+        EI_IMPULSE_ERROR res = impulse->postprocessing_blocks[i].display_fn(result, impulse->postprocessing_blocks[i].config);
         if (res != EI_IMPULSE_OK) {
             return res;
         }

@@ -32,9 +32,19 @@ float intersection_over_union(const ei_impulse_result_bounding_box_t bbox1, cons
     return static_cast<float>(intersection_area) / static_cast<float>(bbox1_area + bbox2_area - intersection_area);
 }
 
+float centroid_euclidean_distance(const ei_impulse_result_bounding_box_t bbox1, const ei_impulse_result_bounding_box_t bbox2) {
+    float x1 = bbox1.x + bbox1.width / 2.0f;
+    float y1 = bbox1.y + bbox1.height / 2.0f;
+    float x2 = bbox2.x + bbox2.width / 2.0f;
+    float y2 = bbox2.y + bbox2.height / 2.0f;
+    float distance = std::sqrt(std::pow(x1 - x2, 2) + std::pow(y1 - y2, 2));
+    EI_LOGD("centroid_euclidean_distance: x1=%f y1=%f x2=%f y2=%f distance=%f\n", x1, y1, x2, y2, distance);
+    return distance;
+}
+
 class JonkerVolgenantAlignment {
 public:
-    JonkerVolgenantAlignment(float iou_threshold) : iou_threshold(iou_threshold) {
+    JonkerVolgenantAlignment(float threshold, bool use_iou = true) : threshold(threshold), use_iou(use_iou) {
     }
 
     std::vector<std::tuple<int, int, float>> align(const std::vector<ei_impulse_result_bounding_box_t> traces,
@@ -47,8 +57,13 @@ public:
         std::vector<double> cost_mtx(traces.size() * detections.size());
         for (size_t trace_idx = 0; trace_idx < traces.size(); ++trace_idx) {
             for (size_t detection_idx = 0; detection_idx < detections.size(); ++detection_idx) {
-                float iou = intersection_over_union(traces[trace_idx], detections[detection_idx]);
-                float cost = 1 - iou;
+                float cost = 0.0;
+                if (use_iou) {
+                    float iou = intersection_over_union(traces[trace_idx], detections[detection_idx]);
+                    cost = 1 - iou;
+                } else {
+                    cost = centroid_euclidean_distance(traces[trace_idx], detections[detection_idx]);
+                }
                 EI_LOGD("t_idx=%zu d_idx=%zu cost=%.6f\n", trace_idx, detection_idx, cost);
                 cost_mtx[trace_idx * detections.size() + detection_idx] = cost;
             }
@@ -74,9 +89,16 @@ public:
         for (size_t i = 0; i < traces.size(); i++) {
             size_t trace_idx = i;
             size_t detection_idx = alignments_b[alignments_a[i]];
-            float iou = 1 - cost_mtx[trace_idx * detections.size() + detection_idx];
-            if (iou > iou_threshold) {
-                matches.emplace_back(trace_idx, detection_idx, iou);
+            if (use_iou) {
+                float iou = 1 - cost_mtx[trace_idx * detections.size() + detection_idx];
+                if (iou > threshold) {
+                    matches.emplace_back(trace_idx, detection_idx, iou);
+                }
+            } else {
+                float cost = cost_mtx[trace_idx * detections.size() + detection_idx];
+                if (cost < threshold) {
+                    matches.emplace_back(trace_idx, detection_idx, cost);
+                }
             }
         }
         delete[] alignments_a;
@@ -84,12 +106,13 @@ public:
         return matches;
     }
 
-    float iou_threshold;
+    float threshold;
+    bool use_iou;
 };
 
 class GreedyAlignment {
 public:
-    GreedyAlignment(float iou_threshold) : iou_threshold(iou_threshold) {
+    GreedyAlignment(float threshold, bool use_iou = true) : threshold(threshold), use_iou(use_iou) {
     }
     std::vector<std::tuple<int, int, float>> align(const std::vector<ei_impulse_result_bounding_box_t> traces,
                                                    const std::vector<ei_impulse_result_bounding_box_t> detections) {
@@ -101,11 +124,16 @@ public:
         std::vector<std::tuple<int, int, float>> alignments;
         for (size_t trace_idx = 0; trace_idx < traces.size(); ++trace_idx) {
             for (size_t detection_idx = 0; detection_idx < detections.size(); ++detection_idx) {
-                float iou = intersection_over_union(traces[trace_idx], detections[detection_idx]);
-                float cost = 1 - iou;
-                EI_LOGD("t_idx=%zu d_idx=%zu cost=%.6f\n", trace_idx, detection_idx, cost);
-                if (iou > iou_threshold) {
-                    alignments.emplace_back(trace_idx, detection_idx, cost);
+                if (use_iou) {
+                    float iou = intersection_over_union(traces[trace_idx], detections[detection_idx]);
+                    if (iou > threshold) {
+                        alignments.emplace_back(trace_idx, detection_idx, 1 - iou);
+                    }
+                } else {
+                    float cost = centroid_euclidean_distance(traces[trace_idx], detections[detection_idx]);
+                    if (cost < threshold) {
+                        alignments.emplace_back(trace_idx, detection_idx, cost);
+                    }
                 }
             }
         }
@@ -123,7 +151,7 @@ public:
 
             if (trace_idxs_matched.find(trace_idx) == trace_idxs_matched.end() && detection_idxs_matched.find(detection_idx) == detection_idxs_matched.end()) {
                 // (1 - cost) to get iou
-                matches.emplace_back(trace_idx, detection_idx, 1 - cost);
+                matches.emplace_back(trace_idx, detection_idx, use_iou ? 1 - cost : cost);
                 trace_idxs_matched.insert(trace_idx);
                 if (trace_idxs_matched.size() == traces.size()) return matches;
                 detection_idxs_matched.insert(detection_idx);
@@ -134,5 +162,6 @@ public:
         return matches;
     }
 
-    float iou_threshold;
+    float threshold;
+    bool use_iou;
 };

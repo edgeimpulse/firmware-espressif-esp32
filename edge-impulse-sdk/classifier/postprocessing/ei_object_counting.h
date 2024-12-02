@@ -117,6 +117,18 @@ EI_IMPULSE_ERROR process_object_counting(ei_impulse_handle_t *handle,
     return EI_IMPULSE_OK;
 }
 
+EI_IMPULSE_ERROR display_object_counting(ei_impulse_result_t *result,
+                                         void *config)
+{
+    // print the counts
+    ei_printf("Counts:\r\n");
+        for (uint32_t i = 0; i < result->postprocessed_output.object_counting_output.counter_num; i++) {
+            ei_printf("  Counter %d: %d\r\n", i, result->postprocessed_output.object_counting_output.counts[i]);
+    }
+
+    return EI_IMPULSE_OK;
+}
+
 EI_IMPULSE_ERROR set_post_process_params(ei_impulse_handle_t* handle, ei_object_counting_config_t* params) {
     int16_t block_number = get_block_number(handle, (void*)init_object_counting);
     if (block_number == -1) {

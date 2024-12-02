@@ -219,10 +219,10 @@ private:
 
 class Tracker {
 public:
-    Tracker (uint32_t keep_grace = 5, uint16_t max_observations = 5, float iou_threshold = 0.5)
+    Tracker (uint32_t keep_grace = 5, uint16_t max_observations = 5, float threshold = 0.5, bool use_iou = true)
             : keep_grace(keep_grace),
               max_observations(max_observations),
-              alignment(iou_threshold) {
+              alignment(threshold, use_iou) {
         trace_seq_id = 0;
         t = 0;
     }
@@ -354,13 +354,12 @@ public:
         t += 1;
     }
 
-    bool set_iou_threshold(float iou_threshold) {
-        alignment.iou_threshold = iou_threshold;
-        return true;
+    void set_threshold(float threshold) {
+        alignment.threshold = threshold;
     }
 
-    float get_iou_threshold() {
-        return alignment.iou_threshold;
+    float get_threshold() {
+        return alignment.threshold;
     }
 
     uint32_t keep_grace;
@@ -379,7 +378,8 @@ EI_IMPULSE_ERROR init_object_tracking(ei_impulse_handle_t *handle, void** state,
     // Allocate the object counter
     Tracker *object_tracker = new Tracker(ei_object_tracking_config->keep_grace,
                                           ei_object_tracking_config->max_observations,
-                                          ei_object_tracking_config->iou_threshold);
+                                          ei_object_tracking_config->threshold,
+                                          ei_object_tracking_config->use_iou);
     if (!object_tracker) {
         return EI_IMPULSE_OUT_OF_MEMORY;
     }
@@ -425,6 +425,25 @@ EI_IMPULSE_ERROR process_object_tracking(ei_impulse_handle_t *handle,
     return EI_IMPULSE_OK;
 }
 
+EI_IMPULSE_ERROR display_object_tracking(ei_impulse_result_t *result,
+                                         void *config)
+{
+    // print the open traces
+    ei_printf("Open traces:\r\n");
+    for (uint32_t i = 0; i < result->postprocessed_output.object_tracking_output.open_traces_count; i++) {
+        ei_object_tracking_trace_t trace = result->postprocessed_output.object_tracking_output.open_traces[i];
+        ei_printf("  Trace %d: %s [ x: %u, y: %u, width: %u, height: %u ]\r\n",
+                trace.id,
+                trace.label,
+                trace.x,
+                trace.y,
+                trace.width,
+                trace.height);
+    }
+
+    return EI_IMPULSE_OK;
+}
+
 EI_IMPULSE_ERROR set_post_process_params(ei_impulse_handle_t* handle, ei_object_tracking_config_t* params) {
     int16_t block_number = get_block_number(handle, (void*)init_object_tracking);
     if (block_number == -1) {
@@ -434,7 +453,7 @@ EI_IMPULSE_ERROR set_post_process_params(ei_impulse_handle_t* handle, ei_object_
 
     object_tracker->keep_grace = params->keep_grace;
     object_tracker->max_observations = params->max_observations;
-    object_tracker->set_iou_threshold(params->iou_threshold);
+    object_tracker->set_threshold(params->threshold);
     return EI_IMPULSE_OK;
 }
 
@@ -447,7 +466,7 @@ EI_IMPULSE_ERROR get_post_process_params(ei_impulse_handle_t* handle, ei_object_
 
     params->keep_grace = object_tracker->keep_grace;
     params->max_observations = object_tracker->max_observations;
-    params->iou_threshold = object_tracker->get_iou_threshold();
+    params->threshold = object_tracker->get_threshold();
     return EI_IMPULSE_OK;
 }
 

@@ -280,6 +280,15 @@ EI_IMPULSE_ERROR process_perfcal(ei_impulse_handle_t *handle,
     return EI_IMPULSE_OK;
 }
 
+EI_IMPULSE_ERROR display_perfcal(ei_impulse_result_t *result,
+                                         void *config)
+{
+    // print the detected label
+    ei_printf("Detected label: %s\r\n", result->postprocessed_output.perf_cal_output.detected_label);
+
+    return EI_IMPULSE_OK;
+}
+
 EI_IMPULSE_ERROR set_post_process_params(ei_impulse_handle_t* handle, ei_perf_cal_params_t* params) {
     int16_t block_number = get_block_number(handle, (void*)init_perfcal);
     if (block_number == -1) {
