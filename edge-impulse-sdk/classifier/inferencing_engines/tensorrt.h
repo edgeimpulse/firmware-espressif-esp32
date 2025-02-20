@@ -1,24 +1,187 @@
-/*
- * Copyright (c) 2022 EdgeImpulse Inc.
+/* The Clear BSD License
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Copyright (c) 2025 EdgeImpulse Inc.
+ * All rights reserved.
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an "AS
- * IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
- * express or implied. See the License for the specific language
- * governing permissions and limitations under the License.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted (subject to the limitations in the disclaimer
+ * below) provided that the following conditions are met:
  *
- * SPDX-License-Identifier: Apache-2.0
+ *   * Redistributions of source code must retain the above copyright notice,
+ *   this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright
+ *   notice, this list of conditions and the following disclaimer in the
+ *   documentation and/or other materials provided with the distribution.
+ *
+ *   * Neither the name of the copyright holder nor the names of its
+ *   contributors may be used to endorse or promote products derived from this
+ *   software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY
+ * THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+ * PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef _EI_CLASSIFIER_INFERENCING_ENGINE_TENSORRT_H_
 #define _EI_CLASSIFIER_INFERENCING_ENGINE_TENSORRT_H_
 
 #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSORRT)
+
+#if (EI_CLASSIFIER_HAS_ANOMALY == EI_ANOMALY_TYPE_VISUAL_GMM)
+
+#include <thread>
+#include "tensorflow-lite/tensorflow/lite/c/common.h"
+#include "tensorflow-lite/tensorflow/lite/interpreter.h"
+#include "tensorflow-lite/tensorflow/lite/kernels/register.h"
+#include "tensorflow-lite/tensorflow/lite/model.h"
+#include "tensorflow-lite/tensorflow/lite/optional_debug_tools.h"
+#include "edge-impulse-sdk/tensorflow/lite/kernels/custom/tree_ensemble_classifier.h"
+#include "edge-impulse-sdk/classifier/ei_model_types.h"
+#include "edge-impulse-sdk/classifier/inferencing_engines/tflite_helper.h"
+
+typedef struct {
+    std::unique_ptr<tflite::FlatBufferModel> model;
+    std::unique_ptr<tflite::Interpreter> interpreter;
+} ei_tflite_state_t;
+
+std::map<uint32_t, ei_tflite_state_t*> ei_tflite_instances;
+
+/**
+ * Construct a tflite interpreter (creates it if needed)
+ */
+static EI_IMPULSE_ERROR get_interpreter(ei_learning_block_config_tflite_graph_t *block_config, tflite::Interpreter **interpreter) {
+    // not in the map yet...
+    if (!ei_tflite_instances.count(block_config->block_id)) {
+        ei_config_tflite_graph_t *graph_config = (ei_config_tflite_graph_t*)block_config->graph_config;
+        ei_tflite_state_t *new_state = new ei_tflite_state_t();
+
+        auto new_model = tflite::FlatBufferModel::BuildFromBuffer((const char*)graph_config->model, graph_config->model_size);
+        new_state->model = std::move(new_model);
+        if (!new_state->model) {
+            ei_printf("Failed to build TFLite model from buffer\n");
+            return EI_IMPULSE_TFLITE_ERROR;
+        }
+
+        tflite::ops::builtin::BuiltinOpResolver resolver;
+#if EI_CLASSIFIER_HAS_TREE_ENSEMBLE_CLASSIFIER
+        resolver.AddCustom("TreeEnsembleClassifier",
+            tflite::ops::custom::Register_TREE_ENSEMBLE_CLASSIFIER());
+#endif
+        tflite::InterpreterBuilder builder(*new_state->model, resolver);
+        builder(&new_state->interpreter);
+
+        if (!new_state->interpreter) {
+            ei_printf("Failed to construct interpreter\n");
+            return EI_IMPULSE_TFLITE_ERROR;
+        }
+
+        if (new_state->interpreter->AllocateTensors() != kTfLiteOk) {
+            ei_printf("AllocateTensors failed\n");
+            return EI_IMPULSE_TFLITE_ERROR;
+        }
+
+        int hw_thread_count = (int)std::thread::hardware_concurrency();
+        hw_thread_count -= 1; // leave one thread free for the other application
+        if (hw_thread_count < 1) {
+            hw_thread_count = 1;
+        }
+
+        if (new_state->interpreter->SetNumThreads(hw_thread_count) != kTfLiteOk) {
+            ei_printf("SetNumThreads failed\n");
+            return EI_IMPULSE_TFLITE_ERROR;
+        }
+
+        ei_tflite_instances.insert(std::make_pair(block_config->block_id, new_state));
+    }
+
+    auto tflite_state = ei_tflite_instances[block_config->block_id];
+    *interpreter = tflite_state->interpreter.get();
+    return EI_IMPULSE_OK;
+}
+
+EI_IMPULSE_ERROR run_nn_inference_tflite_full(
+    const ei_impulse_t *impulse,
+    ei_feature_t *fmatrix,
+    uint32_t learn_block_index,
+    uint32_t* input_block_ids,
+    uint32_t input_block_ids_size,
+    ei_impulse_result_t *result,
+    void *config_ptr,
+    bool debug = false)
+{
+    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
+
+    tflite::Interpreter *interpreter;
+    auto interpreter_ret = get_interpreter(block_config, &interpreter);
+    if (interpreter_ret != EI_IMPULSE_OK) {
+        return interpreter_ret;
+    }
+
+    TfLiteTensor *input = interpreter->input_tensor(0);
+    TfLiteTensor *output = interpreter->output_tensor(block_config->output_data_tensor);
+
+    if (!input) {
+        return EI_IMPULSE_INPUT_TENSOR_WAS_NULL;
+    }
+    if (!output) {
+        return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
+    }
+
+    size_t mtx_size = impulse->dsp_blocks_size + impulse->learning_blocks_size;
+    auto input_res = fill_input_tensor_from_matrix(fmatrix, input, input_block_ids, input_block_ids_size, mtx_size);
+    if (input_res != EI_IMPULSE_OK) {
+        return input_res;
+    }
+
+    uint64_t ctx_start_us = ei_read_timer_us();
+
+    TfLiteStatus status = interpreter->Invoke();
+    if (status != kTfLiteOk) {
+        ei_printf("ERR: interpreter->Invoke() failed with %d\n", status);
+        return EI_IMPULSE_TFLITE_ERROR;
+    }
+
+    uint64_t ctx_end_us = ei_read_timer_us();
+
+    result->timing.classification_us = ctx_end_us - ctx_start_us;
+    result->timing.classification = (int)(result->timing.classification_us / 1000);
+
+    if (result->copy_output) {
+        auto output_res = fill_output_matrix_from_tensor(output, fmatrix[impulse->dsp_blocks_size + learn_block_index].matrix);
+        if (output_res != EI_IMPULSE_OK) {
+            return output_res;
+        }
+    }
+
+    if (debug) {
+        ei_printf("Predictions (time: %d ms.):\n", result->timing.classification);
+    }
+
+    TfLiteTensor *scores_tensor = interpreter->output_tensor(block_config->output_score_tensor);
+    TfLiteTensor *labels_tensor = interpreter->output_tensor(block_config->output_labels_tensor);
+
+    EI_IMPULSE_ERROR fill_res = fill_result_struct_from_output_tensor_tflite(
+        impulse, block_config, output, labels_tensor, scores_tensor, result, debug);
+
+    if (fill_res != EI_IMPULSE_OK) {
+        return fill_res;
+    }
+
+    // on Linux we're not worried about free'ing (for now)
+
+    return EI_IMPULSE_OK;
+}
+#endif // (EI_CLASSIFIER_HAS_ANOMALY == EI_ANOMALY_TYPE_VISUAL_GMM)
 
 #include "model-parameters/model_metadata.h"
 
@@ -52,32 +215,13 @@ inline bool file_exists(char *model_file_name)
     }
 }
 
-/**
- * @brief      Do neural network inferencing over the processed feature matrix
- *
- * @param      fmatrix  Processed matrix
- * @param      result   Output classifier results
- * @param[in]  debug    Debug output enable
- *
- * @return     The ei impulse error.
- */
-EI_IMPULSE_ERROR run_nn_inference(
+EI_IMPULSE_ERROR write_model_to_file(
     const ei_impulse_t *impulse,
-    ei_feature_t *fmatrix,
-    uint32_t learn_block_index,
-    uint32_t* input_block_ids,
-    uint32_t input_block_ids_size,
-    ei_impulse_result_t *result,
-    void *config_ptr,
+    char *model_file_name,
+    const unsigned char *model,
+    size_t model_size,
     bool debug = false)
 {
-    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
-    ei_config_tflite_graph_t *graph_config = (ei_config_tflite_graph_t*)block_config->graph_config;
-
-    #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
-    #error "TensorRT requires an unquantized network"
-    #endif
-
     static char current_exe_path[PATH_MAX] = { 0 };
 
 #if __APPLE__
@@ -102,8 +246,6 @@ EI_IMPULSE_ERROR run_nn_inference(
     }
 #endif
 
-    static char model_file_name[PATH_MAX];
-
     if (strlen(current_exe_path) == 0) {
         // could not determine current exe path, use /tmp for the engine file
         snprintf(
@@ -125,61 +267,70 @@ EI_IMPULSE_ERROR run_nn_inference(
             impulse->deploy_version);
     }
 
-    static bool first_run = true;
+    bool fexists = file_exists(model_file_name);
+    if (!fexists) {
+        ei_printf("INFO: Model file '%s' does not exist, creating...\n", model_file_name);
 
-    if (first_run) {
-
-        bool fexists = file_exists(model_file_name);
-        if (!fexists) {
-            ei_printf("INFO: Model file '%s' does not exist, creating...\n", model_file_name);
-
-            FILE *file = fopen(model_file_name, "w");
-            if (!file) {
-                ei_printf("ERR: TensorRT init failed to open '%s'\n", model_file_name);
-                return EI_IMPULSE_TENSORRT_INIT_FAILED;
-            }
-
-            if (fwrite(graph_config->model, graph_config->model_size, 1, file) != 1) {
-                ei_printf("ERR: TensorRT init fwrite failed.\n");
-                return EI_IMPULSE_TENSORRT_INIT_FAILED;
-            }
-
-            if (fclose(file) != 0) {
-                ei_printf("ERR: TensorRT init fclose failed.\n");
-                return EI_IMPULSE_TENSORRT_INIT_FAILED;
-            }
+        FILE *file = fopen(model_file_name, "w");
+        if (!file) {
+            ei_printf("ERR: TensorRT init failed to open '%s'\n", model_file_name);
+            return EI_IMPULSE_TENSORRT_INIT_FAILED;
         }
 
+        if (fwrite(model, model_size, 1, file) != 1) {
+            ei_printf("ERR: TensorRT init fwrite failed.\n");
+            return EI_IMPULSE_TENSORRT_INIT_FAILED;
+        }
+
+        if (fclose(file) != 0) {
+            ei_printf("ERR: TensorRT init fclose failed.\n");
+            return EI_IMPULSE_TENSORRT_INIT_FAILED;
+        }
+    }
+    return EI_IMPULSE_OK;
+}
+
+/**
+ * @brief      Do neural network inferencing over the processed feature matrix
+ *
+ * @param      fmatrix  Processed matrix
+ * @param      result   Output classifier results
+ * @param[in]  debug    Debug output enable
+ *
+ * @return     The ei impulse error.
+ */
+EI_IMPULSE_ERROR run_nn_inference(
+    const ei_impulse_t *impulse,
+    ei_feature_t *fmatrix,
+    uint32_t learn_block_index,
+    uint32_t* input_block_ids,
+    uint32_t input_block_ids_size,
+    ei_impulse_result_t *result,
+    void *config_ptr,
+    bool debug = false)
+{
+    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
+    ei_config_tflite_graph_t *graph_config = (ei_config_tflite_graph_t*)block_config->graph_config;
+
+#if (EI_CLASSIFIER_HAS_ANOMALY == EI_ANOMALY_TYPE_VISUAL_GMM)
+    if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY
+       && !result->copy_output) {
+        return run_nn_inference_tflite_full(impulse, fmatrix, learn_block_index, input_block_ids, input_block_ids_size, result, config_ptr);
+    }
+#endif
+
+    #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
+    #error "TensorRT requires an unquantized network"
+    #endif
+
+    static bool first_run = true;
+    static char model_file_name[PATH_MAX];
+    if (first_run) {
+        write_model_to_file(impulse, model_file_name, graph_config->model, graph_config->model_size);
         first_run = false;
     }
 
-    uint32_t out_data_size = 0;
-
-    if (block_config->object_detection) {
-        switch (block_config->object_detection_last_layer) {
-            case EI_CLASSIFIER_LAST_LAYER_TAO_SSD:
-            case EI_CLASSIFIER_LAST_LAYER_TAO_RETINANET:
-            case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV3:
-            case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV4:
-            case EI_CLASSIFIER_LAST_LAYER_FOMO:
-            case EI_CLASSIFIER_LAST_LAYER_YOLOV5:
-            case EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI: {
-                out_data_size = impulse->tflite_output_features_count;
-                break;
-            }
-            default: {
-                ei_printf(
-                    "ERR: Unsupported object detection last layer (%d)\n",
-                    block_config->object_detection_last_layer);
-                return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-            }
-        }
-    }
-    else {
-        out_data_size = impulse->label_count;
-    }
-
-    float *out_data = (float*)ei_malloc(out_data_size * sizeof(float));
+    float *out_data = (float*)ei_malloc(impulse->tflite_output_features_count * sizeof(float));
     if (out_data == nullptr) {
         ei_printf("ERR: Cannot allocate memory for output data \n");
     }
@@ -215,12 +366,27 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     uint64_t ctx_start_us = ei_read_timer_us();
 
-    libeitrt::infer(ei_trt_handle, matrix->buffer, out_data, out_data_size);
+    libeitrt::infer(ei_trt_handle, matrix->buffer, out_data, impulse->tflite_output_features_count);
 
     uint64_t ctx_end_us = ei_read_timer_us();
 
     result->timing.classification_us = ctx_end_us - ctx_start_us;
     result->timing.classification = (int)(result->timing.classification_us / 1000);
+
+    if (result->copy_output) {
+        matrix_t *output_matrix = fmatrix[impulse->dsp_blocks_size + learn_block_index].matrix;
+        const size_t matrix_els = output_matrix->rows * output_matrix->cols;
+
+        if (impulse->tflite_output_features_count != matrix_els) {
+                ei_printf("ERR: output tensor has size %d, but input matrix has has size %d\n",
+                    impulse->tflite_output_features_count, (int)matrix_els);
+                ei_free(out_data);
+                return EI_IMPULSE_INVALID_SIZE;
+        }
+        memcpy(output_matrix->buffer, out_data, impulse->tflite_output_features_count * sizeof(float));
+        ei_free(out_data);
+        return EI_IMPULSE_OK;
+    }
 
     EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
 
@@ -287,8 +453,16 @@ EI_IMPULSE_ERROR run_nn_inference(
             }
         }
     }
+    else if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY) {
+        if (!result->copy_output) {
+            fill_res = fill_result_visual_ad_struct_f32(impulse, result, out_data, block_config, debug);
+        }
+    }
+    // if we copy the output, we don't need to process it as classification
     else {
-        fill_res = fill_result_struct_f32(impulse, result, out_data, debug);
+        if (!result->copy_output) {
+            fill_res = fill_result_struct_f32(impulse, result, out_data, debug);
+        }
     }
 
     ei_free(out_data);
@@ -314,6 +488,7 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 {
     return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
 }
+
 
 #endif // #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSORRT)
 #endif // _EI_CLASSIFIER_INFERENCING_ENGINE_TENSORRT_H_

@@ -1786,13 +1786,16 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   if (input->type == kTfLiteInt8) {
     data_dims_t input_dims =  {
                                 .width = input_width, .height = input_height,
-                                .channels = input->dims->data[3], 1
+                                .channels = input->dims->data[3], .extra = 1
                               };
     data_dims_t output_dims = {
                                 .width = output_width, .height = output_height,
-                                .channels = output->dims->data[3], 1
+                                .channels = output->dims->data[3], .extra = 1
                               };
-    data_dims_t filter_dims = {.width = filter_width, .height = filter_height, 0, 0};
+    data_dims_t filter_dims = {
+                                .width = filter_width, .height = filter_height,
+                                .channels = 0, .extra = 0
+                              };
     conv_params_t conv_params = {
                                   .in_offset = 0, .out_offset = 0,
                                   .stride = {params.stride_width, params.stride_height},
@@ -1880,13 +1883,15 @@ inline void EvalQuantizedPerChannel(
 
     data_dims_t input_dims =  {
                                 .width = input_width, .height = input_height,
-                                .channels = input_depth, 1
+                                .channels = input_depth, .extra = 1
                               };
     data_dims_t output_dims = {
                                 .width = output_width, .height = output_height,
-                                .channels = output_depth, 1
+                                .channels = output_depth, .extra = 1
                               };
-    data_dims_t filter_dims = {.width = filter_width, .height = filter_height, 0, 0};
+    data_dims_t filter_dims = { .width = filter_width, .height = filter_height,
+                                .channels = 0, .extra = 0
+                              };
     conv_params_t conv_params = {
                                   .in_offset = input_offset, .out_offset = output_offset,
                                   .stride = {stride_width, stride_height},
