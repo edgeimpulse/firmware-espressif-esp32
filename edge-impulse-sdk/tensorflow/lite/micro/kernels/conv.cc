@@ -1889,7 +1889,8 @@ inline void EvalQuantizedPerChannel(
                                 .width = output_width, .height = output_height,
                                 .channels = output_depth, .extra = 1
                               };
-    data_dims_t filter_dims = { .width = filter_width, .height = filter_height,
+    data_dims_t filter_dims = {
+                                .width = filter_width, .height = filter_height,
                                 .channels = 0, .extra = 0
                               };
     conv_params_t conv_params = {

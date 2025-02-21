@@ -1730,7 +1730,8 @@ inline void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
                                 .width = output_width, .height = output_height,
                                 .channels = output_depth, .extra = 1
                               };
-    data_dims_t filter_dims = { .width = filter_width, .height = filter_height,
+    data_dims_t filter_dims = {
+                                .width = filter_width, .height = filter_height,
                                 .channels = 0, .extra = 0
                               };
     dw_conv_params_t conv_params =  {
@@ -1843,7 +1844,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                               };
     data_dims_t filter_dims = {
                                 .width = filter_width, .height = filter_height,
-                                .channels = 0, .extra = 0};
+                                .channels = 0, .extra = 0
+                              };
     dw_conv_params_t conv_params =  {
                                       .in_offset = 0, .out_offset = 0,
                                       .ch_mult = params.depth_multiplier,
