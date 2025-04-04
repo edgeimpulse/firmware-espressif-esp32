@@ -282,6 +282,14 @@ void ei_free(void *ptr);
 #endif
 #endif
 
+#ifndef EI_PORTING_ANDROID
+#ifdef __ANDROID__
+#define EI_PORTING_ANDROID      1
+#else
+#define EI_PORTING_ANDROID      0
+#endif
+#endif
+
 #ifndef EI_PORTING_MBED
 #ifdef __MBED__
 #define EI_PORTING_MBED      1

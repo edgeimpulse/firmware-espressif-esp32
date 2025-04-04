@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Arm Limited. All rights reserved.
- *
+ * SPDX-FileCopyrightText: Copyright 2019-2021, 2024 Arm Limited and/or its affiliates <open-source-office@arm.com>
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the License); you may
@@ -28,6 +27,15 @@
 /******************************************************************************
  * Types
  ******************************************************************************/
+
+struct NPU_REG; // Forward declare, to be implemented by each device
+
+struct ethosu_device
+{
+    volatile struct NPU_REG *reg; // Register map
+    uint32_t secure;
+    uint32_t privileged;
+};
 
 enum ethosu_error_codes
 {

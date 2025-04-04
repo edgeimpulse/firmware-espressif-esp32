@@ -474,6 +474,8 @@ __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_visual_ad_struct_f32
         }
     }
 
+    result->classification[0].value = result->visual_ad_result.max_value;
+
     result->visual_ad_grid_cells = results.data();
     result->visual_ad_count = results.size();
 #endif // EI_CLASSIFIER_HAS_VISUAL_ANOMALY
@@ -1886,6 +1888,22 @@ bool find_mtx_by_idx(ei_feature_t* mtx, ei::matrix_t** matrix, uint32_t mtx_id, 
     }
     return false;
 }
+
+size_t get_feature_size(ei_feature_t* mtx, uint32_t ids_size, uint32_t* ids, size_t mtx_size) {
+    size_t feat_size = 0;
+    ei::matrix_t* matrix = NULL;
+    for (size_t i = 0; i < ids_size; i++) {
+        size_t cur_mtx = ids[i];
+
+        if (!find_mtx_by_idx(mtx, &matrix, cur_mtx, mtx_size)) {
+            ei_printf("ERR: Cannot find matrix with id %zu\n", cur_mtx);
+            return -1;
+        }
+        feat_size += matrix->rows * matrix->cols;
+    }
+    return feat_size;
+}
+
 #endif
 
 #endif // _EI_CLASSIFIER_FILL_RESULT_STRUCT_H_

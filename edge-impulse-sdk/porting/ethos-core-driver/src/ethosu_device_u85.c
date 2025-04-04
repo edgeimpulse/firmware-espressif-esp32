@@ -19,18 +19,13 @@
  * Includes
  ******************************************************************************/
 #if EI_ETHOS
-#if defined ETHOSU55 || defined ETHOSU65
+#if defined ETHOSU85
 
-#include "ethosu_interface.h"
+#include "ethosu85_interface.h"
 
+#include "ethosu_config_u85.h"
 #include "ethosu_device.h"
 #include "ethosu_log.h"
-
-#ifdef ETHOSU55
-#include "ethosu_config_u55.h"
-#else
-#include "ethosu_config_u65.h"
-#endif
 
 #include <assert.h>
 #include <inttypes.h>
@@ -43,20 +38,16 @@
  * Defines
  ******************************************************************************/
 
-#define ETHOSU_PRODUCT_U55 0
-#define ETHOSU_PRODUCT_U65 1
+#define ETHOSU_PRODUCT_U85 2
 
 #define BASEP_OFFSET 4
 
-#ifdef ETHOSU65
 #define ADDRESS_BITS 40
-#else
-#define ADDRESS_BITS 32
-#endif
 
 #define ADDRESS_MASK ((1ull << ADDRESS_BITS) - 1)
 
 #define NPU_CMD_PWR_CLK_MASK (0xC)
+#define NPU_MAC_PWR_RAMP_CYCLES_MASK (0x3F)
 
 /******************************************************************************
  * Functions
@@ -74,11 +65,7 @@ bool ethosu_dev_init(struct ethosu_device *dev, void *base_address, uint32_t sec
     dev->secure     = secure_enable;
     dev->privileged = privilege_enable;
 
-#ifdef ETHOSU55
-    if (dev->reg->CONFIG.product != ETHOSU_PRODUCT_U55)
-#else
-    if (dev->reg->CONFIG.product != ETHOSU_PRODUCT_U65)
-#endif
+    if (dev->reg->CONFIG.product != ETHOSU_PRODUCT_U85)
     {
         LOG_ERR("Failed to initialize device. Driver has not been compiled for this product");
         return false;
@@ -96,13 +83,21 @@ bool ethosu_dev_init(struct ethosu_device *dev, void *base_address, uint32_t sec
 enum ethosu_error_codes ethosu_dev_axi_init(struct ethosu_device *dev)
 {
     struct regioncfg_r rcfg = {0};
-    struct axi_limit0_r l0  = {0};
-    struct axi_limit1_r l1  = {0};
-    struct axi_limit2_r l2  = {0};
-    struct axi_limit3_r l3  = {0};
+    struct axi_sram_r axi_s = {0};
+    struct axi_ext_r axi_e  = {0};
 
+    // Configure MEM_ATTR array. These are user configurable,
+    // and each region will be set to use one of the entries
+    // as its config.
+    dev->reg->MEM_ATTR[0].word = NPU_MEM_ATTR_0;
+    dev->reg->MEM_ATTR[1].word = NPU_MEM_ATTR_1;
+    dev->reg->MEM_ATTR[2].word = NPU_MEM_ATTR_2;
+    dev->reg->MEM_ATTR[3].word = NPU_MEM_ATTR_3;
+
+    // Set MEM_ATTR entry for command stream
     dev->reg->QCONFIG.word = NPU_QCONFIG;
 
+    // Set MEM_ATTR entries to use for regions 0-7
     rcfg.region0             = NPU_REGIONCFG_0;
     rcfg.region1             = NPU_REGIONCFG_1;
     rcfg.region2             = NPU_REGIONCFG_2;
@@ -113,30 +108,17 @@ enum ethosu_error_codes ethosu_dev_axi_init(struct ethosu_device *dev)
     rcfg.region7             = NPU_REGIONCFG_7;
     dev->reg->REGIONCFG.word = rcfg.word;
 
-    l0.max_beats                = AXI_LIMIT0_MAX_BEATS_BYTES;
-    l0.memtype                  = AXI_LIMIT0_MEM_TYPE;
-    l0.max_outstanding_read_m1  = AXI_LIMIT0_MAX_OUTSTANDING_READS - 1;
-    l0.max_outstanding_write_m1 = AXI_LIMIT0_MAX_OUTSTANDING_WRITES - 1;
+    // Set AXI limits on SRAM AXI interfaces
+    axi_s.max_outstanding_read_m1  = AXI_LIMIT_SRAM_MAX_OUTSTANDING_READ_M1 - 1;
+    axi_s.max_outstanding_write_m1 = AXI_LIMIT_SRAM_MAX_OUTSTANDING_WRITE_M1 - 1;
+    axi_s.max_beats                = AXI_LIMIT_SRAM_MAX_BEATS;
+    dev->reg->AXI_SRAM.word        = axi_s.word;
 
-    l1.max_beats                = AXI_LIMIT1_MAX_BEATS_BYTES;
-    l1.memtype                  = AXI_LIMIT1_MEM_TYPE;
-    l1.max_outstanding_read_m1  = AXI_LIMIT1_MAX_OUTSTANDING_READS - 1;
-    l1.max_outstanding_write_m1 = AXI_LIMIT1_MAX_OUTSTANDING_WRITES - 1;
-
-    l2.max_beats                = AXI_LIMIT2_MAX_BEATS_BYTES;
-    l2.memtype                  = AXI_LIMIT2_MEM_TYPE;
-    l2.max_outstanding_read_m1  = AXI_LIMIT2_MAX_OUTSTANDING_READS - 1;
-    l2.max_outstanding_write_m1 = AXI_LIMIT2_MAX_OUTSTANDING_WRITES - 1;
-
-    l3.max_beats                = AXI_LIMIT3_MAX_BEATS_BYTES;
-    l3.memtype                  = AXI_LIMIT3_MEM_TYPE;
-    l3.max_outstanding_read_m1  = AXI_LIMIT3_MAX_OUTSTANDING_READS - 1;
-    l3.max_outstanding_write_m1 = AXI_LIMIT3_MAX_OUTSTANDING_WRITES - 1;
-
-    dev->reg->AXI_LIMIT0.word = l0.word;
-    dev->reg->AXI_LIMIT1.word = l1.word;
-    dev->reg->AXI_LIMIT2.word = l2.word;
-    dev->reg->AXI_LIMIT3.word = l3.word;
+    // Set AXI limits on EXT AXI interface(s)
+    axi_e.max_outstanding_read_m1  = AXI_LIMIT_EXT_MAX_OUTSTANDING_READ_M1 - 1;
+    axi_e.max_outstanding_write_m1 = AXI_LIMIT_EXT_MAX_OUTSTANDING_WRITE_M1 - 1;
+    axi_e.max_beats                = AXI_LIMIT_EXT_MAX_BEATS;
+    dev->reg->AXI_EXT.word         = axi_e.word;
 
     return ETHOSU_SUCCESS;
 }
@@ -155,10 +137,8 @@ void ethosu_dev_run_command_stream(struct ethosu_device *dev,
     LOG_DEBUG("QBASE=0x%016llx, QSIZE=%" PRIu32 ", cmd_stream_ptr=%p", qbase, cms_length, cmd_stream_ptr);
 
     dev->reg->QBASE.word[0] = qbase & 0xffffffff;
-#ifdef ETHOSU65
     dev->reg->QBASE.word[1] = qbase >> 32;
-#endif
-    dev->reg->QSIZE.word = cms_length;
+    dev->reg->QSIZE.word    = cms_length;
 
     for (int i = 0; i < num_base_addr; i++)
     {
@@ -166,9 +146,7 @@ void ethosu_dev_run_command_stream(struct ethosu_device *dev,
         assert(addr <= ADDRESS_MASK);
         LOG_DEBUG("BASEP%d=0x%016llx", i, addr);
         dev->reg->BASEP[i].word[0] = addr & 0xffffffff;
-#ifdef ETHOSU65
         dev->reg->BASEP[i].word[1] = addr >> 32;
-#endif
     }
 
     cmd.word                        = dev->reg->CMD.word & NPU_CMD_PWR_CLK_MASK;
@@ -196,7 +174,7 @@ bool ethosu_dev_handle_interrupt(struct ethosu_device *dev)
     dev->reg->CMD.word = cmd.word;
 
     // If a fault has occured, the NPU needs to be reset
-    if (dev->reg->STATUS.bus_status || dev->reg->STATUS.cmd_parse_error || dev->reg->STATUS.wd_fault ||
+    if (dev->reg->STATUS.bus_status || dev->reg->STATUS.cmd_parse_error || dev->reg->STATUS.branch_fault ||
         dev->reg->STATUS.ecc_fault || !dev->reg->STATUS.cmd_end_reached)
     {
         return false;
@@ -217,9 +195,6 @@ bool ethosu_dev_verify_access_state(struct ethosu_device *dev)
 
 enum ethosu_error_codes ethosu_dev_soft_reset(struct ethosu_device *dev)
 {
-    // Note that after a soft-reset, the NPU is unconditionally
-    // powered until the next CMD gets written.
-
     struct reset_r reset;
 
     reset.word        = 0;
@@ -250,6 +225,9 @@ enum ethosu_error_codes ethosu_dev_soft_reset(struct ethosu_device *dev)
 
     // Reinitialize AXI settings
     ethosu_dev_axi_init(dev);
+
+    // MAC power ramping up/down control
+    dev->reg->POWER_CTRL.word = (NPU_MAC_PWR_RAMP_CYCLES & NPU_MAC_PWR_RAMP_CYCLES_MASK);
 
     return ETHOSU_SUCCESS;
 }
@@ -308,22 +286,29 @@ bool ethosu_dev_verify_optimizer_config(struct ethosu_device *dev, uint32_t cfg_
     hw_cfg.word = dev->reg->CONFIG.word;
     hw_id.word  = dev->reg->ID.word;
 
-    LOG_INFO("Optimizer config. product=%u, cmd_stream_version=%u, macs_per_cc=%u, shram_size=%u, custom_dma=%u",
+    LOG_INFO("Optimizer config. product=%u, cmd_stream_version=%u, macs_per_cc=%u, num_axi_ext=%u, num_axi_sram=%u, "
+             "custom_dma=%u",
              opt_cfg->product,
              opt_cfg->cmd_stream_version,
              opt_cfg->macs_per_cc,
-             opt_cfg->shram_size,
+             1U << opt_cfg->num_axi_ext,
+             1U << opt_cfg->num_axi_sram,
              opt_cfg->custom_dma);
-    LOG_INFO("Optimizer config. arch version: %u.%u.%u",
+
+    LOG_INFO("Optimizer config. arch version=%u.%u.%u",
              opt_id->arch_major_rev,
              opt_id->arch_minor_rev,
              opt_id->arch_patch_rev);
-    LOG_INFO("Ethos-U config. product=%u, cmd_stream_version=%u, macs_per_cc=%u, shram_size=%u, custom_dma=%u",
+
+    LOG_INFO("Ethos-U config. product=%u, cmd_stream_version=%u, macs_per_cc=%u, num_axi_ext=%u, num_axi_sram=%u, "
+             "custom_dma=%u",
              hw_cfg.product,
              hw_cfg.cmd_stream_version,
              hw_cfg.macs_per_cc,
-             hw_cfg.shram_size,
+             1U << hw_cfg.num_axi_ext,
+             1U << hw_cfg.num_axi_sram,
              hw_cfg.custom_dma);
+
     LOG_INFO("Ethos-U. arch version=%u.%u.%u", hw_id.arch_major_rev, hw_id.arch_minor_rev, hw_id.arch_patch_rev);
 
     if (opt_cfg->word != hw_cfg.word)
@@ -339,6 +324,22 @@ bool ethosu_dev_verify_optimizer_config(struct ethosu_device *dev, uint32_t cfg_
             LOG_ERR("NPU config mismatch. npu.macs_per_cc=%u, optimizer.macs_per_cc=%u",
                     hw_cfg.macs_per_cc,
                     opt_cfg->macs_per_cc);
+            ret = false;
+        }
+
+        if (hw_cfg.num_axi_ext != opt_cfg->num_axi_ext)
+        {
+            LOG_ERR("NPU config mismatch. npu.num_axi_ext=%u, optimizer.num_axi_ext=%u",
+                    1U << hw_cfg.num_axi_ext,
+                    1U << opt_cfg->num_axi_ext);
+            ret = false;
+        }
+
+        if (hw_cfg.num_axi_sram != opt_cfg->num_axi_sram)
+        {
+            LOG_ERR("NPU config mismatch. npu.num_axi_sram=%u, optimizer.num_axi_sram=%u",
+                    1U << hw_cfg.num_axi_sram,
+                    1U << opt_cfg->num_axi_sram);
             ret = false;
         }
 
@@ -373,5 +374,6 @@ bool ethosu_dev_verify_optimizer_config(struct ethosu_device *dev, uint32_t cfg_
 
     return ret;
 }
-#endif // ETHOSU55 || ETHOSU65
+
+#endif // ETHOSU85
 #endif // EI_ETHOS

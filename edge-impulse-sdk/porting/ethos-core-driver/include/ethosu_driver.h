@@ -1,6 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2019-2023 Arm Limited and/or its affiliates <open-source-office@arm.com>
- *
+ * SPDX-FileCopyrightText: Copyright 2019-2024 Arm Limited and/or its affiliates <open-source-office@arm.com>
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the License); you may
@@ -41,12 +40,15 @@ extern "C" {
 #define ETHOSU_DRIVER_VERSION_MINOR 16 ///< Driver minor version
 #define ETHOSU_DRIVER_VERSION_PATCH 0  ///< Driver patch version
 
+#define ETHOSU_SEMAPHORE_WAIT_FOREVER (UINT64_MAX)
+
+#ifndef ETHOSU_SEMAPHORE_WAIT_INFERENCE
+#define ETHOSU_SEMAPHORE_WAIT_INFERENCE ETHOSU_SEMAPHORE_WAIT_FOREVER
+#endif
+
 /******************************************************************************
  * Types
  ******************************************************************************/
-
-// Forward declare
-struct ethosu_device;
 
 enum ethosu_job_state
 {
@@ -55,9 +57,17 @@ enum ethosu_job_state
     ETHOSU_JOB_DONE
 };
 
+enum ethosu_job_result
+{
+    ETHOSU_JOB_RESULT_OK = 0,
+    ETHOSU_JOB_RESULT_TIMEOUT,
+    ETHOSU_JOB_RESULT_ERROR
+};
+
 struct ethosu_job
 {
     volatile enum ethosu_job_state state;
+    volatile enum ethosu_job_result result;
     const void *custom_data_ptr;
     int custom_data_size;
     const uint64_t *base_addr;
@@ -68,15 +78,16 @@ struct ethosu_job
 
 struct ethosu_driver
 {
-    struct ethosu_device *dev;
+    struct ethosu_device dev;
     struct ethosu_driver *next;
     struct ethosu_job job;
     void *semaphore;
     uint64_t fast_memory;
     size_t fast_memory_size;
     uint32_t power_request_counter;
-    bool status_error;
     bool reserved;
+    uint8_t basep_flush_mask;
+    uint8_t basep_invalidate_mask;
 };
 
 struct ethosu_driver_version
@@ -104,23 +115,26 @@ enum ethosu_request_clients
 void ethosu_irq_handler(struct ethosu_driver *drv);
 
 /**
- * Flush/clean the data cache by address and size. Passing NULL as p argument
- * expects the whole cache to be flushed.
+ * Flush/clean the data cache by address and size.
+ * NOTE: It is not recommended to implement this, but let the application code
+ *       make sure that any data needed by the NPU is flushed before invoking
+ *       an inference.
  *
- * Addresses passed to this function must be 16 byte aligned.
+ * Addresses passed to this function must be 32 byte aligned.
  *
- * @param p         16 byte aligned address
+ * @param p         32 byte aligned address
  * @param bytes     Size of memory block in bytes
  */
 void ethosu_flush_dcache(uint32_t *p, size_t bytes);
 
 /**
- * Invalidate the data cache by address and size. Passing NULL as p argument
- * expects the whole cache to be invalidated.
+ * Invalidate the data cache by address and size.
+ * NOTE: The driver will only call this for the scratch/tensor arena base
+ *       pointer.
  *
- * Addresses passed to this function must be 16 byte aligned.
+ * Addresses passed to this function must be 32 byte aligned.
  *
- * @param p         16 byte aligned address
+ * @param p         32 byte aligned address
  * @param bytes     Size in bytes
  */
 void ethosu_invalidate_dcache(uint32_t *p, size_t bytes);
@@ -134,12 +148,26 @@ void ethosu_invalidate_dcache(uint32_t *p, size_t bytes);
 void *ethosu_mutex_create(void);
 
 /**
+ * Destroy mutex.
+ *
+ * @param mutex     Pointer to mutex handle
+ */
+void ethosu_mutex_destroy(void *mutex);
+
+/**
  * Minimal sempahore implementation for baremetal applications. See
  * ethosu_driver.c.
  *
  * @return Pointer to semaphore handle
  */
 void *ethosu_semaphore_create(void);
+
+/**
+ * Destroy semaphore.
+ *
+ * @param sem       Pointer to semaphore handle
+ */
+void ethosu_semaphore_destroy(void *sem);
 
 /**
  * Lock mutex.
@@ -161,9 +189,10 @@ int ethosu_mutex_unlock(void *mutex);
  * Take semaphore.
  *
  * @param sem       Pointer to semaphore handle
- * @returns 0 on success, else negative error code
+ * @param timeout   Timeout value (unit impl. defined)
+ * @returns 0 on success else negative error code
  */
-int ethosu_semaphore_take(void *sem);
+int ethosu_semaphore_take(void *sem, uint64_t timeout);
 
 /**
  * Give semaphore.
@@ -202,6 +231,15 @@ uint64_t ethosu_address_remap(uint64_t address, int index);
 /******************************************************************************
  * Prototypes
  ******************************************************************************/
+
+/**
+ * Set cache mask for cache flush/clean and invalidation per base pointer.
+ *
+ * @param drv               Pointer to driver handle
+ * @param flush_mask        Base pointer cache flush mask (bit 0 == basep 0)
+ * @param invalidate_mask   Base pointer cache invalidation mask (bit 0 == basep 0)
+ */
+void ethosu_set_basep_cache_mask(struct ethosu_driver *drv, uint8_t flush_mask, uint8_t invalidate_mask);
 
 /**
  * Initialize the Ethos-U driver.

@@ -253,7 +253,9 @@ EI_IMPULSE_ERROR run_nn_inference(
     size_t mtx_size = impulse->dsp_blocks_size + impulse->learning_blocks_size;
     ei::matrix_t* matrix = NULL;
 
-    ei::matrix_t combined_matrix(1, impulse->nn_input_frame_size);
+    size_t combined_matrix_size = get_feature_size(fmatrix, input_block_ids_size, input_block_ids, mtx_size);
+    ei::matrix_t combined_matrix(1, combined_matrix_size);
+
     uint32_t buf_pos = 0;
 
     for (size_t i = 0; i < input_block_ids_size; i++) {

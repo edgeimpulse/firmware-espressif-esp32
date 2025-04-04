@@ -53,6 +53,10 @@
 #include "tflite-model/tflite-resolver.h"
 #endif // EI_CLASSIFIER_HAS_TFLITE_OPS_RESOLVER
 
+#ifdef EI_CLASSIFIER_ENABLE_PROFILER
+#include "edge-impulse-sdk/tensorflow/lite/micro/micro_profiler.h"
+#endif
+
 #ifdef EI_CLASSIFIER_ALLOCATION_STATIC
 #if defined __GNUC__
 #define ALIGN(X) __attribute__((aligned(X)))
@@ -61,6 +65,28 @@
 #elif defined __TASKING__
 #define ALIGN(X) __align(X)
 #endif
+#endif
+
+#define STRINGIZE(x) #x
+#define STRINGIZE_VALUE_OF(x) STRINGIZE(x)
+
+#if defined (__GNUC__)  /* GNU compiler */
+#define ALIGN(X) __attribute__((aligned(X)))
+#define DEFINE_SECTION(x) __attribute__((section(x)))
+#elif defined (_MSC_VER)
+#define ALIGN(X) __declspec(align(X))
+#elif defined (__TASKING__) /* TASKING Compiler */
+#define ALIGN(X) __align(X)
+#define DEFINE_SECTION(x) __attribute__((section(x)))
+#elif defined (__ARMCC_VERSION) /* Arm Compiler */
+#define ALIGN(X) __ALIGNED(x)
+#define DEFINE_SECTION(x) __attribute__((section(x)))
+#elif defined (__ICCARM__) /* IAR Compiler */
+#define ALIGN(x) __attribute__((aligned(x)))
+#define DEFINE_SECTION(x) __attribute__((section(x)))
+#elif defined (__clang__) /* LLVM/Clang Compiler */
+#define ALIGN(X) __ALIGNED(x)
+#define DEFINE_SECTION(x) __attribute__((section(x)))
 #endif
 
 /**
@@ -82,7 +108,8 @@ static EI_IMPULSE_ERROR inference_tflite_setup(
     TfLiteTensor** output_labels,
     TfLiteTensor** output_scores,
     tflite::MicroInterpreter** micro_interpreter,
-    ei_unique_ptr_t& p_tensor_arena) {
+    ei_unique_ptr_t& p_tensor_arena,
+    void** micro_profiler) {
 
     *ctx_start_us = ei_read_timer_us();
 
@@ -90,7 +117,7 @@ static EI_IMPULSE_ERROR inference_tflite_setup(
 
 #ifdef EI_CLASSIFIER_ALLOCATION_STATIC
     // Assign a no-op lambda to the "free" function in case of static arena
-    static uint8_t tensor_arena[EI_CLASSIFIER_TFLITE_LARGEST_ARENA_SIZE] ALIGN(16);
+    static uint8_t tensor_arena[EI_CLASSIFIER_TFLITE_LARGEST_ARENA_SIZE] ALIGN(16) DEFINE_SECTION(STRINGIZE_VALUE_OF(EI_TENSOR_ARENA_LOCATION));
     p_tensor_arena = ei_unique_ptr_t(tensor_arena, [](void*){});
 #else
     // Create an area of memory to use for input, output, and intermediate arrays.
@@ -138,8 +165,20 @@ static EI_IMPULSE_ERROR inference_tflite_setup(
 #endif
 
     // Build an interpreter to run the model with.
+    // only create profiler when enabled
+#ifdef EI_CLASSIFIER_ENABLE_PROFILER
+    tflite::MicroProfiler *profiler = new tflite::MicroProfiler;
+
     tflite::MicroInterpreter *interpreter = new tflite::MicroInterpreter(
-        model, resolver, tensor_arena, graph_config->arena_size);
+        model, resolver, tensor_arena, graph_config->arena_size, nullptr, profiler);
+
+    *micro_profiler = (void*)profiler;
+#else
+    tflite::MicroInterpreter *interpreter = new tflite::MicroInterpreter(
+        model, resolver, tensor_arena, graph_config->arena_size, nullptr, nullptr);
+
+    micro_profiler = nullptr;
+#endif
 
     *micro_interpreter = interpreter;
 
@@ -188,8 +227,8 @@ static EI_IMPULSE_ERROR inference_tflite_run(
     tflite::MicroInterpreter* interpreter,
     uint8_t* tensor_arena,
     ei_impulse_result_t *result,
-    bool debug) {
-
+    bool debug,
+    void* micro_profiler) {
 
     // Run inference, and report any error
     TfLiteStatus invoke_status = interpreter->Invoke();
@@ -208,6 +247,18 @@ static EI_IMPULSE_ERROR inference_tflite_run(
     if (debug) {
         ei_printf("Predictions (time: %d ms.):\n", result->timing.classification);
     }
+
+#ifdef EI_CLASSIFIER_ENABLE_PROFILER
+    tflite::MicroProfiler *profiler = (tflite::MicroProfiler*)micro_profiler;
+
+    ei_printf("Profiling per individual OP\n");
+    profiler->LogCsv();
+    ei_printf("\n");
+
+    ei_printf("Profiling per OP group\n");
+    profiler->LogTicksPerTagCsv();
+    ei_printf("\n");
+#endif
 
     EI_IMPULSE_ERROR fill_res = fill_result_struct_from_output_tensor_tflite(
         impulse, block_config, output, labels_tensor, scores_tensor, result, debug);
@@ -248,13 +299,21 @@ EI_IMPULSE_ERROR run_nn_inference_from_dsp(
     ei_unique_ptr_t p_tensor_arena(nullptr, ei_aligned_free);
 
     tflite::MicroInterpreter* interpreter;
+#ifdef EI_CLASSIFIER_ENABLE_PROFILER
+    tflite::MicroProfiler* profiler;
+#else
+    void* profiler = nullptr;
+#endif
+
     EI_IMPULSE_ERROR init_res = inference_tflite_setup(
         config,
         &ctx_start_us,
         &input, &output,
         &output_labels,
         &output_scores,
-        &interpreter, p_tensor_arena);
+        &interpreter,
+        p_tensor_arena,
+        (void**)&profiler);
 
     if (init_res != EI_IMPULSE_OK) {
         return init_res;
@@ -311,6 +370,12 @@ EI_IMPULSE_ERROR run_nn_inference(
     ei_unique_ptr_t p_tensor_arena(nullptr, ei_aligned_free);
 
     tflite::MicroInterpreter* interpreter;
+#ifdef EI_CLASSIFIER_ENABLE_PROFILER
+    tflite::MicroProfiler* profiler;
+#else
+    void* profiler = nullptr;
+#endif
+
     EI_IMPULSE_ERROR init_res = inference_tflite_setup(
         block_config,
         &ctx_start_us,
@@ -318,7 +383,8 @@ EI_IMPULSE_ERROR run_nn_inference(
         &output_labels,
         &output_scores,
         &interpreter,
-        p_tensor_arena);
+        p_tensor_arena,
+        (void**)&profiler);
 
     if (init_res != EI_IMPULSE_OK) {
         return init_res;
@@ -339,7 +405,11 @@ EI_IMPULSE_ERROR run_nn_inference(
         output,
         output_labels,
         output_scores,
-        interpreter, tensor_arena, result, debug);
+        interpreter,
+        tensor_arena,
+        result,
+        debug,
+        profiler);
 
     if (result->copy_output) {
         auto output_res = fill_output_matrix_from_tensor(output, fmatrix[impulse->dsp_blocks_size + learn_block_index].matrix);
@@ -380,6 +450,12 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     ei_unique_ptr_t p_tensor_arena(nullptr, ei_aligned_free);
 
     tflite::MicroInterpreter* interpreter;
+#ifdef EI_CLASSIFIER_ENABLE_PROFILER
+    tflite::MicroProfiler* profiler;
+#else
+    void* profiler = nullptr;
+#endif
+
     EI_IMPULSE_ERROR init_res = inference_tflite_setup(
         block_config,
         &ctx_start_us,
@@ -387,7 +463,8 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
         &output_labels,
         &output_scores,
         &interpreter,
-        p_tensor_arena);
+        p_tensor_arena,
+        (void**)&profiler);
 
     if (init_res != EI_IMPULSE_OK) {
         return init_res;
@@ -436,7 +513,9 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
         output_scores,
         interpreter,
         static_cast<uint8_t*>(p_tensor_arena.get()),
-        result, debug);
+        result,
+        debug,
+        profiler);
 
     if (run_res != EI_IMPULSE_OK) {
         return run_res;

@@ -194,6 +194,7 @@ EI_IMPULSE_ERROR run_nn_inference_tflite_full(
 #include <string>
 #include <filesystem>
 #include <stdlib.h>
+#include <map>
 #include "tflite/linux-jetson-nano/libeitrt.h"
 
 #if __APPLE__
@@ -202,7 +203,8 @@ EI_IMPULSE_ERROR run_nn_inference_tflite_full(
 #include <linux/limits.h>
 #endif
 
-EiTrt *ei_trt_handle = NULL;
+EiTrt* ei_trt_handle;
+std::map<int,bool> ei_trt_models_init;
 
 inline bool file_exists(char *model_file_name)
 {
@@ -217,6 +219,7 @@ inline bool file_exists(char *model_file_name)
 
 EI_IMPULSE_ERROR write_model_to_file(
     const ei_impulse_t *impulse,
+    uint32_t learn_block_index,
     char *model_file_name,
     const unsigned char *model,
     size_t model_size,
@@ -251,20 +254,22 @@ EI_IMPULSE_ERROR write_model_to_file(
         snprintf(
             model_file_name,
             PATH_MAX,
-            "/tmp/ei-%d-%d.engine",
+            "/tmp/ei-%d-%d-%d.engine",
             impulse->project_id,
-            impulse->deploy_version);
+            impulse->deploy_version,
+            impulse->learning_blocks[learn_block_index].blockId);
     }
     else {
         std::filesystem::path p(current_exe_path);
         snprintf(
             model_file_name,
             PATH_MAX,
-            "%s/%s-project%d-v%d.engine",
+            "%s/%s-project%d-v%d-%d.engine",
             p.parent_path().c_str(),
             p.stem().c_str(),
             impulse->project_id,
-            impulse->deploy_version);
+            impulse->deploy_version,
+            impulse->learning_blocks[learn_block_index].blockId);
     }
 
     bool fexists = file_exists(model_file_name);
@@ -323,30 +328,43 @@ EI_IMPULSE_ERROR run_nn_inference(
     #error "TensorRT requires an unquantized network"
     #endif
 
-    static bool first_run = true;
     static char model_file_name[PATH_MAX];
-    if (first_run) {
-        write_model_to_file(impulse, model_file_name, graph_config->model, graph_config->model_size);
-        first_run = false;
-    }
+    // writes the model file to filesystem (if and only it doesn't exist)
+    write_model_to_file(impulse, learn_block_index, model_file_name, graph_config->model, graph_config->model_size);
 
-    float *out_data = (float*)ei_malloc(impulse->tflite_output_features_count * sizeof(float));
-    if (out_data == nullptr) {
-        ei_printf("ERR: Cannot allocate memory for output data \n");
-    }
-
-    // lazy initialize tensorRT context
+    // create context for building and executing TensorRT engine(s)
     if (ei_trt_handle == nullptr) {
-        ei_trt_handle = libeitrt::create_EiTrt(model_file_name, debug);
+        ei_trt_handle = libeitrt::create_EiTrt(debug);
+        libeitrt::setMaxWorkspaceSize(ei_trt_handle, 1<<29); // 512 MB
+
+        if (debug) {
+           ei_printf("Using EI TensorRT lib v%d.%d.%d\r\n", libeitrt::getMajorVersion(ei_trt_handle),
+                     libeitrt::getMinorVersion(ei_trt_handle), libeitrt::getPatchVersion(ei_trt_handle));
+        }
     }
+
+    // lazy initialize TensorRT models and warmup only once per model
+    if (ei_trt_models_init.count(learn_block_index) <= 0) {
+        libeitrt::build(ei_trt_handle, learn_block_index, model_file_name);
+        libeitrt::warmUp(ei_trt_handle, learn_block_index, 200);
+        ei_trt_models_init[learn_block_index] = true;
+    }
+
+    int input_size = libeitrt::getInputSize(ei_trt_handle, learn_block_index);
+    int output_size = libeitrt::getOutputSize(ei_trt_handle, learn_block_index);
 
 #if EI_CLASSIFIER_SINGLE_FEATURE_INPUT == 0
     size_t mtx_size = impulse->dsp_blocks_size + impulse->learning_blocks_size;
     ei::matrix_t* matrix = NULL;
 
-    ei::matrix_t combined_matrix(1, impulse->nn_input_frame_size);
-    uint32_t buf_pos = 0;
+    size_t combined_matrix_size = get_feature_size(fmatrix, input_block_ids_size, input_block_ids, mtx_size);
+    if ((input_size >= 0) && ((size_t)input_size != combined_matrix_size)) {
+        ei_printf("ERR: Invalid input features size, %ld given (expected: %d)\n", combined_matrix_size, input_size);
+        return EI_IMPULSE_INVALID_SIZE;
+    }
+    ei::matrix_t combined_matrix(1, combined_matrix_size);
 
+    uint32_t buf_pos = 0;
     for (size_t i = 0; i < input_block_ids_size; i++) {
         size_t cur_mtx = input_block_ids[i];
 
@@ -364,26 +382,38 @@ EI_IMPULSE_ERROR run_nn_inference(
     ei::matrix_t* matrix = fmatrix[0].matrix;
 #endif
 
-    uint64_t ctx_start_us = ei_read_timer_us();
+    // copy input data to gpu
+    libeitrt::copyInputToDevice(ei_trt_handle, learn_block_index, matrix->buffer,
+                                input_size * sizeof(float));
 
-    libeitrt::infer(ei_trt_handle, matrix->buffer, out_data, impulse->tflite_output_features_count);
+    libeitrt::infer(ei_trt_handle, learn_block_index);
 
-    uint64_t ctx_end_us = ei_read_timer_us();
+    float *out_data = (float*)ei_malloc(output_size * sizeof(float));
+    if (out_data == nullptr) {
+        ei_printf("ERR: Cannot allocate memory for output data \n");
+        return EI_IMPULSE_ALLOC_FAILED;
+    }
 
-    result->timing.classification_us = ctx_end_us - ctx_start_us;
+    // copy output data from gpu
+    libeitrt::copyOutputToHost(ei_trt_handle, learn_block_index, out_data,
+                               output_size * sizeof(float));
+
+
+    // get inference time
+    result->timing.classification_us = libeitrt::getInferenceUs(ei_trt_handle, learn_block_index);
     result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     if (result->copy_output) {
         matrix_t *output_matrix = fmatrix[impulse->dsp_blocks_size + learn_block_index].matrix;
         const size_t matrix_els = output_matrix->rows * output_matrix->cols;
 
-        if (impulse->tflite_output_features_count != matrix_els) {
-                ei_printf("ERR: output tensor has size %d, but input matrix has has size %d\n",
-                    impulse->tflite_output_features_count, (int)matrix_els);
+        if ((output_size >= 0) && ((size_t)output_size != matrix_els)) {
+                ei_printf("ERR: output tensor has size %d, but input matrix has size %d\n",
+                    output_size, (int)matrix_els);
                 ei_free(out_data);
                 return EI_IMPULSE_INVALID_SIZE;
         }
-        memcpy(output_matrix->buffer, out_data, impulse->tflite_output_features_count * sizeof(float));
+        memcpy(output_matrix->buffer, out_data, output_size * sizeof(float));
         ei_free(out_data);
         return EI_IMPULSE_OK;
     }
@@ -437,6 +467,16 @@ EI_IMPULSE_ERROR run_nn_inference(
                 break;
             case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV4: {
                 fill_res = fill_result_struct_f32_tao_yolov4(
+                    impulse,
+                    block_config,
+                    result,
+                    out_data,
+                    impulse->tflite_output_features_count,
+                    debug);
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLO_PRO: {
+                fill_res = fill_result_struct_f32_yolo_pro(
                     impulse,
                     block_config,
                     result,

@@ -1,6 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2019-2023 Arm Limited and/or its affiliates <open-source-office@arm.com>
- *
+ * SPDX-FileCopyrightText: Copyright 2019-2024 Arm Limited and/or its affiliates <open-source-office@arm.com>
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the License); you may
@@ -32,39 +31,13 @@ extern "C" {
 #endif
 
 /******************************************************************************
- * Defines
- ******************************************************************************/
-
-// NOTE: Deprecated
-#ifndef ETHOSU_PMU_NCOUNTERS
-#define ETHOSU_PMU_NCOUNTERS 4
-#endif
-
-/******************************************************************************
- * Types
- ******************************************************************************/
-struct NPU_REG; // Forward declare, to be implemented by each device
-
-struct ethosu_device
-{
-    volatile struct NPU_REG *reg; // Register map
-    uint32_t secure;
-    uint32_t privileged;
-};
-
-/******************************************************************************
  * Prototypes
  ******************************************************************************/
 
 /**
  * Initialize the device.
  */
-struct ethosu_device *ethosu_dev_init(void *const base_address, uint32_t secure_enable, uint32_t privilege_enable);
-
-/**
- * Deinitialize the device.
- */
-void ethosu_dev_deinit(struct ethosu_device *dev);
+bool ethosu_dev_init(struct ethosu_device *dev, void *base_address, uint32_t secure_enable, uint32_t privilege_enable);
 
 /**
  * Initialize AXI settings for device.

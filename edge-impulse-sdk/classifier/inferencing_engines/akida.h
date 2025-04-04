@@ -204,7 +204,7 @@ bool init_akida(const uint8_t *model_arr, size_t model_arr_size, bool debug)
     // get list of available devices
     py::list devices = akida.attr("devices")();
     if(devices.empty() == true) {
-        ei_printf("ERR: AKD1000 device not found!\n");
+        ei_printf("ERR: Akida device not found!\n");
         return false;
     }
 
@@ -215,16 +215,18 @@ bool init_akida(const uint8_t *model_arr, size_t model_arr_size, bool debug)
     else {
         device = devices[0];
     }
-    //TODO: check if selected device is correct (compare versions)
-    // enable power measurement
-    device.attr("soc").attr("power_measurement_enabled") = true;
+
+    // TODO: check if selected device is correct (compare versions)
+    // power measurement not avaliable on akida1500, commenting out for now
+    //device.attr("soc").attr("power_measurement_enabled") = true;
+
 
     // map model to the device
     try {
         model.attr("map")(device);
     }
     catch (py::error_already_set &e) {
-        ei_printf("ERR: Can't load the ML model onto the AKD1000 SoC\n");
+        ei_printf("ERR: Can't load the ML model onto the Akida SoC\n");
         ei_printf("ERR: %s\n", e.what());
         return false;
     }
@@ -283,6 +285,7 @@ EI_IMPULSE_ERROR run_nn_inference(
     void *config_ptr,
     bool debug)
 {
+
     ei_learning_block_config_tflite_graph_t *block_config = ((ei_learning_block_config_tflite_graph_t*)config_ptr);
     ei_config_tflite_graph_t *graph_config = ((ei_config_tflite_graph_t*)block_config->graph_config);
 
@@ -340,7 +343,7 @@ EI_IMPULSE_ERROR run_nn_inference(
         }
     }
 
-    // Run inference on AKD1000
+    // Run inference on Akida
     uint64_t ctx_start_us = ei_read_timer_us();
     py::array_t<float> potentials;
     try {
@@ -358,7 +361,7 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     if(debug) {
         std::string ret_str = py::str(potentials).cast<std::string>();
-        ei_printf("AKD1000 raw output:\n%s\n", ret_str.c_str());
+        ei_printf("Akida raw output:\n%s\n", ret_str.c_str());
     }
 
     // convert to vector of floats to make further processing much easier
@@ -392,14 +395,16 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     float active_power = 0;
 #if (defined(EI_CLASSIFIER_USE_AKIDA_HARDWARE))
+    // the ADK1500 does not have power measurements, commenting out for now
+    // TODO: check betweewn Akida1000 and Akida1500 or reanble when available
     // power measurement post-processing
-    float floor_power = device.attr("soc").attr("power_meter").attr("floor").cast<float>();
-    py::array pwr_events = device.attr("soc").attr("power_meter").attr("events")();
-    auto events = pwr_events.mutable_unchecked<py::object>();
-    for (py::ssize_t i = 0; i < events.shape(0); i++) {
-        active_power += events(i).attr("power").cast<float>();
-    }
-    active_power = (active_power/pwr_events.size()) - floor_power;
+    //float floor_power = device.attr("soc").attr("power_meter").attr("floor").cast<float>();
+    //py::array pwr_events = device.attr("soc").attr("power_meter").attr("events")();
+    //auto events = pwr_events.mutable_unchecked<py::object>();
+    //for (py::ssize_t i = 0; i < events.shape(0); i++) {
+    //    active_power += events(i).attr("power").cast<float>();
+    //}
+    //active_power = (active_power/pwr_events.size()) - floor_power;
 #endif
 
     result->timing.classification_us = ctx_end_us - ctx_start_us;

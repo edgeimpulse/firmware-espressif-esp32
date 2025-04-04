@@ -1,6 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright 2019-2023 Arm Limited and/or its affiliates <open-source-office@arm.com>
- *
+ * SPDX-FileCopyrightText: Copyright 2019-2024 Arm Limited and/or its affiliates <open-source-office@arm.com>
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the License); you may
@@ -25,10 +24,14 @@
 #include "ethosu_device.h"
 #include "ethosu_log.h"
 
-#ifdef ETHOSU55
+#if defined(ETHOSU55)
 #include "ethosu_config_u55.h"
-#else
+#elif defined(ETHOSU65)
 #include "ethosu_config_u65.h"
+#elif defined(ETHOSU85)
+#include "ethosu_config_u85.h"
+#else
+#error "Missing device type macro"
 #endif
 
 #include <assert.h>
@@ -51,6 +54,7 @@
 #define DRIVER_ACTION_LENGTH_32_BIT_WORD 1
 #define ETHOSU_FOURCC ('1' << 24 | 'P' << 16 | 'O' << 8 | 'C') // "Custom Operator Payload 1"
 
+#define SCRATCH_BASE_ADDR_INDEX 1
 #define FAST_MEMORY_BASE_ADDR_INDEX 2
 
 /******************************************************************************
@@ -161,7 +165,8 @@ static void *ethosu_semaphore;
 
 void *__attribute__((weak)) ethosu_mutex_create(void)
 {
-    return NULL;
+    static uint8_t mutex_placeholder;
+    return &mutex_placeholder;
 }
 
 void __attribute__((weak)) ethosu_mutex_destroy(void *mutex)
@@ -198,12 +203,21 @@ void __attribute__((weak)) ethosu_semaphore_destroy(void *sem)
 }
 
 // Baremetal simulation of waiting/sleeping for and then taking a semaphore using intrisics
-int __attribute__((weak)) ethosu_semaphore_take(void *sem)
+int __attribute__((weak)) ethosu_semaphore_take(void *sem, uint64_t timeout)
 {
+    UNUSED(timeout);
+    // Baremetal pseudo-example on how to trigger a timeout:
+    // if (timeout != ETHOSU_SEMAPHORE_WAIT_FOREVER) {
+    //     setup_a_timer_to_call_SEV_after_time(timeout);
+    // }
     struct ethosu_semaphore_t *s = sem;
     while (s->count == 0)
     {
         __WFE();
+        // Baremetal pseudo-example check if timeout triggered:
+        // if (SEV_timer_triggered()) {
+        //     return -1;
+        // }
     }
     s->count--;
     return 0;
@@ -246,7 +260,7 @@ static void ethosu_register_driver(struct ethosu_driver *drv)
 
     ethosu_semaphore_give(ethosu_semaphore);
 
-    LOG_INFO("New NPU driver registered (handle: 0x%p, NPU: 0x%p)", drv, drv->dev->reg);
+    LOG_INFO("New NPU driver registered (handle: 0x%p, NPU: 0x%p)", drv, drv->dev.reg);
 }
 
 static int ethosu_deregister_driver(struct ethosu_driver *drv)
@@ -264,7 +278,7 @@ static int ethosu_deregister_driver(struct ethosu_driver *drv)
         {
             *prev = curr->next;
             LOG_INFO("NPU driver handle %p deregistered.", drv);
-            ethosu_semaphore_take(ethosu_semaphore);
+            ethosu_semaphore_take(ethosu_semaphore, ETHOSU_SEMAPHORE_WAIT_FOREVER);
             break;
         }
 
@@ -292,7 +306,7 @@ static int handle_optimizer_config(struct ethosu_driver *drv, struct opt_cfg_s c
 {
     LOG_INFO("Optimizer release nbr: %u patch: %u", opt_cfg_p->da_data.rel_nbr, opt_cfg_p->da_data.patch_nbr);
 
-    if (ethosu_dev_verify_optimizer_config(drv->dev, opt_cfg_p->cfg, opt_cfg_p->id) != true)
+    if (ethosu_dev_verify_optimizer_config(&drv->dev, opt_cfg_p->cfg, opt_cfg_p->id) != true)
     {
         return -1;
     }
@@ -302,8 +316,7 @@ static int handle_optimizer_config(struct ethosu_driver *drv, struct opt_cfg_s c
 
 static int handle_command_stream(struct ethosu_driver *drv, const uint8_t *cmd_stream, const int cms_length)
 {
-    uint32_t cms_bytes       = cms_length * BYTES_IN_32_BITS;
-    ptrdiff_t cmd_stream_ptr = (ptrdiff_t)cmd_stream;
+    uint32_t cms_bytes = cms_length * BYTES_IN_32_BITS;
 
     LOG_INFO("handle_command_stream: cmd_stream=%p, cms_length %d", cmd_stream, cms_length);
 
@@ -313,32 +326,38 @@ static int handle_command_stream(struct ethosu_driver *drv, const uint8_t *cmd_s
         return -1;
     }
 
-    // Verify 16 byte alignment for base address'
+    // Verify minimum 16 byte alignment for base address'
     for (int i = 0; i < drv->job.num_base_addr; i++)
     {
         if (0 != (drv->job.base_addr[i] & MASK_16_BYTE_ALIGN))
         {
-            LOG_ERR("Base addr %d: 0x%llx not aligned to 16 bytes", i, drv->job.base_addr[i]);
+            LOG_ERR("Base addr %d: 0x%" PRIx64 "not aligned to 16 bytes", i, drv->job.base_addr[i]);
             return -1;
         }
     }
 
-    // Flush the cache if available on CPU.
-    // The upcasting to uin32_t* is ok since the pointer never is dereferenced.
-    // The base_addr_size is null if invoking from prior to invoke_V2, in that case
-    // the whole cache is being flushed.
+    // DEPRECATION WARNING:
+    // It is advised against letting the driver handle flushing/cleaning of the cache, as this will
+    // be done for every invokation. It is up to the application code to ensure cache coherency
+    // before invoking an inference.
+    //
+    // The cache flush call below will flush/clean every base pointer marked in the flush mask.
+    // Typically only the scratch tensor contains RW data shared between the CPU and NPU, and needs
+    // to be flushed/cleaned before invoking an inference.
+    //
+    // It is recommended to not implement/override the default empty ethosu_flush_dcache() weak
+    // function.
+    //
+    // NOTE: It is required that any base pointer marked for cache flush/clean is aligned to the
+    // cache line size.
 
-    if (drv->job.base_addr_size != NULL)
+    // Flush/clean the cache for base pointers marked in the mask
+    for (int i = 0; i < drv->job.num_base_addr; i++)
     {
-        ethosu_flush_dcache((uint32_t *)cmd_stream_ptr, cms_bytes);
-        for (int i = 0; i < drv->job.num_base_addr; i++)
+        if (drv->basep_flush_mask & (1 << i))
         {
             ethosu_flush_dcache((uint32_t *)(uintptr_t)drv->job.base_addr[i], drv->job.base_addr_size[i]);
         }
-    }
-    else
-    {
-        ethosu_flush_dcache(NULL, 0);
     }
 
     // Request power gating disabled during inference run
@@ -354,7 +373,7 @@ static int handle_command_stream(struct ethosu_driver *drv, const uint8_t *cmd_s
     ethosu_inference_begin(drv, drv->job.user_arg);
 
     // Execute the command stream
-    ethosu_dev_run_command_stream(drv->dev, cmd_stream, cms_bytes, drv->job.base_addr, drv->job.num_base_addr);
+    ethosu_dev_run_command_stream(&drv->dev, cmd_stream, cms_bytes, drv->job.base_addr, drv->job.num_base_addr);
 
     return 0;
 }
@@ -364,19 +383,27 @@ static int handle_command_stream(struct ethosu_driver *drv, const uint8_t *cmd_s
  ******************************************************************************/
 void __attribute__((weak)) ethosu_irq_handler(struct ethosu_driver *drv)
 {
-    LOG_DEBUG("Got interrupt from Ethos-U");
-
-    drv->job.state = ETHOSU_JOB_DONE;
-    if (!ethosu_dev_handle_interrupt(drv->dev))
+    // Prevent race condition where interrupt triggered after a timeout waiting
+    // for semaphore, but before NPU is reset.
+    if (drv->job.result == ETHOSU_JOB_RESULT_TIMEOUT)
     {
-        drv->status_error = true;
+        return;
     }
+
+    drv->job.state  = ETHOSU_JOB_DONE;
+    drv->job.result = ethosu_dev_handle_interrupt(&drv->dev) ? ETHOSU_JOB_RESULT_OK : ETHOSU_JOB_RESULT_ERROR;
     ethosu_semaphore_give(drv->semaphore);
 }
 
 /******************************************************************************
  * Functions API
  ******************************************************************************/
+
+void ethosu_set_basep_cache_mask(struct ethosu_driver *drv, uint8_t flush_mask, uint8_t invalidate_mask)
+{
+    drv->basep_flush_mask      = flush_mask;
+    drv->basep_invalidate_mask = invalidate_mask;
+}
 
 int ethosu_init(struct ethosu_driver *drv,
                 void *const base_address,
@@ -396,6 +423,11 @@ int ethosu_init(struct ethosu_driver *drv,
     if (!ethosu_mutex)
     {
         ethosu_mutex = ethosu_mutex_create();
+        if (!ethosu_mutex)
+        {
+            LOG_ERR("Failed to create global driver mutex");
+            return -1;
+        }
     }
 
     if (!ethosu_semaphore)
@@ -408,14 +440,16 @@ int ethosu_init(struct ethosu_driver *drv,
         }
     }
 
-    drv->fast_memory           = (uint32_t)fast_memory;
+    drv->fast_memory           = (uintptr_t)fast_memory;
     drv->fast_memory_size      = fast_memory_size;
     drv->power_request_counter = 0;
 
-    // Initialize the device and set requested security state and privilege mode
-    drv->dev = ethosu_dev_init(base_address, secure_enable, privilege_enable);
+    // Set default cache flush/clean and invalidate base pointer masks to invalidate the scratch
+    // base pointer where Vela for TFLM is placing the scratch buffer (tensor arena)
+    ethosu_set_basep_cache_mask(drv, (1 << SCRATCH_BASE_ADDR_INDEX), (1 << SCRATCH_BASE_ADDR_INDEX));
 
-    if (drv->dev == NULL)
+    // Initialize the device and set requested security state and privilege mode
+    if (!ethosu_dev_init(&drv->dev, base_address, secure_enable, privilege_enable))
     {
         LOG_ERR("Failed to initialize Ethos-U device");
         return -1;
@@ -425,12 +459,8 @@ int ethosu_init(struct ethosu_driver *drv,
     if (!drv->semaphore)
     {
         LOG_ERR("Failed to create driver semaphore");
-        ethosu_dev_deinit(drv->dev);
-        drv->dev = NULL;
         return -1;
     }
-
-    drv->status_error = false;
 
     ethosu_reset_job(drv);
     ethosu_register_driver(drv);
@@ -442,21 +472,19 @@ void ethosu_deinit(struct ethosu_driver *drv)
 {
     ethosu_deregister_driver(drv);
     ethosu_semaphore_destroy(drv->semaphore);
-    ethosu_dev_deinit(drv->dev);
-    drv->dev = NULL;
 }
 
 int ethosu_soft_reset(struct ethosu_driver *drv)
 {
     // Soft reset the NPU
-    if (ethosu_dev_soft_reset(drv->dev) != ETHOSU_SUCCESS)
+    if (ethosu_dev_soft_reset(&drv->dev) != ETHOSU_SUCCESS)
     {
         LOG_ERR("Failed to soft-reset NPU");
         return -1;
     }
 
     // Update power and clock gating after the soft reset
-    ethosu_dev_set_clock_and_power(drv->dev,
+    ethosu_dev_set_clock_and_power(&drv->dev,
                                    drv->power_request_counter > 0 ? ETHOSU_CLOCK_Q_DISABLE : ETHOSU_CLOCK_Q_ENABLE,
                                    drv->power_request_counter > 0 ? ETHOSU_POWER_Q_DISABLE : ETHOSU_POWER_Q_ENABLE);
 
@@ -491,7 +519,7 @@ void ethosu_release_power(struct ethosu_driver *drv)
         // Decrement ref counter and enable power gating if no requests remain
         if (--drv->power_request_counter == 0)
         {
-            ethosu_dev_set_clock_and_power(drv->dev, ETHOSU_CLOCK_Q_ENABLE, ETHOSU_POWER_Q_ENABLE);
+            ethosu_dev_set_clock_and_power(&drv->dev, ETHOSU_CLOCK_Q_ENABLE, ETHOSU_POWER_Q_ENABLE);
         }
     }
 }
@@ -507,7 +535,7 @@ void ethosu_get_driver_version(struct ethosu_driver_version *ver)
 void ethosu_get_hw_info(struct ethosu_driver *drv, struct ethosu_hw_info *hw)
 {
     assert(hw != NULL);
-    ethosu_dev_get_hw_info(drv->dev, hw);
+    ethosu_dev_get_hw_info(&drv->dev, hw);
 }
 
 int ethosu_wait(struct ethosu_driver *drv, bool block)
@@ -529,46 +557,64 @@ int ethosu_wait(struct ethosu_driver *drv, bool block)
         }
         // fall through
     case ETHOSU_JOB_DONE:
+        // Invalidate cache for base pointers marked to be invalidated, typically the
+        // scratch tensor base pointer containing the tensor arena.
+        // NOTE: Requires the base pointers to be cache line size aligned.
+        for (int i = 0; i < drv->job.num_base_addr; i++)
+        {
+            if (drv->basep_invalidate_mask & (1 << i))
+            {
+                ethosu_invalidate_dcache((uint32_t *)(uintptr_t)drv->job.base_addr[i], drv->job.base_addr_size[i]);
+            }
+        }
+
         // Wait for interrupt in blocking mode. In non-blocking mode
         // the interrupt has already triggered
-        ethosu_semaphore_take(drv->semaphore);
+        ret = ethosu_semaphore_take(drv->semaphore, ETHOSU_SEMAPHORE_WAIT_INFERENCE);
+        if (ret < 0)
+        {
+            drv->job.result = ETHOSU_JOB_RESULT_TIMEOUT;
 
-        // Inference done callback
+            // There's a race where the NPU interrupt can have fired between semaphore
+            // timing out and setting the result above (checked in interrupt handler).
+            // By checking if the job state has been changed (only set to DONE by interrupt
+            // handler), we know if the interrupt handler has run, if so decrement the
+            // semaphore count by one (given in interrupt handler).
+            if (drv->job.state == ETHOSU_JOB_DONE)
+            {
+                drv->job.result = ETHOSU_JOB_RESULT_TIMEOUT; // Reset back to timeout
+                ethosu_semaphore_take(drv->semaphore, ETHOSU_SEMAPHORE_WAIT_INFERENCE);
+            }
+        }
+
+        // Inference done callback - always called even in case of timeout
         ethosu_inference_end(drv, drv->job.user_arg);
 
-        // Relase power gating disabled requirement
+        // Release power gating disabled requirement
         ethosu_release_power(drv);
 
         // Check NPU and interrupt status
-        if (drv->status_error)
+        if (drv->job.result)
         {
-            LOG_ERR("NPU error(s) occured during inference.");
-            ethosu_dev_print_err_status(drv->dev);
-
-            // Reset the NPU
-            (void)ethosu_soft_reset(drv);
-            // NPU is no longer in error state
-            drv->status_error = false;
-
-            ret = -1;
-        }
-
-        if (ret == 0)
-        {
-            // Invalidate cache
-            if (drv->job.base_addr_size != NULL)
+            if (drv->job.result == ETHOSU_JOB_RESULT_ERROR)
             {
-                for (int i = 0; i < drv->job.num_base_addr; i++)
-                {
-                    ethosu_invalidate_dcache((uint32_t *)(uintptr_t)drv->job.base_addr[i], drv->job.base_addr_size[i]);
-                }
+                LOG_ERR("NPU error(s) occured during inference.");
+                ethosu_dev_print_err_status(&drv->dev);
             }
             else
             {
-                ethosu_invalidate_dcache(NULL, 0);
+                LOG_ERR("NPU inference timed out.");
             }
 
+            // Reset the NPU
+            (void)ethosu_soft_reset(drv);
+
+            ret = -1;
+        }
+        else
+        {
             LOG_DEBUG("Inference finished successfully...");
+            ret = 0;
         }
 
         // Reset internal job (state resets to IDLE)
@@ -594,6 +640,9 @@ int ethosu_invoke_async(struct ethosu_driver *drv,
                         const int num_base_addr,
                         void *user_arg)
 {
+    assert(custom_data_ptr != NULL);
+    assert(base_addr != NULL);
+    assert(base_addr_size != NULL);
 
     const struct cop_data_s *data_ptr = custom_data_ptr;
     const struct cop_data_s *data_end = (struct cop_data_s *)((ptrdiff_t)custom_data_ptr + custom_data_size);
@@ -630,12 +679,11 @@ int ethosu_invoke_async(struct ethosu_driver *drv,
     data_ptr++;
 
     // Adjust base address to fast memory area
-    if (drv->fast_memory != 0 && num_base_addr >= FAST_MEMORY_BASE_ADDR_INDEX)
+    if (drv->fast_memory != 0 && num_base_addr > FAST_MEMORY_BASE_ADDR_INDEX)
     {
-
-        if (base_addr_size != NULL && base_addr_size[FAST_MEMORY_BASE_ADDR_INDEX] > drv->fast_memory_size)
+        if (base_addr_size[FAST_MEMORY_BASE_ADDR_INDEX] > drv->fast_memory_size)
         {
-            LOG_ERR("Fast memory area too small. fast_memory_size=%u, base_addr_size=%u",
+            LOG_ERR("Fast memory area too small. fast_memory_size=%zu, base_addr_size=%zu",
                     drv->fast_memory_size,
                     base_addr_size[FAST_MEMORY_BASE_ADDR_INDEX]);
             goto err;
@@ -643,8 +691,6 @@ int ethosu_invoke_async(struct ethosu_driver *drv,
 
         base_addr[FAST_MEMORY_BASE_ADDR_INDEX] = drv->fast_memory;
     }
-
-    drv->status_error = false;
 
     // Parse Custom Operator Payload data
     while (data_ptr < data_end)
@@ -713,7 +759,7 @@ struct ethosu_driver *ethosu_reserve_driver(void)
     struct ethosu_driver *drv = NULL;
 
     LOG_INFO("Acquiring NPU driver handle");
-    ethosu_semaphore_take(ethosu_semaphore); // This is meant to block until available
+    ethosu_semaphore_take(ethosu_semaphore, ETHOSU_SEMAPHORE_WAIT_FOREVER); // This is meant to block until available
 
     ethosu_mutex_lock(ethosu_mutex);
     drv = registered_drivers;
@@ -752,7 +798,6 @@ void ethosu_release_driver(struct ethosu_driver *drv)
                 drv->power_request_counter = 0;
                 ethosu_soft_reset(drv);
                 ethosu_reset_job(drv);
-                drv->status_error = false;
             }
         }
 
