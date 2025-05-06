@@ -277,12 +277,12 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     // smart pointer to features array
     std::unique_ptr<ei_feature_t[]> features_ptr(new ei_feature_t[block_num]);
     ei_feature_t* features = features_ptr.get();
-    
+
     if (features == nullptr) {
         ei_printf("ERR: Out of memory, can't allocate features\n");
         return EI_IMPULSE_ALLOC_FAILED;
     }
-    
+
     memset(features, 0, sizeof(ei_feature_t) * block_num);
 
     // have it outside of the loop to avoid going out of scope
@@ -304,12 +304,12 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
 
         matrix_ptrs[ix] = std::unique_ptr<ei::matrix_t>(new ei::matrix_t(1, block.n_output_features));
         if (matrix_ptrs[ix] == nullptr) {
-            ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", ix);
+            ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", (unsigned long)ix);
             return EI_IMPULSE_ALLOC_FAILED;
         }
 
         if (matrix_ptrs[ix]->buffer == nullptr) {
-            ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", ix);
+            ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", (unsigned long)ix);
             delete[] matrix_ptrs;
             return EI_IMPULSE_ALLOC_FAILED;
         }
@@ -553,18 +553,18 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
         for (size_t ix = 0; ix < impulse->dsp_blocks_size; ix++) {
             ei_model_dsp_t block = impulse->dsp_blocks[ix];
             matrix_ptrs[ix] = std::unique_ptr<ei::matrix_t>(new ei::matrix_t(1, block.n_output_features));
-            
+
             if (matrix_ptrs[ix] == nullptr) {
-                ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", ix);
+                ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", (unsigned long)ix);
                 return EI_IMPULSE_ALLOC_FAILED;
             }
 
             if (matrix_ptrs[ix]->buffer == nullptr) {
-                ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", ix);
+                ei_printf("ERR: Out of memory, can't allocate matrix_ptrs[%lu]\n", (unsigned long)ix);
                 delete[] matrix_ptrs;
                 return EI_IMPULSE_ALLOC_FAILED;
             }
-        
+
             features[ix].matrix = matrix_ptrs[ix].get();
             features[ix].blockId = block.blockId;
 

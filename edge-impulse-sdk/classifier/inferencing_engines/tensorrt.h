@@ -36,163 +36,30 @@
 #define _EI_CLASSIFIER_INFERENCING_ENGINE_TENSORRT_H_
 
 #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSORRT)
-
-#if (EI_CLASSIFIER_HAS_ANOMALY == EI_ANOMALY_TYPE_VISUAL_GMM)
-
-#include <thread>
-#include "tensorflow-lite/tensorflow/lite/c/common.h"
-#include "tensorflow-lite/tensorflow/lite/interpreter.h"
-#include "tensorflow-lite/tensorflow/lite/kernels/register.h"
-#include "tensorflow-lite/tensorflow/lite/model.h"
-#include "tensorflow-lite/tensorflow/lite/optional_debug_tools.h"
-#include "edge-impulse-sdk/tensorflow/lite/kernels/custom/tree_ensemble_classifier.h"
-#include "edge-impulse-sdk/classifier/ei_model_types.h"
-#include "edge-impulse-sdk/classifier/inferencing_engines/tflite_helper.h"
-
-typedef struct {
-    std::unique_ptr<tflite::FlatBufferModel> model;
-    std::unique_ptr<tflite::Interpreter> interpreter;
-} ei_tflite_state_t;
-
-std::map<uint32_t, ei_tflite_state_t*> ei_tflite_instances;
-
-/**
- * Construct a tflite interpreter (creates it if needed)
- */
-static EI_IMPULSE_ERROR get_interpreter(ei_learning_block_config_tflite_graph_t *block_config, tflite::Interpreter **interpreter) {
-    // not in the map yet...
-    if (!ei_tflite_instances.count(block_config->block_id)) {
-        ei_config_tflite_graph_t *graph_config = (ei_config_tflite_graph_t*)block_config->graph_config;
-        ei_tflite_state_t *new_state = new ei_tflite_state_t();
-
-        auto new_model = tflite::FlatBufferModel::BuildFromBuffer((const char*)graph_config->model, graph_config->model_size);
-        new_state->model = std::move(new_model);
-        if (!new_state->model) {
-            ei_printf("Failed to build TFLite model from buffer\n");
-            return EI_IMPULSE_TFLITE_ERROR;
-        }
-
-        tflite::ops::builtin::BuiltinOpResolver resolver;
-#if EI_CLASSIFIER_HAS_TREE_ENSEMBLE_CLASSIFIER
-        resolver.AddCustom("TreeEnsembleClassifier",
-            tflite::ops::custom::Register_TREE_ENSEMBLE_CLASSIFIER());
-#endif
-        tflite::InterpreterBuilder builder(*new_state->model, resolver);
-        builder(&new_state->interpreter);
-
-        if (!new_state->interpreter) {
-            ei_printf("Failed to construct interpreter\n");
-            return EI_IMPULSE_TFLITE_ERROR;
-        }
-
-        if (new_state->interpreter->AllocateTensors() != kTfLiteOk) {
-            ei_printf("AllocateTensors failed\n");
-            return EI_IMPULSE_TFLITE_ERROR;
-        }
-
-        int hw_thread_count = (int)std::thread::hardware_concurrency();
-        hw_thread_count -= 1; // leave one thread free for the other application
-        if (hw_thread_count < 1) {
-            hw_thread_count = 1;
-        }
-
-        if (new_state->interpreter->SetNumThreads(hw_thread_count) != kTfLiteOk) {
-            ei_printf("SetNumThreads failed\n");
-            return EI_IMPULSE_TFLITE_ERROR;
-        }
-
-        ei_tflite_instances.insert(std::make_pair(block_config->block_id, new_state));
-    }
-
-    auto tflite_state = ei_tflite_instances[block_config->block_id];
-    *interpreter = tflite_state->interpreter.get();
-    return EI_IMPULSE_OK;
-}
-
-EI_IMPULSE_ERROR run_nn_inference_tflite_full(
-    const ei_impulse_t *impulse,
-    ei_feature_t *fmatrix,
-    uint32_t learn_block_index,
-    uint32_t* input_block_ids,
-    uint32_t input_block_ids_size,
-    ei_impulse_result_t *result,
-    void *config_ptr,
-    bool debug = false)
-{
-    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
-
-    tflite::Interpreter *interpreter;
-    auto interpreter_ret = get_interpreter(block_config, &interpreter);
-    if (interpreter_ret != EI_IMPULSE_OK) {
-        return interpreter_ret;
-    }
-
-    TfLiteTensor *input = interpreter->input_tensor(0);
-    TfLiteTensor *output = interpreter->output_tensor(block_config->output_data_tensor);
-
-    if (!input) {
-        return EI_IMPULSE_INPUT_TENSOR_WAS_NULL;
-    }
-    if (!output) {
-        return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
-    }
-
-    size_t mtx_size = impulse->dsp_blocks_size + impulse->learning_blocks_size;
-    auto input_res = fill_input_tensor_from_matrix(fmatrix, input, input_block_ids, input_block_ids_size, mtx_size);
-    if (input_res != EI_IMPULSE_OK) {
-        return input_res;
-    }
-
-    uint64_t ctx_start_us = ei_read_timer_us();
-
-    TfLiteStatus status = interpreter->Invoke();
-    if (status != kTfLiteOk) {
-        ei_printf("ERR: interpreter->Invoke() failed with %d\n", status);
-        return EI_IMPULSE_TFLITE_ERROR;
-    }
-
-    uint64_t ctx_end_us = ei_read_timer_us();
-
-    result->timing.classification_us = ctx_end_us - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
-
-    if (result->copy_output) {
-        auto output_res = fill_output_matrix_from_tensor(output, fmatrix[impulse->dsp_blocks_size + learn_block_index].matrix);
-        if (output_res != EI_IMPULSE_OK) {
-            return output_res;
-        }
-    }
-
-    if (debug) {
-        ei_printf("Predictions (time: %d ms.):\n", result->timing.classification);
-    }
-
-    TfLiteTensor *scores_tensor = interpreter->output_tensor(block_config->output_score_tensor);
-    TfLiteTensor *labels_tensor = interpreter->output_tensor(block_config->output_labels_tensor);
-
-    EI_IMPULSE_ERROR fill_res = fill_result_struct_from_output_tensor_tflite(
-        impulse, block_config, output, labels_tensor, scores_tensor, result, debug);
-
-    if (fill_res != EI_IMPULSE_OK) {
-        return fill_res;
-    }
-
-    // on Linux we're not worried about free'ing (for now)
-
-    return EI_IMPULSE_OK;
-}
-#endif // (EI_CLASSIFIER_HAS_ANOMALY == EI_ANOMALY_TYPE_VISUAL_GMM)
-
 #include "model-parameters/model_metadata.h"
 
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 
+#if defined(__GNUC__)
+    #if (__GNUC__ > 8)
+        // Code for GCC version 8 or higher
+        // has std::filesystem
+        #include <filesystem>
+        namespace fs = std::filesystem;
+    #else
+        // Code for GCC version lower than 8
+        #include <experimental/filesystem>
+        namespace fs = std::experimental::filesystem;
+    #endif
+#else
+    #error "This code requires GCC."
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <string>
-#include <filesystem>
 #include <stdlib.h>
 #include <map>
 #include "tflite/linux-jetson-nano/libeitrt.h"
@@ -260,7 +127,7 @@ EI_IMPULSE_ERROR write_model_to_file(
             impulse->learning_blocks[learn_block_index].blockId);
     }
     else {
-        std::filesystem::path p(current_exe_path);
+        fs::path p(current_exe_path);
         snprintf(
             model_file_name,
             PATH_MAX,
@@ -317,13 +184,6 @@ EI_IMPULSE_ERROR run_nn_inference(
     ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
     ei_config_tflite_graph_t *graph_config = (ei_config_tflite_graph_t*)block_config->graph_config;
 
-#if (EI_CLASSIFIER_HAS_ANOMALY == EI_ANOMALY_TYPE_VISUAL_GMM)
-    if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY
-       && !result->copy_output) {
-        return run_nn_inference_tflite_full(impulse, fmatrix, learn_block_index, input_block_ids, input_block_ids_size, result, config_ptr);
-    }
-#endif
-
     #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
     #error "TensorRT requires an unquantized network"
     #endif
@@ -338,8 +198,8 @@ EI_IMPULSE_ERROR run_nn_inference(
         libeitrt::setMaxWorkspaceSize(ei_trt_handle, 1<<29); // 512 MB
 
         if (debug) {
-           ei_printf("Using EI TensorRT lib v%d.%d.%d\r\n", libeitrt::getMajorVersion(ei_trt_handle),
-                     libeitrt::getMinorVersion(ei_trt_handle), libeitrt::getPatchVersion(ei_trt_handle));
+            ei_printf("Using EI TensorRT lib v%d.%d.%d\r\n", libeitrt::getMajorVersion(ei_trt_handle),
+                      libeitrt::getMinorVersion(ei_trt_handle), libeitrt::getPatchVersion(ei_trt_handle));
         }
     }
 

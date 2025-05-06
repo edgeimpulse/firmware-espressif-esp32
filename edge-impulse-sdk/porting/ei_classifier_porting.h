@@ -363,16 +363,10 @@ void ei_free(void *ptr);
 #endif
 // End load porting layer depending on target
 
-// Additional configuration for specific architecture
-#if defined(__CORTEX_M)
+// Additional configuration for specific architecture for Armv8.1-M architecture ie CM55 and CM85
+#if defined (__ARM_ARCH ) && (__ARM_ARCH >= 8)
 
-#if (__CORTEX_M == 55U)
-#define EI_MAX_OVERFLOW_BUFFER_COUNT	15
-#endif
-
-#if (__CORTEX_M == 85U)
 #define EI_MAX_OVERFLOW_BUFFER_COUNT	50
-#endif
 
 #endif
 

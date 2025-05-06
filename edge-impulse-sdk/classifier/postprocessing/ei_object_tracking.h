@@ -384,7 +384,7 @@ public:
 private:
     uint32_t trace_seq_id;
     uint32_t t;
-    GreedyAlignment alignment;
+    JonkerVolgenantAlignment alignment;
 };
 
 EI_IMPULSE_ERROR init_object_tracking(ei_impulse_handle_t *handle, void** state, void *config)

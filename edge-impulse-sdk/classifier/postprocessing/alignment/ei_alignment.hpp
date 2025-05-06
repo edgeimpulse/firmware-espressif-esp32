@@ -85,10 +85,12 @@ public:
         }
 
         std::vector<std::tuple<int, int, float>> matches;
+        size_t num_iterations = traces.size() > detections.size() ? detections.size() : traces.size();
 
-        for (size_t i = 0; i < traces.size(); i++) {
-            size_t trace_idx = i;
-            size_t detection_idx = alignments_b[alignments_a[i]];
+        for (size_t i = 0; i < num_iterations; i++) {
+            size_t trace_idx = alignments_a[i];
+            size_t detection_idx = alignments_b[i];
+
             if (use_iou) {
                 float iou = 1 - cost_mtx[trace_idx * detections.size() + detection_idx];
                 if (iou > threshold) {
@@ -124,13 +126,15 @@ public:
         std::vector<std::tuple<int, int, float>> alignments;
         for (size_t trace_idx = 0; trace_idx < traces.size(); ++trace_idx) {
             for (size_t detection_idx = 0; detection_idx < detections.size(); ++detection_idx) {
+                float cost = 0.0;
                 if (use_iou) {
                     float iou = intersection_over_union(traces[trace_idx], detections[detection_idx]);
+                    cost = 1 - iou;
                     if (iou > threshold) {
-                        alignments.emplace_back(trace_idx, detection_idx, 1 - iou);
+                        alignments.emplace_back(trace_idx, detection_idx, cost);
                     }
                 } else {
-                    float cost = centroid_euclidean_distance(traces[trace_idx], detections[detection_idx]);
+                    cost = centroid_euclidean_distance(traces[trace_idx], detections[detection_idx]);
                     if (cost < threshold) {
                         alignments.emplace_back(trace_idx, detection_idx, cost);
                     }
@@ -150,7 +154,7 @@ public:
             float cost = std::get<2>(alignments[i]);
 
             if (trace_idxs_matched.find(trace_idx) == trace_idxs_matched.end() && detection_idxs_matched.find(detection_idx) == detection_idxs_matched.end()) {
-                // (1 - cost) to get iou
+                // calculate iou or simply use the distance
                 matches.emplace_back(trace_idx, detection_idx, use_iou ? 1 - cost : cost);
                 trace_idxs_matched.insert(trace_idx);
                 if (trace_idxs_matched.size() == traces.size()) return matches;
