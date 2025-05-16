@@ -68,7 +68,11 @@
 #endif
 
 #if EIDSP_USE_CEVA_DSP
+#if EIDSP_USE_CEVA_DSP_FIXED
+#include "edge-impulse-sdk/dsp/dsp_engines/ei_ceva_dsp_fixed.h"
+#else
 #include "edge-impulse-sdk/dsp/dsp_engines/ei_ceva_dsp.h"
+#endif
 #elif EIDSP_USE_CMSIS_DSP
 #include "edge-impulse-sdk/dsp/dsp_engines/ei_arm_cmsis_dsp.h"
 #else
