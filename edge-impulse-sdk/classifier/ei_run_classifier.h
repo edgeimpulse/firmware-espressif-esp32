@@ -79,6 +79,8 @@
 #include "edge-impulse-sdk/classifier/inferencing_engines/ethos_linux.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ATON
 #include "edge-impulse-sdk/classifier/inferencing_engines/aton.h"
+#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_CEVA_NPN
+#include "edge-impulse-sdk/classifier/inferencing_engines/ceva_npn.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_NONE
 // noop
 #else

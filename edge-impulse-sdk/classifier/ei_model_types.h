@@ -61,6 +61,7 @@
 #define EI_CLASSIFIER_MEMRYX                     12
 #define EI_CLASSIFIER_ETHOS_LINUX                13
 #define EI_CLASSIFIER_ATON                       14
+#define EI_CLASSIFIER_CEVA_NPN                   15
 
 #define EI_CLASSIFIER_SENSOR_UNKNOWN             -1
 #define EI_CLASSIFIER_SENSOR_MICROPHONE          1
@@ -195,6 +196,21 @@ typedef struct {
     size_t model_size;
     size_t arena_size;
 } ei_config_tflite_graph_t;
+
+typedef struct {
+    uint16_t implementation_version;
+    uint8_t input_datatype;
+    bool input_quantized;
+    float input_scale;
+    float input_zeropoint;
+    uint8_t output_datatype;
+    bool output_quantized;
+    float output_scale;
+    float output_zeropoint;
+    const unsigned char *model;
+    size_t model_size;
+    size_t arena_size;
+} ei_config_ceva_npn_graph_t;
 
 typedef struct {
     uint16_t implementation_version;
