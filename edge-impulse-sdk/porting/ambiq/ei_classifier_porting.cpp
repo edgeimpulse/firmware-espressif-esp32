@@ -44,7 +44,11 @@
 #include "ns_malloc.h"
 #include <cstring>
 
+#if defined(EI_APOLLO_USE_UART) && (EI_APOLLO_USE_UART == 1)
+#include "peripheral/uart.h"
+#else
 #include "peripheral/usb/ei_usb.h"
+#endif
 
 #define EI_WEAK_FN __attribute__((weak))
 
@@ -78,10 +82,15 @@ __attribute__((weak)) void ei_printf(const char *format, ...) {
     va_start(myargs, format);
     length = vsnprintf(buffer, sizeof(buffer), format, myargs);
     va_end(myargs);
-
+#if defined(EI_APOLLO_USE_UART) && (EI_APOLLO_USE_UART == 1)
+    if (length > 0) {
+        uart_send((uint8_t *)buffer, length);
+    }
+#else
     if (length > 0) {
         ei_usb_send((uint8_t *)buffer, length);
     }
+#endif
 }
 
 __attribute__((weak)) void ei_printf_float(float f) {
