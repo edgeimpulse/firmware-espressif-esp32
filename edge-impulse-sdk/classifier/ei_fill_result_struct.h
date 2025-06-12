@@ -77,6 +77,9 @@ using namespace ei;
     #if (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLO_PRO)
     #define EI_HAS_YOLO_PRO 1
     #endif
+    #if (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOV11) || (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOV11_ABS)
+    #define EI_HAS_YOLOV11 1
+    #endif
 #endif
 
 __attribute__((unused)) inline float sigmoid(float a) {
@@ -1013,7 +1016,7 @@ __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_struct_f32_yolov7(co
 #endif // #ifdef EI_HAS_YOLOV7
 }
 
-#if (EI_HAS_TAO_DECODE_DETECTIONS == 1) || (EI_HAS_TAO_YOLO == 1) || (EI_HAS_YOLO_PRO == 1)
+#if (EI_HAS_TAO_DECODE_DETECTIONS == 1) || (EI_HAS_TAO_YOLO == 1) || (EI_HAS_YOLO_PRO == 1) || (EI_HAS_YOLOV11 == 1)
 
 __attribute__((unused)) static void prepare_nms_results_common(const ei_impulse_t *impulse,
                                                                ei_impulse_result_t *result,
@@ -1873,6 +1876,164 @@ __attribute__((unused)) static EI_IMPULSE_ERROR fill_result_struct_quantized_yol
 #else
     return EI_IMPULSE_LAST_LAYER_NOT_AVAILABLE;
 #endif // #ifdef EI_HAS_YOLO_PRO
+}
+
+#ifdef EI_HAS_YOLOV11
+template<typename T>
+__attribute__((unused)) static EI_IMPULSE_ERROR fill_result_struct_yolov11_common(const ei_impulse_t *impulse,
+                                                                                   ei_impulse_result_t *result,
+                                                                                   bool is_coord_normalized,
+                                                                                   T *data,
+                                                                                   float zero_point,
+                                                                                   float scale,
+                                                                                   size_t output_features_count,
+                                                                                   float threshold,
+                                                                                   bool debug = false) {
+    size_t row_count = 4 + impulse->label_count;
+    size_t col_size = output_features_count / row_count;
+
+    static std::vector<ei_impulse_result_bounding_box_t> results;
+    static std::vector<ei_impulse_result_bounding_box_t> class_results;
+    results.clear();
+
+    // output shape: (num_classes + 4, num_detections) e.g. (5, 189)
+    //  [0] -> (xcenter, ycenter, width, height, cls...)
+    for (size_t cls_idx = 0; cls_idx < (size_t)impulse->label_count; cls_idx++)  {
+        std::vector<float> boxes;
+        std::vector<float> scores;
+        std::vector<int> classes;
+        class_results.clear();
+
+        for (size_t det_idx = 0; det_idx < col_size; det_idx++) {
+
+            float xcenter = (static_cast<float>(data[0 * col_size + det_idx]) - zero_point) * scale;
+            float ycenter = (static_cast<float>(data[1 * col_size + det_idx]) - zero_point) * scale;
+            float width   = (static_cast<float>(data[2 * col_size + det_idx]) - zero_point) * scale;
+            float height  = (static_cast<float>(data[3 * col_size + det_idx]) - zero_point) * scale;
+
+            // xywh -> xyxy
+            float xmin  = xcenter - (width / 2.0f);
+            float ymin  = ycenter - (height / 2.0f);
+            float xmax  = xcenter + (width / 2.0f);
+            float ymax  = ycenter + (height / 2.0f);
+
+            if (is_coord_normalized) {
+                ymin *= static_cast<float>(impulse->input_height);
+                xmin *= static_cast<float>(impulse->input_width);
+                ymax *= static_cast<float>(impulse->input_height);
+                xmax *= static_cast<float>(impulse->input_width);
+            }
+
+            if (xmin < 0) {
+                xmin = 0;
+            }
+            if (xmin > impulse->input_width) {
+                xmin = impulse->input_width;
+            }
+            if (ymin < 0) {
+                ymin = 0;
+            }
+            if (ymin > impulse->input_height) {
+                ymin = impulse->input_height;
+            }
+
+            if (xmax < 0) {
+                xmax = 0;
+            }
+            if (xmax > impulse->input_width) {
+                xmax = impulse->input_width;
+            }
+            if (ymax < 0) {
+                ymax = 0;
+            }
+            if (ymax > impulse->input_height) {
+                ymax = impulse->input_height;
+            }
+
+            float score = (static_cast<float>(data[(4+cls_idx) * col_size + det_idx]) - zero_point) * scale;
+
+            if (debug) {
+                ei_printf("%s (", impulse->categories[(uint32_t)cls_idx]);
+                ei_printf_float(cls_idx);
+                ei_printf("): ");
+                ei_printf_float(score);
+                ei_printf(" [ ");
+                ei_printf_float(xmin);
+                ei_printf(", ");
+                ei_printf_float(ymin);
+                ei_printf(", ");
+                ei_printf_float(xmax);
+                ei_printf(", ");
+                ei_printf_float(ymax);
+                ei_printf(" ]\n");
+            }
+
+            if (score >= threshold && score <= 1.0f) {
+                boxes.push_back(ymin);
+                boxes.push_back(xmin);
+                boxes.push_back(ymax);
+                boxes.push_back(xmax);
+                scores.push_back(score);
+                classes.push_back((int)cls_idx);
+            }
+        }
+
+        size_t nr_boxes = scores.size();
+        EI_IMPULSE_ERROR nms_res = ei_run_nms(impulse, &class_results,
+                                            boxes.data(), scores.data(), classes.data(),
+                                            nr_boxes,
+                                            true /*clip_boxes*/,
+                                            debug);
+
+        if (nms_res != EI_IMPULSE_OK) {
+            return nms_res;
+        }
+
+        for (auto bb: class_results) {
+            results.push_back(bb);
+        }
+    }
+
+    prepare_nms_results_common(impulse, result, &results);
+    return EI_IMPULSE_OK;
+}
+#endif // #ifdef EI_HAS_YOLOV11
+
+/**
+  * Fill the result structure from an unquantized output tensor
+  */
+__attribute__((unused)) static EI_IMPULSE_ERROR fill_result_struct_f32_yolov11(const ei_impulse_t *impulse,
+                                                                                const ei_learning_block_config_tflite_graph_t *block_config,
+                                                                                ei_impulse_result_t *result,
+                                                                                bool is_coord_normalized,
+                                                                                float *data,
+                                                                                size_t output_features_count,
+                                                                                bool debug = false) {
+#ifdef EI_HAS_YOLOV11
+    return fill_result_struct_yolov11_common(impulse, result, is_coord_normalized, data, 0.0f, 1.0f, output_features_count, block_config->threshold, debug);
+#else
+    return EI_IMPULSE_LAST_LAYER_NOT_AVAILABLE;
+#endif // #ifdef EI_HAS_YOLOV11
+}
+
+/**
+ * Fill the result structure from a quantized output tensor
+*/
+template<typename T>
+__attribute__((unused)) static EI_IMPULSE_ERROR fill_result_struct_quantized_yolov11(const ei_impulse_t *impulse,
+                                                                                      const ei_learning_block_config_tflite_graph_t *block_config,
+                                                                                      ei_impulse_result_t *result,
+                                                                                      bool is_coord_normalized,
+                                                                                      T *data,
+                                                                                      float zero_point,
+                                                                                      float scale,
+                                                                                      size_t output_features_count,
+                                                                                      bool debug = false) {
+#ifdef EI_HAS_YOLOV11
+    return fill_result_struct_yolov11_common(impulse, result, is_coord_normalized, data, zero_point, scale, output_features_count, block_config->threshold, debug);
+#else
+    return EI_IMPULSE_LAST_LAYER_NOT_AVAILABLE;
+#endif // #ifdef EI_HAS_YOLOV11
 }
 
 #if EI_CLASSIFIER_SINGLE_FEATURE_INPUT == 0

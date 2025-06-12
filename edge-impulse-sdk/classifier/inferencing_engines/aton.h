@@ -170,6 +170,31 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
                     impulse->fomo_output_size,
                     impulse->fomo_output_size);
                 break;
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11:
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11_ABS: {
+                bool is_coord_normalized = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV11 ?
+                    true : false;
+                #if MODEL_OUTPUT_IS_FLOAT
+                fill_res = fill_result_struct_f32_yolov11(
+                    ei_default_impulse.impulse,
+                    &result,
+                    is_coord_normalized,
+                    (float *)&data,
+                    ei_default_impulse.impulse->tflite_output_features_count);
+                #else
+                fill_res = fill_result_struct_quantized_yolov11(
+                    impulse,
+                    block_config,
+                    result,
+                    is_coord_normalized,
+                    (uint8_t *)nn_out,
+                    nn_out_info[0].offset[0],
+                    nn_out_info[0].scale[0],
+                    nn_out_len);
+                #endif
+                break;
+            }
+
         
             default:
                 ei_printf("ERR: Unsupported object detection last layer (%d)\n",

@@ -345,6 +345,20 @@ EI_IMPULSE_ERROR run_nn_inference(
                     debug);
                 break;
             }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11:
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11_ABS: {
+                bool is_coord_normalized = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV11 ?
+                    true : false;
+                fill_res = fill_result_struct_f32_yolov11(
+                    impulse,
+                    block_config,
+                    result,
+                    is_coord_normalized,
+                    out_data,
+                    impulse->tflite_output_features_count,
+                    debug);
+                break;
+            }
             default: {
                 ei_printf(
                     "ERR: Unsupported object detection last layer (%d)\n",

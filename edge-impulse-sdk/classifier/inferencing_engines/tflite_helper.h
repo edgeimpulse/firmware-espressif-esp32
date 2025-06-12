@@ -596,6 +596,51 @@ EI_IMPULSE_ERROR fill_result_struct_from_output_tensor_tflite(
                 }
                 break;
             }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11:
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11_ABS: {
+                bool is_coord_normalized = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV11 ?
+                    true : false;
+
+                if (output->type == kTfLiteInt8) {
+                    fill_res = fill_result_struct_quantized_yolov11(
+                        impulse,
+                        block_config,
+                        result,
+                        is_coord_normalized,
+                        output->data.int8,
+                        output->params.zero_point,
+                        output->params.scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (output->type == kTfLiteUInt8) {
+                    fill_res = fill_result_struct_quantized_yolov11(
+                        impulse,
+                        block_config,
+                        result,
+                        is_coord_normalized,
+                        output->data.uint8,
+                        output->params.zero_point,
+                        output->params.scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (output->type == kTfLiteFloat32) {
+                    fill_res = fill_result_struct_f32_yolov11(
+                        impulse,
+                        block_config,
+                        result,
+                        is_coord_normalized,
+                        output->data.f,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    ei_printf("ERR: Invalid output type (%d) for YOLOv11 layer\n", output->type);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
             default: {
                 ei_printf("ERR: Unsupported object detection last layer (%d)\n",
                     block_config->object_detection_last_layer);
