@@ -47,7 +47,6 @@
 #include "edge-impulse-sdk/classifier/ei_aligned_malloc.h"
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/classifier/inferencing_engines/engines.h"
-#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 
 #ifdef __cplusplus
 namespace {
@@ -223,72 +222,32 @@ EI_IMPULSE_ERROR run_gmm_anomaly(
 {
     ei_learning_block_config_anomaly_gmm_t *block_config = (ei_learning_block_config_anomaly_gmm_t*)config_ptr;
 
+    const uint8_t ei_output_tensor_indices_gmm[1] = { 0 };
+    const uint8_t ei_output_tensor_size_gmm = 1;
+
     ei_learning_block_config_tflite_graph_t ei_learning_block_config_gmm = {
         .implementation_version = 1,
-        .classification_mode = block_config->classification_mode,
         .block_id = 0,
-        .object_detection = 0,
-        .object_detection_last_layer = EI_CLASSIFIER_LAST_LAYER_UNKNOWN,
-        .output_data_tensor = 0,
-        .output_labels_tensor = 0,
-        .output_score_tensor = 0,
-        .threshold = block_config->anomaly_threshold,
+        .output_tensors_indices = ei_output_tensor_indices_gmm,
+        .output_tensors_size = ei_output_tensor_size_gmm,
         .quantized = 0,
         .compiled = 0,
         .graph_config = block_config->graph_config
     };
 
-    ei_impulse_result_t anomaly_result = { 0 };
-
+    std::unique_ptr<ei::matrix_t> matrix_ptr(new ei::matrix_t(1, block_config->anom_axes_size));
     std::unique_ptr<ei_feature_t[]> input_ptr(new ei_feature_t[1]);
     ei_feature_t* input = input_ptr.get();
 
-    memset(&anomaly_result, 0, sizeof(ei_impulse_result_t));
+    input[0].matrix = matrix_ptr.get();
+    input[0].blockId = 0;
 
-    std::unique_ptr<ei::matrix_t> matrix_ptr(new ei::matrix_t(1, block_config->anom_axes_size));
+    extract_anomaly_input_values(fmatrix, input_block_ids, input_block_ids_size, block_config->anom_axes_size, block_config->anom_axis, input[0].matrix->buffer);
+    input_block_ids_size = 1;
 
-    if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY) {
-        // [JJ] Here we assume that the feature extractor block is always directly before the GMM block
-        // if that changes (which I assume it will at some point, e.g. if we have a shared backbone)
-        // this will break. Would it be better if `run_nn_inference` would get pointers to the input/output
-        // matrices instead?
-        input[0].matrix = fmatrix[impulse->dsp_blocks_size + (learn_block_index - 1)].matrix;
-        input[0].blockId = fmatrix[impulse->dsp_blocks_size + (learn_block_index - 1)].blockId;
-
-        input_block_ids_size = 1;
-    }
-    else {
-        input[0].matrix = matrix_ptr.get();
-        input[0].blockId = 0;
-
-        extract_anomaly_input_values(fmatrix, input_block_ids, input_block_ids_size, block_config->anom_axes_size, block_config->anom_axis, input[0].matrix->buffer);
-        input_block_ids_size = 1;
-    }
-
-    EI_IMPULSE_ERROR res = run_nn_inference(impulse, input, learn_block_index, input_block_ids, input_block_ids_size, &anomaly_result, (void*)&ei_learning_block_config_gmm, debug);
+    EI_IMPULSE_ERROR res = run_nn_inference(impulse, input, learn_block_index, input_block_ids, input_block_ids_size, result, (void*)&ei_learning_block_config_gmm, debug);
     if (res != EI_IMPULSE_OK) {
         return res;
-    }
-
-    if (debug) {
-        ei_printf("Anomaly score (time: %d ms.): ", anomaly_result.timing.classification);
-        ei_printf_float(anomaly_result.classification[0].value);
-        ei_printf("\n");
-    }
-
-    result->timing.anomaly_us = anomaly_result.timing.classification_us;
-    result->timing.anomaly = anomaly_result.timing.classification;
-
-    if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY) {
-#if EI_CLASSIFIER_HAS_VISUAL_ANOMALY
-        result->visual_ad_grid_cells = anomaly_result.visual_ad_grid_cells;
-        result->visual_ad_count = anomaly_result.visual_ad_count;
-        result->visual_ad_result.mean_value = anomaly_result.visual_ad_result.mean_value;
-        result->visual_ad_result.max_value = anomaly_result.visual_ad_result.max_value;
-#endif // EI_CLASSIFIER_HAS_VISUAL_ANOMALY
-    }
-    else {
-        result->anomaly = anomaly_result.classification[0].value;
     }
 
     return EI_IMPULSE_OK;

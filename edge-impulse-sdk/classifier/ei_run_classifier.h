@@ -214,8 +214,6 @@ extern "C" EI_IMPULSE_ERROR run_inference(
         }
 #endif
 
-        result->copy_output = block.keep_output;
-
         EI_IMPULSE_ERROR res = block.infer_fn(impulse, fmatrix, ix, (uint32_t*)block.input_block_ids, block.input_block_ids_size, result, block.config, debug);
         if (res != EI_IMPULSE_OK) {
             return res;
@@ -257,6 +255,25 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
         return EI_IMPULSE_INFERENCE_ERROR;
     }
 
+#ifndef EI_DSP_RESULT_OVERRIDE
+    // Don't wipe in CI, as we store a pointer
+    memset(result, 0, sizeof(ei_impulse_result_t));
+#endif
+
+    // smart pointer to results array
+    // currently only SSD has multiple outputs
+    // need to be refactored to something more generic
+#if (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_SSD)
+    uint32_t num_results = handle->impulse->learning_blocks_size + 3;
+#else
+    uint32_t num_results = handle->impulse->learning_blocks_size;
+#endif
+
+    std::unique_ptr<ei_feature_t[]> raw_results_ptr(new ei_feature_t[num_results]);
+
+    result->_raw_outputs = raw_results_ptr.get();
+    memset(result->_raw_outputs, 0, sizeof(ei_feature_t) * num_results);
+
 #if (EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ATON)
     // Shortcut for quantized image models
     ei_learning_block_t block = handle->impulse->learning_blocks[0];
@@ -270,11 +287,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     }
 #endif
 
-#ifndef EI_DSP_RESULT_OVERRIDE
-    // Don't wipe in CI, as we store a pointer
-    memset(result, 0, sizeof(ei_impulse_result_t));
-#endif
-    uint32_t block_num = handle->impulse->dsp_blocks_size + handle->impulse->learning_blocks_size;
+    uint32_t block_num = handle->impulse->dsp_blocks_size;
 
     // smart pointer to features array
     std::unique_ptr<ei_feature_t[]> features_ptr(new ei_feature_t[block_num]);
@@ -373,18 +386,6 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
         out_features_index += block.n_output_features;
     }
 
-#if EI_CLASSIFIER_SINGLE_FEATURE_INPUT == 0
-    for (size_t ix = 0; ix < handle->impulse->learning_blocks_size; ix++) {
-        ei_learning_block_t block = handle->impulse->learning_blocks[ix];
-
-        if (block.keep_output) {
-            matrix_ptrs[handle->impulse->dsp_blocks_size + ix] = std::unique_ptr<ei::matrix_t>(new ei::matrix_t(1, block.output_features_count));
-            features[handle->impulse->dsp_blocks_size + ix].matrix = matrix_ptrs[handle->impulse->dsp_blocks_size + ix].get();
-            features[handle->impulse->dsp_blocks_size + ix].blockId = block.blockId;
-        }
-    }
-#endif // EI_CLASSIFIER_SINGLE_FEATURE_INPUT
-
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
     result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
@@ -452,13 +453,18 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
         return EI_IMPULSE_INFERENCE_ERROR;
     }
 
+    memset(result, 0, sizeof(ei_impulse_result_t));
+
+    // smart pointer to results array
+    std::unique_ptr<ei_feature_t[]> raw_results_ptr(new ei_feature_t[handle->impulse->learning_blocks_size]);
+    result->_raw_outputs = raw_results_ptr.get();
+    memset(result->_raw_outputs, 0, sizeof(ei_feature_t) * handle->impulse->learning_blocks_size);
+
     auto impulse = handle->impulse;
     static ei::matrix_t static_features_matrix(1, impulse->nn_input_frame_size);
     if (!static_features_matrix.buffer) {
         return EI_IMPULSE_ALLOC_FAILED;
     }
-
-    memset(result, 0, sizeof(ei_impulse_result_t));
 
     EI_IMPULSE_ERROR ei_impulse_error = EI_IMPULSE_OK;
 
@@ -659,9 +665,7 @@ extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(
     ei_impulse_result_t *result,
     bool debug = false)
 {
-    memset(result, 0, sizeof(ei_impulse_result_t));
-
-    return run_nn_inference_image_quantized(impulse, signal, result, impulse->learning_blocks[0].config, debug);
+    return run_nn_inference_image_quantized(impulse, signal, 0, result, impulse->learning_blocks[0].config, debug);
 }
 
 #endif // #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI)

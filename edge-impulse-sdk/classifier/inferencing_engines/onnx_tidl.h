@@ -61,7 +61,6 @@
 
 #include <cmath>
 #include "edge-impulse-sdk/classifier/ei_aligned_malloc.h"
-#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 
 #include "onnx-model/tidl-model.h"
@@ -372,7 +371,7 @@ static EI_IMPULSE_ERROR inference_onnx_run(const ei_impulse_t *impulse,
     Ort::RunOptions* run_options,
     Ort::IoBinding* binding,
     ei_impulse_result_t *result,
-    bool debug) {
+    uint32_t learn_block_index) {
 
     ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
 
@@ -387,98 +386,24 @@ static EI_IMPULSE_ERROR inference_onnx_run(const ei_impulse_t *impulse,
 
     // get output features count from model
     auto node_dims = (*output_tensors).at(0).GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
-    size_t output_tensor_features_count = 1;
+    size_t output_size = 1;
     for(int j = node_dims.size()-1; j >= 0; j--)
     {
-        output_tensor_features_count *= node_dims[j];
+        output_size *= node_dims[j];
     }
 
     // Read the predicted y value from the model's output tensor
-    if (debug) {
-        ei_printf("Predictions (time: %d ms.):\n", result->timing.classification);
-    }
+    EI_LOGD("Predictions (time: %d ms.):\n", result->timing.classification);
 
-    EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
+    result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
+    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
 
-    // NOTE: for now only yolox object detection supported
-    if (block_config->object_detection) {
-        switch (block_config->object_detection_last_layer) {
-            case EI_CLASSIFIER_LAST_LAYER_YOLOX: {
-                if (block_config->quantized == 1) {
-                    ei_printf("ERR: YOLOX does not support quantized inference\n");
-                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-                }
-                else {
-                    if (debug) {
-                        ei_printf("YOLOX OUTPUT (%d ms.): ", result->timing.classification);
-                        for (size_t ix = 0; ix < output_tensor_features_count; ix++) {
-                            ei_printf_float(((float*)out_data)[ix]);
-                            ei_printf(" ");
-                        }
-                        ei_printf("\n");
-                    }
-                    fill_res = fill_result_struct_f32_yolox_detect(
-                        impulse,
-                        block_config,
-                        result,
-                        (float*)out_data,
-                        output_tensor_features_count);
-                }
-                break;
-            }
-            default: {
-                ei_printf("ERR: Unsupported object detection last layer (%d)\n",
-                    block_config->object_detection_last_layer);
-                break;
-            }
-        }
-    }
-    else {
+    for (size_t i = 0; i < output_size; i++) {
 #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
-
-    switch (output_tensor_type) {
-        case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8: {
-            fill_res = fill_result_struct_i8(impulse, result, (int8_t*)out_data, impulse->tflite_output_zeropoint, impulse->tflite_output_scale, debug);
-            break;
-        }
-        case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8: {
-            fill_res = fill_result_struct_i8(impulse, result, (int8_t*)out_data, impulse->tflite_output_zeropoint, impulse->tflite_output_scale, debug);
-            break;
-        }
-        default: {
-            ei_printf("ERR: Cannot handle output type (%d)\n", output_tensor_type);
-            return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
-        }
-    }
-
+        result->_raw_outputs[learn_block_index].matrix->buffer[i] = (int8*)out_data[i];
 #else
-    switch (output_tensor_type) {
-        case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT: {
-            fill_res = fill_result_struct_f32(impulse, result, (float*)out_data, debug);
-            break;
-        }
-        default: {
-            ei_printf("ERR: Cannot handle output type (%d)\n", output_tensor_type);
-            return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
-        }
-    }
+        result->_raw_outputs[learn_block_index].matrix->buffer[i] = ((float*)out_data)[i];
 #endif
-    }
-
-    ///* freeing shared mem*/
-    //for (size_t i = 0; i < output_tensors->size(); i++)
-    //{
-    //    void *ptr = (*output_tensors)[i].GetTensorMutableData<void>();
-    //    freeTensorMem(ptr, true);
-    //}
-    //for (size_t i = 0; i < input_tensors->size(); i++)
-    //{
-    //    void *ptr = (*input_tensors)[i].GetTensorMutableData<void>();
-    //    freeTensorMem(ptr, true);
-    //}
-
-    if (fill_res != EI_IMPULSE_OK) {
-        return fill_res;
     }
 
     return EI_IMPULSE_OK;
@@ -577,7 +502,8 @@ EI_IMPULSE_ERROR run_nn_inference(
         session,
         run_options,
         binding,
-        result, debug);
+        result,
+        learn_block_index);
 
     if (run_res != EI_IMPULSE_OK) {
         return run_res;
@@ -595,6 +521,7 @@ EI_IMPULSE_ERROR run_nn_inference(
 EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     const ei_impulse_t *impulse,
     signal_t *signal,
+    uint32_t learn_block_index,
     ei_impulse_result_t *result,
     void *config_ptr,
     bool debug = false)
@@ -707,7 +634,8 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
         session,
         run_options,
         binding,
-        result, debug);
+        result,
+        learn_block_index);
 
     if (run_res != EI_IMPULSE_OK) {
         return run_res;

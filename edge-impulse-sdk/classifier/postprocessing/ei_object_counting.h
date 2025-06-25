@@ -112,8 +112,10 @@ EI_IMPULSE_ERROR deinit_object_counting(void *state, void *config)
 }
 
 EI_IMPULSE_ERROR process_object_counting(ei_impulse_handle_t *handle,
+                                         uint32_t block_index,
+                                         uint32_t input_block_id,
                                          ei_impulse_result_t *result,
-                                         void *config,
+                                         void *config_ptr,
                                          void *state)
 {
     const ei_impulse_t *impulse = handle->impulse;

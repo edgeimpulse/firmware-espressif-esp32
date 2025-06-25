@@ -38,6 +38,7 @@
 #include <stdint.h>
 // needed for standalone C example
 #include "model-parameters/model_metadata.h"
+#include "edge-impulse-sdk/dsp/numpy_types.h"
 
 #ifndef EI_CLASSIFIER_MAX_OBJECT_DETECTION_COUNT
 #define EI_CLASSIFIER_MAX_OBJECT_DETECTION_COUNT 10
@@ -287,12 +288,21 @@ typedef struct {
      * Timing information for the processing (DSP) and inference blocks.
      */
     ei_impulse_result_timing_t timing;
-
+#ifdef __cplusplus
     /**
-     * Copy the output data to a buffer. If set to false, the output data will be
-     * returned as a pointer to the internal buffer. If set to true, the output data
-     * will be copied to the buffer provided in `ei_impulse_output_t`.
+     * Raw outputs from the neural network. The number of elements in this array is
+     * equal to the number of learning blocks in the model.
+     * INTERNAL
+     * EXPERIMENTAL
      */
+    ei_feature_t* _raw_outputs;
+#else
+    /** padding for C bindings to make sure the struct is the same size
+     * INTERNAL
+     * EXPERIMENTAL
+     */
+    void* _padding;
+#endif
     bool copy_output;
 #if EI_CLASSIFIER_HAS_VISUAL_ANOMALY || __DOXYGEN__
     /**

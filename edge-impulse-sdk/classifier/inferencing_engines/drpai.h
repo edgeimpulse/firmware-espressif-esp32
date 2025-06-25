@@ -68,15 +68,12 @@
 #include "tensorflow-lite/tensorflow/lite/optional_debug_tools.h"
 #endif
 #include "edge-impulse-sdk/tensorflow/lite/kernels/custom/tree_ensemble_classifier.h"
-#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "edge-impulse-sdk/classifier/ei_run_dsp.h"
 #include "edge-impulse-sdk/porting/ei_logging.h"
 
 #include <linux/drpai.h>
 #include <tflite-model/drpai_model.h>
-
-
 
 /*****************************************
  * Macro
@@ -472,12 +469,8 @@ EI_IMPULSE_ERROR drpai_close(uint32_t input_frame_size) {
 #if ((EI_CLASSIFIER_OBJECT_DETECTION == 1) && (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI))
 EI_IMPULSE_ERROR drpai_run_yolov5_postprocessing(
     const ei_impulse_t *impulse,
-    ei_learning_block_config_tflite_graph_t *block_config,
-    signal_t *signal,
-    ei_impulse_result_t *result,
-    bool debug = false)
+    float* output)
 {
-
     static std::unique_ptr<tflite::FlatBufferModel> model = nullptr;
     static std::unique_ptr<tflite::Interpreter> interpreter = nullptr;
 
@@ -558,32 +551,21 @@ EI_IMPULSE_ERROR drpai_run_yolov5_postprocessing(
     }
 
     uint64_t ctx_start_us = ei_read_timer_us();
-
     interpreter->Invoke();
-
     uint64_t ctx_end_us = ei_read_timer_us();
-
     EI_LOGD("Invoke took %d ms.\n", (int)((ctx_end_us - ctx_start_us) / 1000));
 
     float* out_data = interpreter->typed_output_tensor<float>(0);
 
-    const size_t out_size = impulse->tflite_output_features_count;
-
-    if (debug) {
-      printf("First 20 bytes: ");
+#if EI_LOG_LEVEL == EI_LOG_LEVEL_DEBUG
+      ei_printf("First 20 bytes: ");
       for (size_t ix = 0; ix < 20; ix++) {
           ei_printf("%f ", out_data[ix]);
       }
       ei_printf("\n");
-    }
+#endif
 
-    // printf("Last 5 bytes: ");
-    // for (size_t ix = out_size - 5; ix < out_size; ix++) {
-    //     printf("%f ", out_data[ix]);
-    // }
-    // printf("\n");
-
-    return fill_result_struct_f32_yolov5(impulse, block_config, result, 5, out_data, out_size);
+    return EI_IMPULSE_OK;
 }
 #endif
 
@@ -617,11 +599,13 @@ EI_IMPULSE_ERROR run_nn_inference(
 EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     const ei_impulse_t *impulse,
     signal_t *signal,
+    uint32_t learn_block_index,
     ei_impulse_result_t *result,
     void *config_ptr,
     bool debug = false)
 {
-    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
+  ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
+  ei_config_drpai_graph_t *graph_config = (ei_config_drpai_graph_t*)block_config->graph_config;
 
     // this needs to be changed for multi-model, multi-impulse
     static bool first_run = true;
@@ -697,67 +681,20 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
         first_run = false;
     }
 
-    EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
+    float *drpai_output = drpai_output_buf;
 
-    if (block_config->object_detection) {
-        switch (block_config->object_detection_last_layer) {
-            case EI_CLASSIFIER_LAST_LAYER_FOMO: {
-                if (debug) {
-                    ei_printf("DEBUG: raw drpai output");
-                    ei_printf("\n[");
-                    for (uint32_t i = 0; i < impulse->tflite_output_features_count; i++) {
-                        ei_printf_float(drpai_output_buf[i]);
-                        ei_printf(" ");
-                    }
-                    ei_printf("]\n");
-                }
-
-                fill_res = fill_result_struct_f32_fomo(
-                    impulse,
-                    block_config,
-                    result,
-                    drpai_output_buf,
-                    impulse->fomo_output_size,
-                    impulse->fomo_output_size);
-                break;
-            }
-            case EI_CLASSIFIER_LAST_LAYER_SSD: {
-                ei_printf("ERR: MobileNet SSD models are not implemented for DRP-AI (%d)\n",
-                    block_config->object_detection_last_layer);
-                return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-            }
-            case EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI: {
-                if (debug) {
-                    ei_printf("DEBUG: raw drpai output");
-                    ei_printf("\n[");
-                    // impulse->tflite_output_features_count can't be used here as this is not the final output
-                    // so print only the first 10 values.
-                    for (uint32_t i = 0; i < 10; i++) {
-                        ei_printf_float(drpai_output_buf[i]);
-                        ei_printf(" ");
-                    }
-                    ei_printf("]\n");
-                }
-
+    if (graph_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI) {
 #if ((EI_CLASSIFIER_OBJECT_DETECTION == 1) && (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI))
-                  // do post processing
-                  fill_res = drpai_run_yolov5_postprocessing(impulse, block_config, signal, result, debug);
+        // do post processing
+        drpai_run_yolov5_postprocessing(impulse, drpai_output);
 #endif
-                break;
-            }
-            default: {
-                ei_printf("ERR: Unsupported object detection last layer (%d)\n",
-                    block_config->object_detection_last_layer);
-                return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-            }
-        }
-    }
-    else {
-        fill_res = fill_result_struct_f32(impulse, result, drpai_output_buf, debug);
     }
 
-    if (fill_res != EI_IMPULSE_OK) {
-        return fill_res;
+    result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, graph_config->output_features_count);
+    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+
+    for (size_t i = 0; i < graph_config->output_features_count; i++) {
+        result->_raw_outputs[learn_block_index].matrix->buffer[i] = drpai_output[i];
     }
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
