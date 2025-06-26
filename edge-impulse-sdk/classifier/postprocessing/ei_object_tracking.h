@@ -89,6 +89,7 @@ public:
         }
 
         trace_label = initial_bbox.label;
+        trace_score = initial_bbox.value;
         observations.push_back(initial_bbox);
         float initial_centroid[2] = { initial_bbox.x + static_cast<float>(initial_bbox.width) / 2,
                                       initial_bbox.y + static_cast<float>(initial_bbox.height) / 2 };
@@ -99,6 +100,7 @@ public:
         centroid_filter = new TinyEKF(initial_centroid, 8, 2);
         width_height_filter = new TinyEKF(initial_width_height, 8, 2);
 
+        // Use x0, y0, x1, y1 for EMAs
         xyxy_emas[0] = new ExponentialMovingAverage(this->max_observations);
         xyxy_emas[1] = new ExponentialMovingAverage(this->max_observations);
         xyxy_emas[2] = new ExponentialMovingAverage(this->max_observations);
@@ -115,7 +117,6 @@ public:
     }
 
     ei_impulse_result_bounding_box_t predict() {
-
         fx_centroid[0] = centroid_filter->x[0];
         fx_centroid[1] = centroid_filter->x[1];
         fx_width_height[0] = width_height_filter->x[0];
@@ -126,11 +127,11 @@ public:
 
         ei_impulse_result_bounding_box_t p_bbox = {"", 0, 0, 0, 0, 0.0};
         p_bbox.label = trace_label;
-        p_bbox.x = clip((centroid_filter->x[0] - width_height_filter->x[0] / 2), 0);
-        p_bbox.y = clip(centroid_filter->x[1] - width_height_filter->x[1] / 2, 0);
-        p_bbox.width = clip(width_height_filter->x[0], 0);
-        p_bbox.height = clip(width_height_filter->x[1], 0);
-        p_bbox.value = 0.0;
+        p_bbox.value = trace_score;
+        p_bbox.x = round(clip((centroid_filter->x[0] - width_height_filter->x[0] / 2), 0));
+        p_bbox.y = round(clip(centroid_filter->x[1] - width_height_filter->x[1] / 2, 0));
+        p_bbox.width = round(clip(width_height_filter->x[0], 0));
+        p_bbox.height = round(clip(width_height_filter->x[1], 0));
         last_prediction = p_bbox;
         EI_LOGD("predict %d %d %d %d %f\n", last_prediction.x, last_prediction.y, last_prediction.width, last_prediction.height, last_prediction.value);
         return last_prediction;
@@ -158,6 +159,7 @@ public:
                                   static_cast<float>(bbox->height) };
         width_height_filter->update(width_height, hx_width_height);
 
+        trace_score = bbox->value;
         observations.push_back(*bbox);
         while (observations.size() > max_observations) {
             observations.erase(observations.begin());
@@ -200,7 +202,8 @@ public:
         bbox.y = round(xyxy_emas[1]->smoothed_value());
         bbox.width = round(xyxy_emas[2]->smoothed_value());
         bbox.height = round(xyxy_emas[3]->smoothed_value());
-
+        bbox.label = trace_label;
+        bbox.value = trace_score;
         return bbox;
     }
 
@@ -231,6 +234,7 @@ private:
     float hx_centroid[2];
     float hx_width_height[2];
     const char* trace_label;
+    float trace_score;
     ExponentialMovingAverage *xyxy_emas[4];
 };
 
@@ -257,7 +261,21 @@ public:
     std::vector<Trace*>closed_traces;
     std::vector<ei_object_tracking_trace_t> object_tracking_output;
 
+    /**
+     * Process new detections.
+     * @param detections Bounding boxes, this vector might be reordered.
+     */
     void process_new_detections(std::vector<ei_impulse_result_bounding_box_t> detections) {
+        // sort detections by x, y, width, height, label (same in Python code, see ei_tracking/tracking.py)
+        // so it doesn't matter in what order we pass in the detections
+        std::sort(detections.begin(), detections.end(), [](const ei_impulse_result_bounding_box_t& a, const ei_impulse_result_bounding_box_t& b) {
+            if (a.x != b.x) return a.x < b.x;
+            if (a.y != b.y) return a.y < b.y;
+            if (a.width != b.width) return a.width < b.width;
+            if (a.height != b.height) return a.height < b.height;
+            return std::strcmp(a.label, b.label) < 0;
+        });
+
         // firstly try an alignment with last observations...
         std::vector<ei_impulse_result_bounding_box_t> last_obs_bboxes;
         for (auto trace : open_traces) {
@@ -291,7 +309,7 @@ public:
         // and use whichever matching set is better
         std::vector<std::tuple<int, int, float>> matches;
 
-        if (last_obs_cost > predicted_cost) {
+        if (last_obs_cost < predicted_cost) {
             EI_LOGD("using last_obs_matches matches\n");
             matches = last_obs_matches;
         }
@@ -385,6 +403,7 @@ private:
     uint32_t trace_seq_id;
     uint32_t t;
     JonkerVolgenantAlignment alignment;
+    std::vector<std::string> seen_labels;
 };
 
 EI_IMPULSE_ERROR init_object_tracking(ei_impulse_handle_t *handle, void** state, void *config)

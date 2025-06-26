@@ -659,11 +659,12 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov5_f32(ei_impulse_ha
         float score = raw_output_mtx->buffer[base_ix + 4];
 
         uint32_t label = 0;
+        float highest_value = 0.0f;
         for (size_t lx = 0; lx < impulse->label_count; lx++) {
             float l = raw_output_mtx->buffer[base_ix + 5 + lx];
-            if (l > 0.5f) {
+            if (l > highest_value) {
                 label = lx;
-                break;
+                highest_value = l;
             }
         }
 
@@ -759,11 +760,12 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov5_i8(ei_impulse_han
         float score = (raw_output_mtx->buffer[base_ix + 4] - config->zero_point) * config->scale;
 
         uint32_t label = 0;
+        float highest_value = 0.0f;
         for (size_t lx = 0; lx < impulse->label_count; lx++) {
             float l = (raw_output_mtx->buffer[base_ix + 5 + lx] - config->zero_point) * config->scale;
-            if (l > 0.5f) {
+            if (l > highest_value) {
                 label = lx;
-                break;
+                highest_value = l;
             }
         }
 
