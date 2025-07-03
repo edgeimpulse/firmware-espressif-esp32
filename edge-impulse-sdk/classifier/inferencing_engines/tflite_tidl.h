@@ -45,8 +45,8 @@
 #include "tensorflow-lite/tensorflow/lite/kernels/register.h"
 #include "tensorflow-lite/tensorflow/lite/model.h"
 #include "tensorflow-lite/tensorflow/lite/optional_debug_tools.h"
+#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
-#include "edge-impulse-sdk/classifier/inferencing_engines/tflite_helper.h"
 
 #include "itidl_rt.h"
 #if ARMNN_ENABLE
@@ -55,6 +55,11 @@
 #endif
 
 #include <dlfcn.h>
+
+// old models don't have this, add this here
+#ifndef EI_CLASSIFIER_TFLITE_OUTPUT_DATA_TENSOR
+#define EI_CLASSIFIER_TFLITE_OUTPUT_DATA_TENSOR 0
+#endif // not defined EI_CLASSIFIER_TFLITE_OUTPUT_DATA_TENSOR
 
 #include "tflite-model/tidl-model.h"
 #include "utils/model_header_utils.h"
@@ -76,10 +81,8 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     static std::unique_ptr<tflite::FlatBufferModel> model = nullptr;
     static std::unique_ptr<tflite::Interpreter> interpreter = nullptr;
-    //static std::vector<int> inputs;
-    //static std::vector<int> outputs;
-    TfLiteTensor* input;
-    TfLiteTensor** outputs;
+    static std::vector<int> inputs;
+    static std::vector<int> outputs;
 
     if (!model) {
 
@@ -135,8 +138,11 @@ EI_IMPULSE_ERROR run_nn_inference(
         }
     }
 
+    inputs = interpreter->inputs();
+    outputs = interpreter->outputs();
+
     ei_printf("device mem enabled\n");
-    for (uint32_t i = 0; i < interpreter->inputs().size(); i++)
+    for (uint32_t i = 0; i < inputs.size(); i++)
     {
         const TfLiteTensor *tensor = interpreter->input_tensor(i);
         in_ptrs[i] = TIDLRT_allocSharedMem(tflite::kDefaultTensorAlignment, tensor->bytes);
@@ -144,9 +150,9 @@ EI_IMPULSE_ERROR run_nn_inference(
         {
             ei_printf("Could not allocate Memory for input: %s\n", tensor->name);
         }
-        interpreter->SetCustomAllocationForTensor(interpreter->inputs()[i], {in_ptrs[i], tensor->bytes});
+        interpreter->SetCustomAllocationForTensor(inputs[i], {in_ptrs[i], tensor->bytes});
     }
-    for (uint32_t i = 0; i < interpreter->outputs().size(); i++)
+    for (uint32_t i = 0; i < outputs.size(); i++)
     {
         const TfLiteTensor *tensor = interpreter->output_tensor(i);
         out_ptrs[i] = TIDLRT_allocSharedMem(tflite::kDefaultTensorAlignment, tensor->bytes);
@@ -154,32 +160,52 @@ EI_IMPULSE_ERROR run_nn_inference(
         {
             ei_printf("Could not allocate Memory for ouput: %s\n", tensor->name);
         }
-        interpreter->SetCustomAllocationForTensor(interpreter->outputs()[i], {out_ptrs[i], tensor->bytes});
+        interpreter->SetCustomAllocationForTensor(outputs[i], {out_ptrs[i], tensor->bytes});
     }
 
     // Obtain pointers to the model's input and output tensors.
-    input = interpreter->input_tensor(0);
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
+    int8_t* input = interpreter->typed_input_tensor<int8_t>(0);
+#else
+    float* input = interpreter->typed_input_tensor<float>(0);
+#endif
 
     if (!input) {
         return EI_IMPULSE_INPUT_TENSOR_WAS_NULL;
     }
 
-    for (uint8_t i = 0; i < block_config->output_tensors_size; i++) {
-        outputs[i] = interpreter->output_tensor(block_config->output_tensors_indices[i]);
-        if (!outputs[i]) {
-            return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
-        }
-    }
+    size_t mtx_size = impulse->dsp_blocks_size + impulse->learning_blocks_size;
 
-    auto input_res = fill_input_tensor_from_matrix(fmatrix,
-                                                   result->_raw_outputs,
-                                                   input,
-                                                   input_block_ids,
-                                                   input_block_ids_size,
-                                                   impulse->dsp_blocks_size,
-                                                   impulse->learning_blocks_size);
-    if (input_res != EI_IMPULSE_OK) {
-        return input_res;
+    for (size_t i = 0; i < input_block_ids_size; i++) {
+#if EI_CLASSIFIER_SINGLE_FEATURE_INPUT == 0
+        uint16_t cur_mtx = input_block_ids[i];
+        ei::matrix_t* matrix = NULL;
+
+        if (!find_mtx_by_idx(fmatrix, &matrix, cur_mtx, mtx_size)) {
+            ei_printf("ERR: Cannot find matrix with id %zu\n", cur_mtx);
+            return EI_IMPULSE_INVALID_SIZE;
+        }
+#else
+        ei::matrix_t* matrix = fmatrix[0].matrix;
+#endif
+
+        for (uint32_t ix = 0; ix < matrix->rows * matrix->cols; ix++) {
+            if (block_config->object_detection) {
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
+                float pixel = (float)matrix->buffer[ix];
+                input[ix] = static_cast<uint8_t>((pixel / input->tflite_input_scale) + input->tflite_input_zeropoint);
+#else
+                input[ix] = matrix->buffer[ix];
+#endif
+            }
+            else {
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
+                input[ix] = static_cast<int8_t>(round(matrix->buffer[ix] / input->tflite_input_scale) + input->tflite_input_zeropoint);
+#else
+                input[ix] = matrix->buffer[ix];
+#endif
+            }
+        }
     }
 
     uint64_t ctx_start_us = ei_read_timer_us();
@@ -191,11 +217,17 @@ EI_IMPULSE_ERROR run_nn_inference(
     result->timing.classification_us = ctx_end_us - ctx_start_us;
     result->timing.classification = (int)(result->timing.classification_us / 1000);
 
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
+    int8_t* out_data = interpreter->typed_output_tensor<int8_t>(block_config->output_data_tensor);
+#else
+    float* out_data = interpreter->typed_output_tensor<float>(block_config->output_data_tensor);
+#endif
+
     if (debug) {
         ei_printf("LOG_INFO tensors size: %ld \n", interpreter->tensors_size());
         ei_printf("LOG_INFO nodes size: %ld\n", interpreter->nodes_size());
-        ei_printf("LOG_INFO number of inputs: %ld\n", interpreter->inputs().size());
-        ei_printf("LOG_INFO number of outputs: %ld\n", interpreter->outputs().size());
+        ei_printf("LOG_INFO number of inputs: %ld\n", inputs.size());
+        ei_printf("LOG_INFO number of outputs: %ld\n", outputs.size());
         ei_printf("LOG_INFO input(0) name: %s\n", interpreter->GetInputName(0));
 
         int t_size = interpreter->tensors_size();
@@ -220,39 +252,156 @@ EI_IMPULSE_ERROR run_nn_inference(
         }
     }
 
+    if (!out_data) {
+        return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
+    }
+
     if (debug) {
         ei_printf("Predictions (time: %d ms.):\n", result->timing.classification);
     }
 
-    for (uint32_t output_ix = 0; output_ix < block_config->output_tensors_size; output_ix++) {
-        // calculate the size of the output by iterating through dims
-        size_t output_size = 1;
-        for (int dim_num = 0; dim_num < outputs[output_ix]->dims->size; dim_num++) {
-            output_size *= outputs[output_ix]->dims->data[dim_num];
-        }
+    EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
 
-        result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
-        result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
-
-        auto output_res = fill_output_matrix_from_tensor(outputs[output_ix], result->_raw_outputs[learn_block_index + output_ix].matrix);
-        if (output_res != EI_IMPULSE_OK) {
-            return output_res;
+    if (block_config->object_detection) {
+        switch (block_config->object_detection_last_layer) {
+            case EI_CLASSIFIER_LAST_LAYER_FOMO: {
+                if (block_config->quantized == 1) {
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
+                    fill_res = fill_result_struct_i8_fomo(
+                        impulse,
+                        block_config,
+                        result,
+                        out_data,
+                        out_data->tflite_output_zeropoint,
+                        out_data->tflite_output_scale,
+                        impulse->fomo_output_size,
+                        impulse->fomo_output_size);
+#endif
+                }
+                else {
+                    fill_res = fill_result_struct_f32_fomo(
+                        impulse,
+                        block_config,
+                        result,
+                        out_data,
+                        impulse->fomo_output_size,
+                        impulse->fomo_output_size);
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_SSD: {
+                float *scores_tensor = interpreter->typed_output_tensor<float>(block_config->output_score_tensor);
+                float *label_tensor = interpreter->typed_output_tensor<float>(block_config->output_labels_tensor);
+                if (!scores_tensor) {
+                    return EI_IMPULSE_SCORE_TENSOR_WAS_NULL;
+                }
+                if (!label_tensor) {
+                    return EI_IMPULSE_LABEL_TENSOR_WAS_NULL;
+                }
+                if (block_config->quantized == 1) {
+                    ei_printf("ERR: MobileNet SSD does not support quantized inference\n");
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                else {
+                    fill_res = fill_result_struct_f32_object_detection(
+                        impulse,
+                        block_config,
+                        result,
+                        out_data,
+                        scores_tensor,
+                        label_tensor,
+                        debug);
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV5:
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI: {
+                if (block_config->quantized == 1) {
+                    ei_printf("ERR: YOLOv5 does not support quantized inference\n");
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                else {
+                    int version = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI ?
+                        5 : 6;
+                    fill_res = fill_result_struct_f32_yolov5(
+                        impulse,
+                        block_config,
+                        result,
+                        version,
+                        out_data,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOX: {
+                if (block_config->quantized == 1) {
+                    ei_printf("ERR: YOLOX does not support quantized inference\n");
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                else {
+                    fill_res = fill_result_struct_f32_yolox(
+                        impulse,
+                        block_config,
+                        result,
+                        out_data,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV7: {
+                if (block_config->quantized == 1) {
+                    ei_printf("ERR: YOLOV7 does not support quantized inference\n");
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                else {
+                    TfLiteTensor *output = interpreter->output_tensor(0);
+                    size_t output_feature_count = 1;
+                    for (int ix = 0; ix < output->dims->size; ix++) {
+                        output_feature_count *= output->dims->data[ix];
+                    }
+                    fill_res = fill_result_struct_f32_yolov7(
+                        impulse,
+                        block_config,
+                        result,
+                        output->data.f,
+                        output_feature_count);
+                }
+                break;
+            }
+            default: {
+                ei_printf("ERR: Unsupported object detection last layer (%d)\n",
+                    block_config->object_detection_last_layer);
+                break;
+            }
         }
     }
+    else {
+#if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
+        fill_res = fill_result_struct_i8(impulse, result, out_data, out_data->tflite_output_zeropoint, out_data->tflite_output_scale, debug);
+#else
+        fill_res = fill_result_struct_f32(impulse, result, out_data, debug);
+#endif
+    }
 
-    for (uint32_t i = 0; i < interpreter->inputs().size(); i++)
+    for (uint32_t i = 0; i < inputs.size(); i++)
     {
         if (in_ptrs[i])
         {
             TIDLRT_freeSharedMem(in_ptrs[i]);
         }
     }
-    for (uint32_t i = 0; i < interpreter->outputs().size(); i++)
+    for (uint32_t i = 0; i < outputs.size(); i++)
     {
         if (out_ptrs[i])
         {
             TIDLRT_freeSharedMem(out_ptrs[i]);
         }
+    }
+
+    if (fill_res != EI_IMPULSE_OK) {
+        return fill_res;
     }
 
     // on Linux we're not worried about free'ing (for now)

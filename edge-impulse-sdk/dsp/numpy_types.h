@@ -155,22 +155,6 @@ typedef struct ei_matrix {
         return buffer + row * cols;
     }
 
-    void* operator new(size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete(void* ptr) {
-        ei_free(ptr);
-    }
-
-    void* operator new[](size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete[](void* ptr) {
-        ei_free(ptr);
-    }
-
     ei_matrix(ei_vector<float> &in) : ei_matrix(1, in.size(), in.data()) {
     }
 #endif // #ifdef __cplusplus
@@ -270,21 +254,6 @@ typedef struct ei_matrix_i8 {
         return buffer + row * cols;
     }
 
-    void* operator new(size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete(void* ptr) {
-        ei_free(ptr);
-    }
-
-    void* operator new[](size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete[](void* ptr) {
-        ei_free(ptr);
-    }
 #endif // #ifdef __cplusplus
 } matrix_i8_t;
 
@@ -381,21 +350,6 @@ typedef struct ei_matrix_i32 {
         return buffer + row * cols;
     }
 
-    void* operator new(size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete(void* ptr) {
-        ei_free(ptr);
-    }
-
-    void* operator new[](size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete[](void* ptr) {
-        ei_free(ptr);
-    }
 #endif // #ifdef __cplusplus
 } matrix_i32_t;
 
@@ -503,21 +457,6 @@ typedef struct ei_quantized_matrix {
         return buffer + row * cols;
     }
 
-    void* operator new(size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete(void* ptr) {
-        ei_free(ptr);
-    }
-
-    void* operator new[](size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete[](void* ptr) {
-        ei_free(ptr);
-    }
 #endif // #ifdef __cplusplus
 } quantized_matrix_t;
 
@@ -614,21 +553,6 @@ typedef struct ei_matrix_u8 {
         return buffer + row * cols;
     }
 
-    void* operator new(size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete(void* ptr) {
-        ei_free(ptr);
-    }
-
-    void* operator new[](size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete[](void* ptr) {
-        ei_free(ptr);
-    }
 #endif // #ifdef __cplusplus
 } matrix_u8_t;
 
@@ -705,33 +629,6 @@ typedef struct ei_signal_t {
 
 #ifdef __cplusplus
 } // namespace ei {
-#endif // __cplusplus
-
-#ifdef __cplusplus
-typedef struct ei_feature_t {
-    union {
-        ei::matrix_t* matrix;
-        ei::matrix_i8_t* matrix_i8;
-        ei::matrix_u8_t* matrix_u8;
-    };
-    uint32_t blockId;
-
-    void* operator new(size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete(void* ptr) {
-        ei_free(ptr);
-    }
-
-    void* operator new[](size_t size) {
-        return ei_malloc(size);
-    }
-
-    void operator delete[](void* ptr) {
-        ei_free(ptr);
-    }
-} feature_t;
 #endif // __cplusplus
 
 // required on Adafruit nRF52

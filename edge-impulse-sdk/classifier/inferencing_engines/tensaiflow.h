@@ -39,6 +39,7 @@
 
 #include "model-parameters/model_metadata.h"
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
+#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_run_dsp.h"
 
 #include "mcu.h"
@@ -64,12 +65,12 @@ extern "C" void get_data(const void *impulse_arg, int8_t *in_buf_0, uint16_t in_
     }
 }
 
-extern "C" void post_process(const void *block_config_arg, int8_t *out_buf_0, int8_t *out_buf_1)
+extern "C" void post_process(const void *impulse_arg, int8_t *out_buf_0, int8_t *out_buf_1)
 {
-    ei_config_tensaiflow_graph_t *block_config = (ei_config_tensaiflow_graph_t *) block_config_arg;
+    ei_impulse_t *impulse = (ei_impulse_t *) impulse_arg;
 
     #ifdef EI_CLASSIFIER_NN_OUTPUT_COUNT
-    memcpy(infer_result, out_buf_0, block_config->output_features_count);
+    memcpy(infer_result, out_buf_0, impulse->tflite_output_features_count);
     #else
     memcpy(infer_result, out_buf_0, impulse->label_count);
     #endif
@@ -97,24 +98,39 @@ EI_IMPULSE_ERROR run_nn_inference(
     ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
     ei_config_tensaiflow_graph_t *graph_config = (ei_config_tensaiflow_graph_t*)block_config->graph_config;
 
+    if (block_config->object_detection) {
+        ei_printf("ERR: Object detection models are not supported with TensaiFlow\n");
+        return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+    }
+
     uint64_t ctx_start_us = ei_read_timer_us();
     uint32_t time, cycles;
 
     /* Run tensaiflow inference */
-    infer((const void *)graph_config, &time, &cycles);
+    infer((const void *)impulse, &time, &cycles);
 
     // Inference results returned by post_process() and copied into infer_results
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
     result->timing.classification = (int)(result->timing.classification_us / 1000);
 
-    result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, graph_config->output_features_count);
-    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
-
     for (uint32_t ix = 0; ix < impulse->label_count; ix++) {
-        result->_raw_outputs[learn_block_index].matrix->buffer[ix] = infer_result[ix];
+        float value;
+        // Dequantize the output if it is int8
+        value = static_cast<float>(infer_result[ix] - graph_config->output_zeropoint) *
+            graph_config->output_scale;
+
+        if (debug) {
+            ei_printf("%s:\t", impulse->categories[ix]);
+            ei_printf_float(value);
+            ei_printf("\n");
+        }
+        result->classification[ix].label = impulse->categories[ix];
+        result->classification[ix].value = value;
     }
+
     return EI_IMPULSE_OK;
+
 }
 
 /**
@@ -125,7 +141,6 @@ EI_IMPULSE_ERROR run_nn_inference(
 EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     const ei_impulse_t *impulse,
     signal_t *signal,
-    uint32_t learn_block_index,
     ei_impulse_result_t *result,
     void *config_ptr,
     bool debug = false)
@@ -178,18 +193,59 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 
     // Inference results returned by post_process() and copied into infer_results
 
-    size_t output_size = graph_config->output_features_count;
+    EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
 
-    result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
-    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+    if (block_config->object_detection) {
+        switch (block_config->object_detection_last_layer) {
+            case EI_CLASSIFIER_LAST_LAYER_FOMO: {
+                if (block_config->quantized == 1) {
+                    fill_res = fill_result_struct_i8_fomo(
+                        impulse,
+                        block_config,
+                        result,
+                        infer_result,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->fomo_output_size,
+                        impulse->fomo_output_size);
+                }
+                else {
+                    ei_printf("ERR: TensaiFlow does not support float32 inference\n");
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+            break;
+            }
+            default: {
+                ei_printf("ERR: Unsupported object detection last layer (%d)\n",
+                    block_config->object_detection_last_layer);
+                return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+            }
+        }
+    }
+    else {
+        if (block_config->quantized == 1) {
+            fill_res = fill_result_struct_i8(
+                impulse,
+                result,
+                infer_result,
+                graph_config->output_zeropoint,
+                graph_config->output_scale,
+                debug);
+        }
+        else {
+            ei_printf("ERR: TensaiFlow does not support float32 inference\n");
+            return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+        }
+    }
 
-    for (size_t i = 0; i < output_size; i++) {
-        result->_raw_outputs[learn_block_index].matrix->buffer[i] = infer_result[i];
+    if (fill_res != EI_IMPULSE_OK) {
+        return fill_res;
     }
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
     result->timing.classification = (int)(result->timing.classification_us / 1000);
     return EI_IMPULSE_OK;
+
 }
 
 #endif // #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAILFOW)

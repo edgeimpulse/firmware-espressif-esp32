@@ -43,6 +43,7 @@
 
 #include "model-parameters/model_metadata.h"
 #include <string>
+#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "ethos-u-driver-stack-imx/driver_library/include/ethosu.hpp"
 #include "ethos-u-driver-stack-imx/kernel_driver/include/uapi/ethosu.h"
@@ -124,7 +125,6 @@ EI_IMPULSE_ERROR run_nn_inference(
 {
     ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
     ei_config_ethos_graph_t *io_details = ((ei_config_ethos_graph_t*)block_config->graph_config);
-
     std::vector<std::shared_ptr<EthosU::Buffer>> ifm;
     std::vector<std::shared_ptr<EthosU::Buffer>> ofm;
     ei::matrix_t* matrix;
@@ -155,7 +155,7 @@ EI_IMPULSE_ERROR run_nn_inference(
         uint16_t cur_mtx = input_block_ids[i];
         matrix = NULL;
 
-        if (!find_mtx_by_idx(fmatrix, &matrix, cur_mtx, impulse->dsp_blocks_size)) {
+        if (!find_mtx_by_idx(fmatrix, &matrix, cur_mtx, impulse->dsp_blocks_size + impulse->learning_blocks_size)) {
             ei_printf("ERR: Cannot find matrix with id %zu\n", cur_mtx);
             return EI_IMPULSE_INVALID_SIZE;
         }
@@ -206,24 +206,226 @@ EI_IMPULSE_ERROR run_nn_inference(
     result->timing.classification_us = ctx_end_us - ctx_start_us;
     result->timing.classification = (int)(result->timing.classification_us / 1000);
 
-    size_t output_size = io_details->output_features_count;
+    // get output data from the output tensor
+    auto data = inference.getOfmBuffers()[0]->data();
 
-    if (network->getOfmTypes()[0] == EthosU::TensorType_INT8) {
-        result->_raw_outputs[learn_block_index].matrix_i8 = new matrix_i8_t(1, output_size);
-        memcpy(result->_raw_outputs[learn_block_index].matrix_i8->buffer, (int8_t *)inference.getOfmBuffers()[0]->data(), output_size * sizeof(int8_t));
-    }
-    else if (network->getOfmTypes()[0] == EthosU::TensorType_UINT8) {
-        result->_raw_outputs[learn_block_index].matrix_u8 = new matrix_u8_t(1, output_size);
-        memcpy(result->_raw_outputs[learn_block_index].matrix_u8->buffer, (uint8_t *)inference.getOfmBuffers()[0]->data(), output_size * sizeof(uint8_t));
+    EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
+
+    if(block_config->object_detection) {
+        switch (block_config->object_detection_last_layer) {
+            case EI_CLASSIFIER_LAST_LAYER_FOMO: {
+                fill_res = fill_result_struct_i8_fomo(
+                    impulse,
+                    block_config,
+                    result,
+                    (int8_t*)data,
+                    io_details->output_zeropoint,
+                    io_details->output_scale,
+                    impulse->fomo_output_size,
+                    impulse->fomo_output_size);
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_SSD: {
+                ei_printf("ERR: MobileNet SSD models are not supported by Ethos\n");
+                return EI_IMPULSE_LAST_LAYER_NOT_SUPPORTED;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV5:
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI: {
+                int version = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI ?
+                    5 : 6;
+
+                if (network->getOfmTypes()[0] == EthosU::TensorType_INT8) {
+                    fill_res = fill_result_struct_quantized_yolov5(
+                        impulse,
+                        block_config,
+                        result,
+                        version,
+                        (int8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (network->getOfmTypes()[0] == EthosU::TensorType_UINT8) {
+                    fill_res = fill_result_struct_quantized_yolov5(
+                        impulse,
+                        block_config,
+                        result,
+                        version,
+                        (uint8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    ei_printf("ERR: Invalid output type (%d) for YOLOv5 last layer\n", network->getOfmTypes()[0]);
+                    return EI_IMPULSE_LAST_LAYER_NOT_SUPPORTED;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_TAO_SSD:
+            case EI_CLASSIFIER_LAST_LAYER_TAO_RETINANET: {
+                if (network->getOfmTypes()[0] == EthosU::TensorType_INT8) {
+                    fill_res = fill_result_struct_quantized_tao_decode_detections(
+                        impulse,
+                        block_config,
+                        result,
+                        (int8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (network->getOfmTypes()[0] == EthosU::TensorType_UINT8) {
+                    fill_res = fill_result_struct_quantized_tao_decode_detections(
+                        impulse,
+                        block_config,
+                        result,
+                        (uint8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    ei_printf("ERR: Invalid output type (%d) for TAO last layer\n", network->getOfmTypes()[0]);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV3: {
+                if (network->getOfmTypes()[0] == EthosU::TensorType_INT8) {
+                    fill_res = fill_result_struct_quantized_tao_yolov3(
+                        impulse,
+                        block_config,
+                        result,
+                        (int8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (network->getOfmTypes()[0] == EthosU::TensorType_UINT8) {
+                    fill_res = fill_result_struct_quantized_tao_yolov3(
+                        impulse,
+                        block_config,
+                        result,
+                        (uint8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    ei_printf("ERR: Invalid output type (%d) for TAO YOLOv3 layer\n", network->getOfmTypes()[0]);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV4: {
+                if (network->getOfmTypes()[0] == EthosU::TensorType_INT8) {
+                    fill_res = fill_result_struct_quantized_tao_yolov4(
+                        impulse,
+                        block_config,
+                        result,
+                        (int8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (network->getOfmTypes()[0] == EthosU::TensorType_UINT8) {
+                    fill_res = fill_result_struct_quantized_tao_yolov4(
+                        impulse,
+                        block_config,
+                        result,
+                        (uint8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    ei_printf("ERR: Invalid output type (%d) for TAO YOLOv4 layer\n", network->getOfmTypes()[0]);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLO_PRO: {
+                if (network->getOfmTypes()[0] == EthosU::TensorType_INT8) {
+                    fill_res = fill_result_struct_quantized_yolo_pro(
+                        impulse,
+                        block_config,
+                        result,
+                        (int8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (network->getOfmTypes()[0] == EthosU::TensorType_UINT8) {
+                    fill_res = fill_result_struct_quantized_yolo_pro(
+                        impulse,
+                        block_config,
+                        result,
+                        (uint8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    ei_printf("ERR: Invalid output type (%d) for YOLO PRO layer\n", network->getOfmTypes()[0]);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11:
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11_ABS: {
+                bool is_coord_normalized = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV11 ?
+                    true : false;
+                if (network->getOfmTypes()[0] == EthosU::TensorType_INT8) {
+                    fill_res = fill_result_struct_quantized_yolov11(
+                        impulse,
+                        block_config,
+                        result,
+                        is_coord_normalized,
+                        (int8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (network->getOfmTypes()[0] == EthosU::TensorType_UINT8) {
+                    fill_res = fill_result_struct_quantized_yolov11(
+                        impulse,
+                        block_config,
+                        result,
+                        is_coord_normalized,
+                        (uint8_t*)data,
+                        io_details->output_zeropoint,
+                        io_details->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    ei_printf("ERR: Invalid output type (%d) for YOLOv11 layer\n", network->getOfmTypes()[0]);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            default: {
+                ei_printf("ERR: Object Detection layer (%d) not supported\n", block_config->object_detection_last_layer);
+                return EI_IMPULSE_LAST_LAYER_NOT_SUPPORTED;
+            }
+        }
     }
     else {
-        ei_printf("ERR: Cannot handle output type (%d)\n", network->getOfmTypes()[0]);
-        return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
+        fill_res = fill_result_struct_i8(impulse, result, (int8_t*)data, io_details->output_zeropoint, io_details->output_scale, debug);
     }
 
-    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
-
-    return EI_IMPULSE_OK;
+    return fill_res;
 }
 
 #endif // (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ETHOS_LINUX)

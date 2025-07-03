@@ -39,6 +39,7 @@
 #include "model-parameters/model_metadata.h"
 
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
+#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 
 #if defined(__GNUC__)
     #if (__GNUC__ > 8)
@@ -181,7 +182,7 @@ EI_IMPULSE_ERROR run_nn_inference(
     bool debug = false)
 {
     ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
-    ei_config_tensorrt_graph_t *graph_config = (ei_config_tensorrt_graph_t*)block_config->graph_config;
+    ei_config_tflite_graph_t *graph_config = (ei_config_tflite_graph_t*)block_config->graph_config;
 
     #if EI_CLASSIFIER_QUANTIZATION_ENABLED == 1
     #error "TensorRT requires an unquantized network"
@@ -262,14 +263,127 @@ EI_IMPULSE_ERROR run_nn_inference(
     result->timing.classification_us = libeitrt::getInferenceUs(ei_trt_handle, learn_block_index);
     result->timing.classification = (int)(result->timing.classification_us / 1000);
 
-    result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
-    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+    if (result->copy_output) {
+        matrix_t *output_matrix = fmatrix[impulse->dsp_blocks_size + learn_block_index].matrix;
+        const size_t matrix_els = output_matrix->rows * output_matrix->cols;
 
-    for (size_t i = 0; i < output_size; i++) {
-        result->_raw_outputs[learn_block_index].matrix->buffer[i] = out_data[i];
+        if ((output_size >= 0) && ((size_t)output_size != matrix_els)) {
+                ei_printf("ERR: output tensor has size %d, but input matrix has size %d\n",
+                    output_size, (int)matrix_els);
+                ei_free(out_data);
+                return EI_IMPULSE_INVALID_SIZE;
+        }
+        memcpy(output_matrix->buffer, out_data, output_size * sizeof(float));
+        ei_free(out_data);
+        return EI_IMPULSE_OK;
+    }
+
+    EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
+
+    if (block_config->object_detection) {
+        switch (block_config->object_detection_last_layer) {
+            case EI_CLASSIFIER_LAST_LAYER_FOMO: {
+                fill_res = fill_result_struct_f32_fomo(
+                    impulse,
+                    block_config,
+                    result,
+                    out_data,
+                    impulse->fomo_output_size,
+                    impulse->fomo_output_size);
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV5:
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI: {
+                int version = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI ?
+                    5 : 6;
+                fill_res = fill_result_struct_f32_yolov5(
+                    impulse,
+                    block_config,
+                    result,
+                    version,
+                    out_data,
+                    impulse->tflite_output_features_count);
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_TAO_SSD:
+            case EI_CLASSIFIER_LAST_LAYER_TAO_RETINANET: {
+                fill_res = fill_result_struct_f32_tao_decode_detections(
+                    impulse,
+                    block_config,
+                    result,
+                    out_data,
+                    impulse->tflite_output_features_count,
+                    debug);
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV3:
+                fill_res = fill_result_struct_f32_tao_yolov3(
+                    impulse,
+                    block_config,
+                    result,
+                    out_data,
+                    impulse->tflite_output_features_count,
+                    debug);
+                break;
+            case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV4: {
+                fill_res = fill_result_struct_f32_tao_yolov4(
+                    impulse,
+                    block_config,
+                    result,
+                    out_data,
+                    impulse->tflite_output_features_count,
+                    debug);
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLO_PRO: {
+                fill_res = fill_result_struct_f32_yolo_pro(
+                    impulse,
+                    block_config,
+                    result,
+                    out_data,
+                    impulse->tflite_output_features_count,
+                    debug);
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11:
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV11_ABS: {
+                bool is_coord_normalized = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV11 ?
+                    true : false;
+                fill_res = fill_result_struct_f32_yolov11(
+                    impulse,
+                    block_config,
+                    result,
+                    is_coord_normalized,
+                    out_data,
+                    impulse->tflite_output_features_count,
+                    debug);
+                break;
+            }
+            default: {
+                ei_printf(
+                    "ERR: Unsupported object detection last layer (%d)\n",
+                    block_config->object_detection_last_layer);
+                return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+            }
+        }
+    }
+    else if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY) {
+        if (!result->copy_output) {
+            fill_res = fill_result_visual_ad_struct_f32(impulse, result, out_data, block_config, debug);
+        }
+    }
+    // if we copy the output, we don't need to process it as classification
+    else {
+        if (!result->copy_output) {
+            fill_res = fill_result_struct_f32(impulse, result, out_data, debug);
+        }
     }
 
     ei_free(out_data);
+
+    if (fill_res != EI_IMPULSE_OK) {
+        return fill_res;
+    }
 
     return EI_IMPULSE_OK;
 }
@@ -282,13 +396,13 @@ EI_IMPULSE_ERROR run_nn_inference(
 EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     const ei_impulse_t *impulse,
     signal_t *signal,
-    uint32_t learn_block_index,
     ei_impulse_result_t *result,
     void *config_ptr,
     bool debug = false)
 {
     return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
 }
+
 
 #endif // #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSORRT)
 #endif // _EI_CLASSIFIER_INFERENCING_ENGINE_TENSORRT_H_

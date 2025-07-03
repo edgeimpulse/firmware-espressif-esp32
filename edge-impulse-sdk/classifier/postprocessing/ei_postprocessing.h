@@ -59,10 +59,6 @@ extern "C" EI_IMPULSE_ERROR init_postprocessing(ei_impulse_handle_t *handle) {
 
     for (size_t i = 0; i < impulse->postprocessing_blocks_size; i++) {
 
-        if (impulse->postprocessing_blocks[i].init_fn == nullptr) {
-            continue;
-        }
-
         EI_IMPULSE_ERROR res = impulse->postprocessing_blocks[i].init_fn(handle, &handle->post_processing_state[i], impulse->postprocessing_blocks[i].config);
         if (res != EI_IMPULSE_OK) {
             return res;
@@ -84,10 +80,6 @@ extern "C" EI_IMPULSE_ERROR deinit_postprocessing(ei_impulse_handle_t *handle) {
             state = handle->post_processing_state[i];
         }
 
-        if (impulse->postprocessing_blocks[i].deinit_fn == nullptr) {
-            continue;
-        }
-
         EI_IMPULSE_ERROR res = impulse->postprocessing_blocks[i].deinit_fn(state, impulse->postprocessing_blocks[i].config);
         if (res != EI_IMPULSE_OK) {
             return res;
@@ -106,28 +98,18 @@ extern "C" EI_IMPULSE_ERROR run_postprocessing(ei_impulse_handle_t *handle,
     }
     auto impulse = handle->impulse;
 
-    for (size_t ix = 0; ix < impulse->postprocessing_blocks_size; ix++) {
+    for (size_t i = 0; i < impulse->postprocessing_blocks_size; i++) {
         void* state = NULL;
         if (handle->post_processing_state != NULL) {
-            state = handle->post_processing_state[ix];
+            state = handle->post_processing_state[i];
         }
 
-        EI_IMPULSE_ERROR res = impulse->postprocessing_blocks[ix].postprocess_fn(handle,
-                                                                                ix,
-                                                                                impulse->postprocessing_blocks[ix].input_block_id,
+        EI_IMPULSE_ERROR res = impulse->postprocessing_blocks[i].postprocess_fn(handle,
                                                                                 result,
-                                                                                impulse->postprocessing_blocks[ix].config,
+                                                                                impulse->postprocessing_blocks[i].config,
                                                                                 state);
         if (res != EI_IMPULSE_OK) {
             return res;
-        }
-    }
-
-    // free raw results
-    for (size_t ix = 0; ix < impulse->learning_blocks_size; ix++) {
-        if (result->_raw_outputs[ix].matrix) {
-            delete result->_raw_outputs[ix].matrix;
-            result->_raw_outputs[ix].matrix = nullptr;
         }
     }
 

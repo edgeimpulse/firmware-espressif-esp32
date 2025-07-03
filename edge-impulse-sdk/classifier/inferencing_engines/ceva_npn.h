@@ -38,6 +38,7 @@
 #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_CEVA_NPN)
 
 #include "model-parameters/model_metadata.h"
+#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include <ceva_neupro_nano_tflm_api.h>
 
@@ -95,9 +96,9 @@ EI_IMPULSE_ERROR run_nn_inference(
     void *config_ptr,
     bool debug)
 {
+    EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
     ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
     ei_config_ceva_npn_graph_t *graph_config = (ei_config_ceva_npn_graph_t*)block_config->graph_config;
-
     ei_unique_ptr_t p_tensor_arena(nullptr, ei_aligned_free);
     int8_t* input_data;
 	int8_t* output_data;
@@ -144,14 +145,208 @@ EI_IMPULSE_ERROR run_nn_inference(
     result->timing.classification_us = ctx_end_us - ctx_start_us;
     result->timing.classification = (int)(result->timing.classification_us / 1000);
 
-    size_t output_size = graph_config->output_features_count;
+    if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_OBJECT_DETECTION) {
+        switch (block_config->object_detection_last_layer) {
+            case EI_CLASSIFIER_LAST_LAYER_FOMO: {
+                if (graph_config->output_datatype == TfLiteType::kTfLiteInt8) {
+                    fill_res = fill_result_struct_i8_fomo(
+                        impulse,
+                        block_config,
+                        result,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->fomo_output_size,
+                        impulse->fomo_output_size);
+                }
+                else {
+                    EI_LOGE("Unsupported output type (%d) for FOMO last layer\n", graph_config->output_datatype);
+                    fill_res = EI_IMPULSE_POSTPROCESSING_ERROR;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV5:
+            case EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI: {
+                int version = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV5_V5_DRPAI ?
+                    5 : 6;
 
-    result->_raw_outputs[learn_block_index].matrix_i8 = new matrix_i8_t(1, output_size);
-    memcpy(result->_raw_outputs[learn_block_index].matrix_i8->buffer, output_data, output_size * sizeof(int8_t));
+                if (graph_config->output_datatype == kTfLiteInt8) {
+                    fill_res = fill_result_struct_quantized_yolov5(
+                        impulse,
+                        block_config,
+                        result,
+                        version,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (graph_config->output_datatype == kTfLiteUInt8) {
+                    fill_res = fill_result_struct_quantized_yolov5(
+                        impulse,
+                        block_config,
+                        result,
+                        version,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    EI_LOGE("Invalid output type (%d) for YOLOv5 last layer\n", graph_config->output_datatype);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_TAO_SSD:
+            case EI_CLASSIFIER_LAST_LAYER_TAO_RETINANET: {
 
-    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+                if (graph_config->output_datatype == kTfLiteInt8) {
+                    fill_res = fill_result_struct_quantized_tao_decode_detections(
+                        impulse,
+                        block_config,
+                        result,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (graph_config->output_datatype == kTfLiteUInt8) {
+                    fill_res = fill_result_struct_quantized_tao_decode_detections(
+                        impulse,
+                        block_config,
+                        result,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    EI_LOGE("Invalid output type (%d) for TAO last layer\n", graph_config->output_datatype);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV3: {
 
-    return EI_IMPULSE_OK;
+                if (graph_config->output_datatype == kTfLiteInt8) {
+                    fill_res = fill_result_struct_quantized_tao_yolov3(
+                        impulse,
+                        block_config,
+                        result,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (graph_config->output_datatype == kTfLiteUInt8) {
+                    fill_res = fill_result_struct_quantized_tao_yolov3(
+                        impulse,
+                        block_config,
+                        result,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    EI_LOGE("Invalid output type (%d) for TAO YOLOv3 layer\n", graph_config->output_datatype);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_TAO_YOLOV4: {
+
+                if (graph_config->output_datatype == kTfLiteInt8) {
+                    fill_res = fill_result_struct_quantized_tao_yolov4(
+                        impulse,
+                        block_config,
+                        result,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (graph_config->output_datatype == kTfLiteUInt8) {
+                    fill_res = fill_result_struct_quantized_tao_yolov4(
+                        impulse,
+                        block_config,
+                        result,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    EI_LOGE("Invalid output type (%d) for TAO YOLOv4 layer\n", graph_config->output_datatype);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            case EI_CLASSIFIER_LAST_LAYER_YOLO_PRO: {
+
+                if (graph_config->output_datatype == kTfLiteInt8) {
+                    fill_res = fill_result_struct_quantized_yolo_pro(
+                        impulse,
+                        block_config,
+                        result,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else if (graph_config->output_datatype == kTfLiteUInt8) {
+                    fill_res = fill_result_struct_quantized_yolo_pro(
+                        impulse,
+                        block_config,
+                        result,
+                        output_data,
+                        graph_config->output_zeropoint,
+                        graph_config->output_scale,
+                        impulse->tflite_output_features_count,
+                        debug);
+                }
+                else {
+                    EI_LOGE("Invalid output type (%d) for YOLO PRO layer\n", graph_config->output_datatype);
+                    return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+                }
+                break;
+            }
+            default: {
+                EI_LOGE("Unsupported object detection last layer (%d)\n",
+                    block_config->object_detection_last_layer);
+                return EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
+            }
+        }
+    }
+    else if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY) {
+        EI_LOGE("Visual Anomaly Detection is not supported on CEVA NPN\n");
+        fill_res = EI_IMPULSE_INFERENCE_ERROR;
+    }
+    // if we copy the output, we don't need to process it as classification
+    else {
+        if (!result->copy_output) {
+            bool int8_output = graph_config->output_datatype == TfLiteType::kTfLiteInt8;
+            if (int8_output) {
+                fill_res = fill_result_struct_i8(impulse, result, output_data, graph_config->output_zeropoint, graph_config->output_scale, debug);
+            }
+            else {
+                EI_LOGE("CEVA NPN only supports int8 output\n");
+                fill_res = EI_IMPULSE_POSTPROCESSING_ERROR;
+            }
+        }
+    }
+
+    return fill_res;
 }
 
 
