@@ -42,6 +42,7 @@
 #include "ei_classifier_types.h"
 #include "ei_signal_with_axes.h"
 #include "postprocessing/ei_postprocessing.h"
+#include "edge-impulse-sdk/classifier/ei_data_normalization.h"
 
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/porting/ei_logging.h"
@@ -372,6 +373,14 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
 
         out_features_index += block.n_output_features;
     }
+
+#if EI_CLASSIFIER_HAS_DATA_NORMALIZATION
+    EI_IMPULSE_ERROR dn_error = run_data_normalization(handle, features);
+    if (dn_error != EI_IMPULSE_OK) {
+        ei_printf("ERR: Failed to run Data Normalization process (%d)\n", dn_error);
+        return dn_error;
+    }
+#endif
 
 #if EI_CLASSIFIER_SINGLE_FEATURE_INPUT == 0
     for (size_t ix = 0; ix < handle->impulse->learning_blocks_size; ix++) {
@@ -824,6 +833,9 @@ extern "C" void run_classifier_init(void)
     ei_dsp_clear_continuous_audio_state();
     init_impulse(&ei_default_impulse);
     init_postprocessing(&ei_default_impulse);
+#if EI_CLASSIFIER_HAS_DATA_NORMALIZATION
+    init_data_normalization(&ei_default_impulse);
+#endif
 }
 
 /**
@@ -846,6 +858,9 @@ __attribute__((unused)) void run_classifier_init(ei_impulse_handle_t *handle)
     ei_dsp_clear_continuous_audio_state();
     init_impulse(handle);
     init_postprocessing(handle);
+#if EI_CLASSIFIER_HAS_DATA_NORMALIZATION
+    init_data_normalization(handle);
+#endif
 }
 
 /**
@@ -867,6 +882,9 @@ extern "C" void run_classifier_deinit(void)
 __attribute__((unused)) void run_classifier_deinit(ei_impulse_handle_t *handle)
 {
     deinit_postprocessing(handle);
+#if EI_CLASSIFIER_HAS_DATA_NORMALIZATION
+    deinit_data_normalization(handle);
+#endif
 }
 
 /**

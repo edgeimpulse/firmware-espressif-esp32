@@ -74,6 +74,7 @@ typedef enum {
     EI_IMPULSE_DEVICE_INIT_ERROR = -27, /**< Device initialization (usually NPU accelerator) failed */
     EI_IMPULSE_LAST_LAYER_NOT_SUPPORTED = -28, /**< The last layer is not supported by inferencing engine. */
     EI_IMPULSE_POSTPROCESSING_ERROR = -29, /**< Error in post-processing portion of impulse */
+    EI_IMPULSE_DATA_NORMALIZATION_ERROR = -30, /**< Error in data normalization portion of impulse */
 } EI_IMPULSE_ERROR;
 
 #endif // _EIDSP_RETURN_TYPES_H_

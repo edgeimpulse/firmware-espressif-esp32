@@ -144,6 +144,29 @@ typedef struct {
 typedef int (*extract_fn_t)(ei::signal_t *signal, ei::matrix_t *output_matrix, void *config, float frequency);
 
 typedef struct {
+    float *mean_data;
+    const size_t mean_data_len;
+    float *scale_data;
+    const size_t scale_data_len;
+    float *var_data;
+    const size_t var_data_len;
+} ei_data_normalization_standard_scaler_config_t;
+
+typedef enum EI_DATA_NORMALZATION_METHOD {
+    DATA_NORMALIZATION_METHOD_NONE               = 0,
+    DATA_NORMALIZATION_METHOD_STANDARD_SCALER    = 1
+} ei_data_normalization_method_t;
+
+typedef struct {
+    void *config;
+    const ei_data_normalization_method_t method;
+    void *context;
+    EI_IMPULSE_ERROR (*init_fn)(ei_impulse_handle_t *handle);
+    EI_IMPULSE_ERROR (*deinit_fn)(ei_impulse_handle_t *handle);
+    EI_IMPULSE_ERROR (*exec_fn)(void *dsp_block, ei::matrix_t* matrix);
+} ei_data_normalization_t;
+
+typedef struct {
     uint32_t blockId;
     size_t n_output_features;
     extract_fn_t extract_fn;
@@ -152,6 +175,7 @@ typedef struct {
     uint32_t axes_size;
     int version;  // future proof, can easily add to this struct now
     DspHandle* (*factory)(void* config, float sampling_freq); // nullptr means no state
+    const ei_data_normalization_t *data_normalization_config;
     // v1 ends here
 } ei_model_dsp_t;
 
