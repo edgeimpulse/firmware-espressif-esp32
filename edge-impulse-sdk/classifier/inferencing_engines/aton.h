@@ -46,6 +46,11 @@
 #include "ll_aton_runtime.h"
 #include "app_config.h"
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /* Private variables ------------------------------------------------------- */
 static uint8_t *nn_in;
 static uint8_t *nn_out;
@@ -247,6 +252,10 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     return EI_IMPULSE_OK;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // EI_CLASSIFIER_INFERENCING_ENGINE
 #endif // _EI_CLASSIFIER_INFERENCING_ENGINE_ATON_H
