@@ -47,7 +47,6 @@
 #include "tensorflow-lite/tensorflow/lite/model.h"
 #include "tensorflow-lite/tensorflow/lite/optional_debug_tools.h"
 #include "edge-impulse-sdk/tensorflow/lite/kernels/custom/tree_ensemble_classifier.h"
-#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "edge-impulse-sdk/classifier/inferencing_engines/tflite_helper.h"
 #ifdef EI_CLASSIFIER_USE_QNN_DELEGATES
@@ -189,18 +188,33 @@ EI_IMPULSE_ERROR run_nn_inference(
         return interpreter_ret;
     }
 
-    TfLiteTensor *input = interpreter->input_tensor(0);
-    TfLiteTensor *output = interpreter->output_tensor(block_config->output_data_tensor);
+    TfLiteTensor* input = nullptr;
+    TfLiteTensor** outputs = nullptr;
+
+    // allocate outputs
+    outputs = (TfLiteTensor**)ei_malloc(block_config->output_tensors_size * sizeof(TfLiteTensor*));
+
+    // Obtain pointers to the model's input and output tensors.
+    input = interpreter->input_tensor(0);
+
+    for (uint8_t i = 0; i < block_config->output_tensors_size; i++) {
+        outputs[i] = interpreter->output_tensor(block_config->output_tensors_indices[i]);
+        if (&outputs[i] == nullptr) {
+            return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
+        }
+    }
 
     if (!input) {
         return EI_IMPULSE_INPUT_TENSOR_WAS_NULL;
     }
-    if (!output) {
-        return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
-    }
 
-    size_t mtx_size = impulse->dsp_blocks_size + impulse->learning_blocks_size;
-    auto input_res = fill_input_tensor_from_matrix(fmatrix, input, input_block_ids, input_block_ids_size, mtx_size);
+    auto input_res = fill_input_tensor_from_matrix(fmatrix,
+                                                result->_raw_outputs,
+                                                input,
+                                                input_block_ids,
+                                                input_block_ids_size,
+                                                impulse->dsp_blocks_size,
+                                                impulse->learning_blocks_size);
     if (input_res != EI_IMPULSE_OK) {
         return input_res;
     }
@@ -218,26 +232,54 @@ EI_IMPULSE_ERROR run_nn_inference(
     result->timing.classification_us = ctx_end_us - ctx_start_us;
     result->timing.classification = (int)(result->timing.classification_us / 1000);
 
-    if (result->copy_output) {
-        auto output_res = fill_output_matrix_from_tensor(output, fmatrix[impulse->dsp_blocks_size + learn_block_index].matrix);
-        if (output_res != EI_IMPULSE_OK) {
-            return output_res;
+    for (uint32_t output_ix = 0; output_ix < block_config->output_tensors_size; output_ix++) {
+        TfLiteTensor* output = outputs[output_ix];
+        // calculate the size of the output by iterating through dims
+        size_t output_size = 1;
+        for (int dim_num = 0; dim_num < output->dims->size; dim_num++) {
+            output_size *= output->dims->data[dim_num];
         }
+
+        switch (output->type) {
+            case kTfLiteFloat32: {
+                result->_raw_outputs[learn_block_index + output_ix].matrix = new matrix_t(1, output_size);
+                memcpy(result->_raw_outputs[learn_block_index + output_ix].matrix->buffer, output->data.f, output->bytes);
+                break;
+            }
+            case kTfLiteInt8: {
+                if (block_config->dequantize_output) {
+                    result->_raw_outputs[learn_block_index + output_ix].matrix = new matrix_t(1, output_size);
+                    fill_output_matrix_from_tensor(output, result->_raw_outputs[learn_block_index + output_ix].matrix);
+                }
+                else {
+                    result->_raw_outputs[learn_block_index + output_ix].matrix_i8 = new matrix_i8_t(1, output_size);
+                    memcpy(result->_raw_outputs[learn_block_index + output_ix].matrix_i8->buffer, output->data.int8, output->bytes);
+                }
+                break;
+            }
+            case kTfLiteUInt8: {
+                if (block_config->dequantize_output) {
+                    result->_raw_outputs[learn_block_index + output_ix].matrix = new matrix_t(1, output_size);
+                    fill_output_matrix_from_tensor(output, result->_raw_outputs[learn_block_index + output_ix].matrix);
+                }
+                else {
+                    result->_raw_outputs[learn_block_index + output_ix].matrix_u8 = new matrix_u8_t(1, output_size);
+                    memcpy(result->_raw_outputs[learn_block_index + output_ix].matrix_u8->buffer, output->data.uint8, output->bytes);
+                }
+                break;
+            }
+            default: {
+                ei_printf("ERR: Cannot handle output type (%d)\n", output->type);
+                return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
+            }
+        }
+
+        result->_raw_outputs[learn_block_index + output_ix].blockId = block_config->block_id + output_ix;
     }
 
-    if (debug) {
-        ei_printf("Predictions (time: %d ms.):\n", result->timing.classification);
-    }
+    EI_LOGD("Predictions (time: %d ms.):\n", result->timing.classification);
 
-    TfLiteTensor *scores_tensor = interpreter->output_tensor(block_config->output_score_tensor);
-    TfLiteTensor *labels_tensor = interpreter->output_tensor(block_config->output_labels_tensor);
-
-    EI_IMPULSE_ERROR fill_res = fill_result_struct_from_output_tensor_tflite(
-        impulse, block_config, output, labels_tensor, scores_tensor, result, debug);
-
-    if (fill_res != EI_IMPULSE_OK) {
-        return fill_res;
-    }
+    ei_free(outputs);
 
     // on Linux we're not worried about free'ing (for now)
 
@@ -255,18 +297,16 @@ __attribute__((unused)) int extract_tflite_features(signal_t *signal, matrix_t *
         .arena_size = dsp_config->arena_size
     };
 
+    const uint8_t ei_output_tensor_indices[1] = { 0 };
+    const uint8_t ei_output_tensor_size = 1;
+
     ei_learning_block_config_tflite_graph_t ei_learning_block_config = {
         .implementation_version = 1,
-        .classification_mode = EI_CLASSIFIER_CLASSIFICATION_MODE_DSP,
         .block_id = dsp_config->block_id,
-        .object_detection = false,
-        .object_detection_last_layer = EI_CLASSIFIER_LAST_LAYER_UNKNOWN,
-        .output_data_tensor = 0,
-        .output_labels_tensor = 255,
-        .output_score_tensor = 255,
-        .threshold = 0,
+        .output_tensors_indices = ei_output_tensor_indices,
+        .output_tensors_size = ei_output_tensor_size,
         .quantized = 0,
-        .compiled = 0,
+        .compiled = 1,
         .graph_config = &ei_config_tflite_graph_0
     };
 

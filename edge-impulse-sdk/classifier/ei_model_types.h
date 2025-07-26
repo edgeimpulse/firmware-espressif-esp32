@@ -99,13 +99,14 @@
 #define EI_CLASSIFIER_IMAGE_SCALING_BGR_SUBTRACT_IMAGENET_MEAN    5
 
 // maps back to ClassificationMode in keras-types.ts
-#define EI_CLASSIFIER_CLASSIFICATION_MODE_CLASSIFICATION      1
-#define EI_CLASSIFIER_CLASSIFICATION_MODE_REGRESSION          2
-#define EI_CLASSIFIER_CLASSIFICATION_MODE_OBJECT_DETECTION    3
-#define EI_CLASSIFIER_CLASSIFICATION_MODE_ANOMALY_GMM         4
-#define EI_CLASSIFIER_CLASSIFICATION_MODE_VISUAL_ANOMALY      5
-#define EI_CLASSIFIER_CLASSIFICATION_MODE_ANOMALY_KMEANS      6
-#define EI_CLASSIFIER_CLASSIFICATION_MODE_DSP                 7
+#define EI_CLASSIFIER_MODE_OTHER               0
+#define EI_CLASSIFIER_MODE_CLASSIFICATION      1
+#define EI_CLASSIFIER_MODE_REGRESSION          2
+#define EI_CLASSIFIER_MODE_OBJECT_DETECTION    3
+#define EI_CLASSIFIER_MODE_ANOMALY_GMM         4
+#define EI_CLASSIFIER_MODE_VISUAL_ANOMALY      5
+#define EI_CLASSIFIER_MODE_ANOMALY_KMEANS      6
+#define EI_CLASSIFIER_MODE_DSP                 7
 
 #ifndef EI_CLASSIFIER_DSP_AXES_INDEX_TYPE
 #define EI_CLASSIFIER_DSP_AXES_INDEX_TYPE       uint8_t
@@ -113,11 +114,6 @@
 
 struct ei_impulse;
 class ei_impulse_handle_t;
-
-typedef struct {
-    ei::matrix_t* matrix;
-    uint32_t blockId;
-} ei_feature_t;
 
 typedef struct {
     uint16_t implementation_version;
@@ -186,24 +182,25 @@ typedef struct {
 
 typedef struct {
     uint32_t blockId;
-    bool keep_output;
     EI_IMPULSE_ERROR (*infer_fn)(const ei_impulse *impulse, ei_feature_t *fmatrix, uint32_t learn_block_index, uint32_t* input_block_ids, uint32_t input_block_ids_size, ei_impulse_result_t *result, void *config, bool debug);
     void *config;
     int image_scaling;
     const uint32_t* input_block_ids;
     const uint8_t input_block_ids_size;
-    uint32_t output_features_count;
 } ei_learning_block_t;
 
 typedef struct {
     uint32_t block_id;
+    uint8_t type;
     EI_IMPULSE_ERROR (*init_fn)(ei_impulse_handle_t *handle, void **state, void *config);
     EI_IMPULSE_ERROR (*deinit_fn)(void *state, void *config);
-    EI_IMPULSE_ERROR (*postprocess_fn)(ei_impulse_handle_t *handle, ei_impulse_result_t *result, void *config, void* state);
+    EI_IMPULSE_ERROR (*postprocess_fn)(ei_impulse_handle_t *handle, uint32_t block_index, uint32_t input_block_id, ei_impulse_result_t *result, void *config, void* state);
     EI_IMPULSE_ERROR (*display_fn)(ei_impulse_result_t *result, void *config);
     void *config;
+    const uint32_t input_block_id;
 } ei_postprocessing_block_t;
 
+/** Configuration for the tensaiflow.h */
 typedef struct {
     uint16_t implementation_version;
     uint8_t input_datatype;
@@ -214,8 +211,62 @@ typedef struct {
     bool output_quantized;
     float output_scale;
     float output_zeropoint;
+    uint32_t output_features_count;
 } ei_config_tensaiflow_graph_t;
 
+/** Configuration for the akida.h */
+typedef struct {
+    uint16_t implementation_version;
+    const unsigned char *model;
+    size_t model_size;
+    int8_t object_detection_last_layer;
+} ei_config_akida_graph_t;
+
+/** Configuration for the tensorrt.h */
+typedef struct {
+    uint16_t implementation_version;
+    const unsigned char *model;
+    size_t model_size;
+    uint32_t output_features_count;
+    uint8_t mode;
+} ei_config_tensorrt_graph_t;
+
+/** Configuration for the drpai.h */
+typedef struct {
+    uint16_t implementation_version;
+    int8_t object_detection_last_layer;
+    uint32_t output_features_count;
+} ei_config_drpai_graph_t;
+
+/** Configuration for the aton.h */
+typedef struct {
+    uint16_t implementation_version;
+    uint8_t quant_type;
+} ei_config_aton_graph_t;
+
+/** Configuration for the aton.h */
+typedef struct {
+    uint16_t implementation_version;
+    int8_t object_detection_last_layer;
+} ei_config_memryx_graph_t;
+
+/**  Configuration for the ethos_linux */
+typedef struct {
+    uint16_t implementation_version;
+    uint8_t input_datatype;
+    bool input_quantized;
+    float input_scale;
+    float input_zeropoint;
+    uint8_t output_datatype;
+    bool output_quantized;
+    float output_scale;
+    float output_zeropoint;
+    const unsigned char *model;
+    size_t model_size;
+    uint32_t output_features_count;
+} ei_config_ethos_graph_t;
+
+/** Configuration for the tflite_micro.h/tflite_full.h */
 typedef struct {
     uint16_t implementation_version;
     const unsigned char *model;
@@ -223,36 +274,7 @@ typedef struct {
     size_t arena_size;
 } ei_config_tflite_graph_t;
 
-typedef struct {
-    uint16_t implementation_version;
-    uint8_t input_datatype;
-    bool input_quantized;
-    float input_scale;
-    float input_zeropoint;
-    uint8_t output_datatype;
-    bool output_quantized;
-    float output_scale;
-    float output_zeropoint;
-    const unsigned char *model;
-    size_t model_size;
-    size_t arena_size;
-} ei_config_ceva_npn_graph_t;
-
-typedef struct {
-    uint16_t implementation_version;
-    uint8_t input_datatype;
-    bool input_quantized;
-    float input_scale;
-    float input_zeropoint;
-    uint8_t output_datatype;
-    bool output_quantized;
-    float output_scale;
-    float output_zeropoint;
-    const unsigned char *model;
-    size_t model_size;
-    size_t arena_size;
-} ei_config_ethos_graph_t;
-
+/** Configuration for the tflite_eon.h */
 typedef struct {
     uint16_t implementation_version;
     TfLiteStatus (*model_init)(void*(*alloc_fnc)(size_t, size_t));
@@ -264,26 +286,35 @@ typedef struct {
 
 typedef struct {
     uint16_t implementation_version;
-    uint8_t classification_mode;
+    uint8_t input_datatype;
+    bool input_quantized;
+    float input_scale;
+    float input_zeropoint;
+    uint8_t output_datatype;
+    bool output_quantized;
+    float output_scale;
+    float output_zeropoint;
+    const unsigned char *model;
+    size_t model_size;
+    size_t arena_size;
+    uint32_t output_features_count;
+} ei_config_ceva_npn_graph_t;
+
+typedef struct {
+    uint16_t implementation_version;
     uint32_t block_id;
-    /* object detection */
-    bool object_detection;
-    int8_t object_detection_last_layer;
-    uint8_t output_data_tensor;
-    uint8_t output_labels_tensor;
-    uint8_t output_score_tensor;
-    /* object detection and visual AD */
-    float threshold;
-    /* tflite graph params */
+    const uint8_t* output_tensors_indices;
+    uint8_t output_tensors_size;
+    /* graph params */
     bool quantized;
     bool compiled;
-    /* tflite graph config pointer */
+    /* graph config pointer */
     void *graph_config;
+    bool dequantize_output;
 } ei_learning_block_config_tflite_graph_t;
 
 typedef struct {
     uint16_t implementation_version;
-    uint8_t classification_mode;
     const uint16_t *anom_axis;
     uint16_t anom_axes_size;
     const ei_classifier_anom_cluster_t *anom_clusters;
@@ -294,11 +325,8 @@ typedef struct {
 
 typedef struct {
     uint16_t implementation_version;
-    uint8_t classification_mode;
     const uint16_t *anom_axis;
     uint16_t anom_axes_size;
-    float anomaly_threshold;
-    bool visual;
     void* graph_config;
 } ei_learning_block_config_anomaly_gmm_t;
 
@@ -326,22 +354,17 @@ typedef struct ei_impulse {
     uint32_t input_frames;
     float interval_ms;
     float frequency;
+
+    /* dsp blocks */
     uint8_t dsp_blocks_size;
     ei_model_dsp_t *dsp_blocks;
 
-    /* object detection */
-    uint16_t object_detection_count;
-    uint32_t fomo_output_size;
-    uint16_t visual_ad_grid_size_x;
-    uint16_t visual_ad_grid_size_y;
-    uint32_t tflite_output_features_count;
-
     /* learning blocks */
-    const uint8_t learning_blocks_size;
+    uint8_t learning_blocks_size;
     const ei_learning_block_t *learning_blocks;
 
     /* postprocessing blocks */
-    const size_t postprocessing_blocks_size;
+    size_t postprocessing_blocks_size;
     const ei_postprocessing_block_t *postprocessing_blocks;
 
     /* inference parameters */
@@ -357,7 +380,6 @@ typedef struct ei_impulse {
     uint8_t has_anomaly;
     uint16_t label_count;
     const char **categories;
-    ei_object_detection_nms_config_t object_detection_nms;
 } ei_impulse_t;
 
 class ei_impulse_state_t {

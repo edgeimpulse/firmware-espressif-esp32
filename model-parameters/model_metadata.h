@@ -32,9 +32,17 @@
 #ifndef _EI_CLASSIFIER_MODEL_METADATA_H_
 #define _EI_CLASSIFIER_MODEL_METADATA_H_
 
+/**
+* @file
+*  Auto-generated global deployment macros.
+*  model_metadata.h defines if certain functions are enabled or disabled in the whole project.
+*/
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+
+#include "edge-impulse-sdk/classifier/ei_constants.h"
 
 #define EI_CLASSIFIER_NONE                       255
 #define EI_CLASSIFIER_UTENSOR                    1
@@ -69,16 +77,17 @@
 #define EI_CLASSIFIER_DATATYPE_UINT8             3
 #define EI_CLASSIFIER_DATATYPE_INT8              9
 
-#define EI_CLASSIFIER_PROJECT_ID                 168
+#define EI_CLASSIFIER_PROJECT_ID                 40
 #define EI_CLASSIFIER_PROJECT_OWNER              "Edge Impulse Profiling"
 #define EI_CLASSIFIER_PROJECT_NAME               "Demo: Keyword Spotting"
-#define EI_CLASSIFIER_PROJECT_DEPLOY_VERSION     1
+#define EI_CLASSIFIER_PROJECT_DEPLOY_VERSION     3
 #define EI_CLASSIFIER_NN_INPUT_FRAME_SIZE        650
 #define EI_CLASSIFIER_RAW_SAMPLE_COUNT           16000
 #define EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME      1
 #define EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE       (EI_CLASSIFIER_RAW_SAMPLE_COUNT * EI_CLASSIFIER_RAW_SAMPLES_PER_FRAME)
 #define EI_CLASSIFIER_INPUT_WIDTH                0
 #define EI_CLASSIFIER_INPUT_HEIGHT               0
+#define EI_CLASSIFIER_RESIZE_MODE                EI_CLASSIFIER_RESIZE_NONE
 #define EI_CLASSIFIER_INPUT_FRAMES               0
 #define EI_CLASSIFIER_NN_OUTPUT_COUNT            3
 #define EI_CLASSIFIER_INTERVAL_MS                0.0625
@@ -97,6 +106,7 @@
 #define EI_CLASSIFIER_TFLITE_INPUT_DATATYPE         EI_CLASSIFIER_DATATYPE_INT8
 #define EI_CLASSIFIER_TFLITE_OUTPUT_DATATYPE        EI_CLASSIFIER_DATATYPE_INT8
 
+#define EI_CLASSIFIER_TFLITE_LARGEST_ARENA_SIZE  6265
 
 #define EI_CLASSIFIER_INFERENCING_ENGINE            EI_CLASSIFIER_TFLITE
 
@@ -117,6 +127,7 @@
 #define EI_CLASSIFIER_LOAD_FFT_1024              0
 #define EI_CLASSIFIER_LOAD_FFT_2048              0
 #define EI_CLASSIFIER_LOAD_FFT_4096              0
+#define EI_CLASSIFIER_NON_STANDARD_FFT_SIZES     0
 
 #define EI_DSP_PARAMS_GENERATED 1
 
@@ -131,8 +142,8 @@
 #define EI_CLASSIFIER_SLICE_SIZE                 (EI_CLASSIFIER_RAW_SAMPLE_COUNT / EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW)
 
 #define EI_STUDIO_VERSION_MAJOR             1
-#define EI_STUDIO_VERSION_MINOR             55
-#define EI_STUDIO_VERSION_PATCH             0
+#define EI_STUDIO_VERSION_MINOR             61
+#define EI_STUDIO_VERSION_PATCH             36
 
 #define EI_CLASSIFIER_HR_ENABLED            0
 
@@ -288,6 +299,7 @@ typedef struct {
     size_t named_axes_size;
     const char * ppg_ecg;
     int filter_preset;
+    int hr_win_size_s;
     float sensitivity;
     float acc_resting_std;
     const char * hrv_features;

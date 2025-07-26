@@ -38,7 +38,6 @@
 
 /* Include ----------------------------------------------------------------- */
 #include "edge-impulse-sdk/tensorflow/lite/kernels/custom/tree_ensemble_classifier.h"
-#include "edge-impulse-sdk/classifier/ei_fill_result_struct.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "edge-impulse-sdk/classifier/ei_run_dsp.h"
 #include "edge-impulse-sdk/porting/ei_logging.h"
@@ -64,11 +63,14 @@ LL_ATON_DECLARE_NAMED_NN_INSTANCE_AND_INTERFACE(Default);
 EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     const ei_impulse_t *impulse,
     signal_t *signal,
+    uint32_t learn_block_index,
     ei_impulse_result_t *result,
     void *config_ptr,
     bool debug = false)
 {
-    EI_IMPULSE_ERROR fill_res = EI_IMPULSE_OK;
+    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
+    ei_config_aton_graph_t *graph_config = (ei_config_aton_graph_t*)block_config->graph_config;
+
     extern uint8_t *global_camera_buffer;
     extern uint8_t *snapshot_buf;
     // this needs to be changed for multi-model, multi-impulse
@@ -91,14 +93,13 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
         nn_in = (uint8_t *) LL_Buffer_addr_start(&nn_in_info[0]);
         uint32_t nn_in_len = LL_Buffer_len(&nn_in_info[0]);
 
-
         #if DATA_OUT_FORMAT_FLOAT32
         nn_out = (float32_t *) nn_out_info[0].addr_base.p;
         #else
         nn_out = (uint8_t *) LL_Buffer_addr_start(&nn_out_info[0]);
         #endif
         nn_out_len = LL_Buffer_len(&nn_out_info[0]);
-        
+
         first_run = false;
     }
 
@@ -118,114 +119,38 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     }
     #endif
 
-    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t *)impulse->learning_blocks[0].config;
-    if (block_config->classification_mode == EI_CLASSIFIER_CLASSIFICATION_MODE_OBJECT_DETECTION) {
-        switch (block_config->object_detection_last_layer) {
-
-            case EI_CLASSIFIER_LAST_LAYER_YOLOV5:
-                #if MODEL_OUTPUT_IS_FLOAT
-                fill_res = fill_result_struct_f32_yolov5(
-                    ei_default_impulse.impulse,
-                    &result,
-                    6, // hard coded for now
-                    (float *)&data,//output.data.uint8,
-                    // output.params.zero_point,
-                    // output.params.scale,
-                    ei_default_impulse.impulse->tflite_output_features_count);
-                #else
-                fill_res = fill_result_struct_quantized_yolov5(
-                    impulse,        
-                    block_config,
-                    result,
-                    6, // hard coded for now
-                    (uint8_t *)nn_out,
-                    nn_out_info[0].offset[0],
-                    nn_out_info[0].scale[0],
-                    nn_out_len);
-                #endif
-                break;
-
-            case EI_CLASSIFIER_LAST_LAYER_YOLO_PRO:
-                #if MODEL_OUTPUT_IS_FLOAT
-                fill_res = fill_result_struct_f32_yolo_pro(
-                    ei_default_impulse.impulse,
-                    &result,
-                    (float *)&data,
-                    ei_default_impulse.impulse->tflite_output_features_count);
-                #else
-                fill_res = fill_result_struct_quantized_yolo_pro(
-                    impulse,
-                    block_config,
-                    result,
-                    (uint8_t *)nn_out,
-                    nn_out_info[0].offset[0],
-                    nn_out_info[0].scale[0],
-                    nn_out_len);
-                #endif
-                break;
-
-            case EI_CLASSIFIER_LAST_LAYER_FOMO:
-                fill_res = fill_result_struct_i8_fomo(
-                    impulse,
-                    block_config,
-                    result,
-                    (int8_t *)nn_out,
-                    nn_out_info[0].offset[0],
-                    nn_out_info[0].scale[0],
-                    impulse->fomo_output_size,
-                    impulse->fomo_output_size);
-                break;
-            case EI_CLASSIFIER_LAST_LAYER_YOLOV11:
-            case EI_CLASSIFIER_LAST_LAYER_YOLOV11_ABS: {
-                bool is_coord_normalized = block_config->object_detection_last_layer == EI_CLASSIFIER_LAST_LAYER_YOLOV11 ?
-                    true : false;
-                #if MODEL_OUTPUT_IS_FLOAT
-                fill_res = fill_result_struct_f32_yolov11(
-                    ei_default_impulse.impulse,
-                    &result,
-                    is_coord_normalized,
-                    (float *)&data,
-                    ei_default_impulse.impulse->tflite_output_features_count);
-                #else
-                fill_res = fill_result_struct_quantized_yolov11(
-                    impulse,
-                    block_config,
-                    result,
-                    is_coord_normalized,
-                    (uint8_t *)nn_out,
-                    nn_out_info[0].offset[0],
-                    nn_out_info[0].scale[0],
-                    nn_out_len);
-                #endif
-                break;
-            }
-
-        
-            default:
-                ei_printf("ERR: Unsupported object detection last layer (%d)\n",
-                    block_config->object_detection_last_layer);
-                fill_res = EI_IMPULSE_UNSUPPORTED_INFERENCING_ENGINE;
-                break;
-        }
-
-    }
-    // if we copy the output, we don't need to process it as classification
-    else
-    {
-        if (!result->copy_output) {
-            bool int8_output = 1; //quantized hardcoded for now
-            if (int8_output) {
-                fill_res = fill_result_struct_i8(impulse, result, (int8_t *)nn_out, nn_out_info[0].offset[0], nn_out_info[0].scale[0], debug);
-            }
-            else {
-                fill_res = fill_result_struct_f32(impulse, result,(float *)nn_out, debug);
-            }
-        }
-    }
-
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
 
-    return fill_res;
+    size_t output_size = nn_out_len;
+
+    result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
+    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+
+    switch (graph_config->quant_type) {
+        case kTfLiteFloat32: {
+            result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
+            memcpy(result->_raw_outputs[learn_block_index].matrix->buffer, (float *)nn_out, output_size * sizeof(float));
+            break;
+        }
+        case kTfLiteInt8: {
+            result->_raw_outputs[learn_block_index].matrix_i8 = new matrix_i8_t(1, output_size);
+            memcpy(result->_raw_outputs[learn_block_index].matrix_i8->buffer, (int8_t *)nn_out, output_size * sizeof(int8_t));
+            break;
+        }
+        case kTfLiteUInt8: {
+            result->_raw_outputs[learn_block_index].matrix_u8 = new matrix_u8_t(1, output_size);
+            memcpy(result->_raw_outputs[learn_block_index].matrix_u8->buffer, (uint8_t *)nn_out, output_size * sizeof(uint8_t));
+            break;
+        }
+        default: {
+            ei_printf("ERR: Cannot handle output type (%d)\n", graph_config->quant_type);
+            return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
+        }
+    }
+
+    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+
+    return EI_IMPULSE_OK;
 }
 
 

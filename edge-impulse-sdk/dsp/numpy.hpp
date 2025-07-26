@@ -2547,4 +2547,70 @@ struct fmat {
 };
 } // namespace ei
 
+__attribute__((unused)) static bool find_mtx_by_idx(ei_feature_t* mtx, ei::matrix_t** matrix, uint32_t mtx_id, size_t mtx_size) {
+    for (uint32_t i = 0; i < mtx_size; i++) {
+        EI_LOGD("mtx[%d].blockId = %d\n", i, mtx[i].blockId);
+        if (mtx[i].matrix == NULL) {
+            EI_LOGD("Matrix is NULL\n");
+            continue;
+        }
+        if (mtx[i].blockId == mtx_id || mtx[i].blockId == 0) {
+            EI_LOGD("Found matrix with blockId %d\n", mtx[i].blockId);
+            *matrix = mtx[i].matrix;
+            return true;
+        }
+    }
+    EI_LOGD("Matrix not found\n");
+    return false;
+}
+
+__attribute__((unused)) static bool find_mtx_by_idx(ei_feature_t* mtx, ei::matrix_i8_t** matrix, uint32_t mtx_id, size_t mtx_size) {
+    for (uint32_t i = 0; i < mtx_size; i++) {
+        EI_LOGD("mtx[%d].blockId = %d\n", i, mtx[i].blockId);
+        if (mtx[i].matrix_i8 == NULL) {
+            EI_LOGD("Matrix is NULL\n");
+            continue;
+        }
+        if (mtx[i].blockId == mtx_id || mtx[i].blockId == 0) {
+            EI_LOGD("Found matrix with blockId %d\n", mtx[i].blockId);
+            *matrix = mtx[i].matrix_i8;
+            return true;
+        }
+    }
+    EI_LOGD("Matrix not found\n");
+    return false;
+}
+
+__attribute__((unused)) static bool find_mtx_by_idx(ei_feature_t* mtx, ei::matrix_u8_t** matrix, uint32_t mtx_id, size_t mtx_size) {
+    for (uint32_t i = 0; i < mtx_size; i++) {
+        EI_LOGD("mtx[%d].blockId = %d\n", i, mtx[i].blockId);
+        if (mtx[i].matrix_u8 == NULL) {
+            EI_LOGD("Matrix is NULL\n");
+            continue;
+        }
+        if (mtx[i].blockId == mtx_id || mtx[i].blockId == 0) {
+            EI_LOGD("Found matrix with blockId %d\n", mtx[i].blockId);
+            *matrix = mtx[i].matrix_u8;
+            return true;
+        }
+    }
+    EI_LOGD("Matrix not found\n");
+    return false;
+}
+
+__attribute__((unused)) static size_t get_feature_size(ei_feature_t* mtx, uint32_t ids_size, uint32_t* ids, size_t mtx_size) {
+    size_t feat_size = 0;
+    ei::matrix_t* matrix = NULL;
+    for (size_t i = 0; i < ids_size; i++) {
+        size_t cur_mtx = ids[i];
+
+        if (!find_mtx_by_idx(mtx, &matrix, cur_mtx, mtx_size)) {
+            ei_printf("ERR: Cannot find matrix with id %zu\n", cur_mtx);
+            return -1;
+        }
+        feat_size += matrix->rows * matrix->cols;
+    }
+    return feat_size;
+}
+
 #endif // _EIDSP_NUMPY_H_
