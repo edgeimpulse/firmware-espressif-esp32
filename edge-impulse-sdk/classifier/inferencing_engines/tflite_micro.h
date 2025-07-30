@@ -446,8 +446,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 {
     ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
 
-    memset(result, 0, sizeof(ei_impulse_result_t));
-
     uint64_t ctx_start_us;
     TfLiteTensor* input;
     TfLiteTensor* outputs;
