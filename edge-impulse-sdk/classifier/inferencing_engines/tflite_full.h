@@ -51,6 +51,8 @@
 #include "edge-impulse-sdk/classifier/inferencing_engines/tflite_helper.h"
 #ifdef EI_CLASSIFIER_USE_QNN_DELEGATES
 #include "QNN/TFLiteDelegate/QnnTFLiteDelegate.h"
+#elif EI_CLASSIFIER_USE_GPU_DELEGATES==1
+#include "tensorflow-lite/tensorflow/lite/delegates/gpu/delegate.h"
 #endif
 
 typedef struct {
@@ -100,6 +102,15 @@ static EI_IMPULSE_ERROR get_interpreter(ei_learning_block_config_tflite_graph_t 
 
         if (new_state->interpreter->ModifyGraphWithDelegate(delegate) != kTfLiteOk) {
             ei_printf("ERROR: ModifyGraphWithDelegate failed\n");
+            return EI_IMPULSE_TFLITE_ERROR;
+        }
+#elif EI_CLASSIFIER_USE_GPU_DELEGATES==1
+        TfLiteGpuDelegateOptionsV2 options = TfLiteGpuDelegateOptionsV2Default();
+
+        TfLiteDelegate* delegate = TfLiteGpuDelegateV2Create(&options);
+
+        if (new_state->interpreter->ModifyGraphWithDelegate(delegate) != kTfLiteOk) {
+            ei_printf("ERROR: ModifyGraphWithDelegate (GPU) failed\n");
             return EI_IMPULSE_TFLITE_ERROR;
         }
 #endif
