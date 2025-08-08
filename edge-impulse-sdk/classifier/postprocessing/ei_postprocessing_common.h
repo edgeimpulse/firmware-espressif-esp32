@@ -517,7 +517,7 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_visual_ad_f32(ei_impulse
 
     for (uint16_t x = 0; x <= config->grid_size_x - 1; x++) {
         for (uint16_t y = 0; y <= config->grid_size_y - 1; y++) {
-            if (raw_output_mtx->buffer[x * config->grid_size_x + y] >= config->threshold) {
+            if (raw_output_mtx->buffer[(x * config->grid_size_x) + y] >= config->threshold) {
                 ei_impulse_result_bounding_box_t tmp = {
                     .label = "anomaly",
                     .x = static_cast<uint32_t>(y * (static_cast<float>(impulse->input_height) / config->grid_size_y)),

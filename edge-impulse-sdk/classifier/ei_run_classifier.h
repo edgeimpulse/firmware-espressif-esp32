@@ -422,7 +422,8 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     EI_IMPULSE_ERROR res = run_inference(handle, features, result, debug);
     if (res != EI_IMPULSE_OK) {
         return res;
-    } else {
+    }
+    else {
         return run_postprocessing(handle, result);
     }
 #endif

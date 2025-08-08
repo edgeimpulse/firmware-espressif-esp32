@@ -7,6 +7,7 @@ set(FIRMWARE_SDK_FOLDER ../firmware-sdk)
 
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 add_definitions(-DEI_CLASSIFIER_TFLITE_ENABLE_ESP_NN=1) # enables ESP-NN optimizations by Espressif
+add_definitions(-DEIDSP_USE_ESP_DSP=1) # enables ESP-DSP optimizations by Espressif
 endif()
 
 set(include_dirs
@@ -19,6 +20,8 @@ set(include_dirs
     ${EI_SDK_FOLDER}/porting
     ${EI_SDK_FOLDER}/porting/espressif/ESP-NN
     ${EI_SDK_FOLDER}/porting/espressif/ESP-NN/include
+    ${EI_SDK_FOLDER}//porting/espressif/esp-dsp/modules/fft/include
+    ${EI_SDK_FOLDER}//porting/espressif/esp-dsp/modules/common/include
     ${EI_SDK_FOLDER}/tensorflow
     ${EI_SDK_FOLDER}/third_party
     ${EI_SDK_FOLDER}/third_party/ruy
@@ -37,7 +40,6 @@ include(${EI_SDK_FOLDER}/cmake/utils.cmake)
 
 RECURSIVE_FIND_FILE_EXCLUDE_DIR(SOURCE_FILES "../edge-impulse-sdk" "CMSIS" "*.cpp")
 RECURSIVE_FIND_FILE_EXCLUDE_DIR(CC_FILES "../edge-impulse-sdk" "CMSIS" "*.cc")
-RECURSIVE_FIND_FILE_EXCLUDE_DIR(S_FILES "../edge-impulse-sdk" "CMSIS" "*.s")
 RECURSIVE_FIND_FILE_EXCLUDE_DIR(C_FILES "../edge-impulse-sdk" "CMSIS" "*.c")
 
 # Manually handle needed C only files b/c of build errors
@@ -57,7 +59,9 @@ RECURSIVE_FIND_FILE(INGESTION_FILES "../edge-impulse/ingestion-sdk-c/" "*.cpp")
 RECURSIVE_FIND_FILE(INFERENCE_FILES "../edge-impulse/inference" "*.cpp")
 RECURSIVE_FIND_FILE(MBEDTLS_FILES "../edge-impulse/mbedtls_hmac_sha256_sw/mbedtls/src" "*.c")
 
-list(APPEND SOURCE_FILES ${S_FILES})
+RECURSIVE_FIND_FILE_EXCLUDE_DIR(S_FILES_ESP_NN "${EI_SDK_FOLDER}/porting/espressif/ESP-NN" "CMSIS" "*.s")
+RECURSIVE_FIND_FILE_EXCLUDE_DIR(S_FILES_ESP_DSP "${EI_SDK_FOLDER}/porting/espressif/esp-dsp/modules/fft" "CMSIS" "*.s")
+
 list(APPEND SOURCE_FILES ${C_FILES})
 list(APPEND SOURCE_FILES ${CC_FILES})
 
@@ -74,6 +78,9 @@ list(APPEND SOURCE_FILES ${INGESTION_FILES})
 
 list(APPEND SOURCE_FILES ${INFERENCE_FILES})
 list(APPEND SOURCE_FILES ${MBEDTLS_FILES})
+
+list(APPEND SOURCE_FILES ${S_FILES_ESP_NN})
+list(APPEND SOURCE_FILES ${S_FILES_ESP_DSP})
 
 idf_component_register(SRCS "main.cpp" "${SOURCE_FILES}"
                        INCLUDE_DIRS "${include_dirs}")

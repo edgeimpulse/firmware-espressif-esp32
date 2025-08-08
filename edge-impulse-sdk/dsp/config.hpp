@@ -102,5 +102,12 @@
 #define EIDSP_SIGNAL_C_FN_POINTER    0
 #endif // EIDSP_SIGNAL_C_FN_POINTER
 
+#ifndef EIDSP_USE_ESP_DSP
+#if defined(ESP32) || defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32P4)
+#define EIDSP_USE_ESP_DSP 1
+#else
+#define EIDSP_USE_ESP_DSP 0
+#endif
+#endif
 // clang-format on
 #endif // _EIDSP_CPP_CONFIG_H_

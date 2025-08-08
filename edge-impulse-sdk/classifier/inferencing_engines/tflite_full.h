@@ -213,6 +213,8 @@ EI_IMPULSE_ERROR run_nn_inference(
         if (&outputs[i] == nullptr) {
             return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
         }
+
+        memset(outputs[i]->data.raw, 0, outputs[i]->bytes);
     }
 
     if (!input) {

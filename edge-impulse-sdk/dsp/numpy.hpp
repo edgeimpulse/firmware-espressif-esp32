@@ -75,6 +75,8 @@
 #endif
 #elif EIDSP_USE_CMSIS_DSP
 #include "edge-impulse-sdk/dsp/dsp_engines/ei_arm_cmsis_dsp.h"
+#elif EIDSP_USE_ESP_DSP
+#include "edge-impulse-sdk/dsp/dsp_engines/ei_esp_dsp.h"
 #else
 #define EIDSP_INCLUDE_KISSFFT 1
 #include "edge-impulse-sdk/dsp/dsp_engines/ei_no_hw_dsp.h"
