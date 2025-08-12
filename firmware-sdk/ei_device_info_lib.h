@@ -160,7 +160,7 @@ public:
         buf->long_recording_length_ms = long_recording_length_ms;
         strncpy(buf->sample_label, sample_label.c_str(), 128);
         strncpy(buf->sample_hmac_key, sample_hmac_key.c_str(), 33);
-        strncpy(buf->sensor_label, sensor_label.c_str(), 128);
+        strncpy(buf->sensor_label, sensor_label.c_str(), 64);
         strncpy(buf->upload_host, upload_host.c_str(), 128);
         strncpy(buf->upload_path, upload_path.c_str(), 128);
         strncpy(buf->upload_api_key, upload_api_key.c_str(), 128);
@@ -196,7 +196,7 @@ public:
             upload_path = std::string(buf->upload_path, 128);
             upload_api_key = std::string(buf->upload_api_key, 128);
             management_url = std::string(buf->mgmt_url, 128);
-            sensor_label = std::string(buf->sensor_label, 128);
+            sensor_label = std::string(buf->sensor_label, 64);
             long_recording_interval_ms = buf->long_recording_interval_ms;
             long_recording_length_ms = buf->long_recording_length_ms;
         }
