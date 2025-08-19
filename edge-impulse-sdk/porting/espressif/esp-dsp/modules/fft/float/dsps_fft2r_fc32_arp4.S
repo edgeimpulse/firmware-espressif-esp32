@@ -12,7 +12,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License.
+// limitations under the License. 
 
 #include "dsps_fft2r_platform.h"
 
@@ -24,7 +24,7 @@
     .global dsps_fft2r_fc32_arp4_
     .type   dsps_fft2r_fc32_arp4_,@function
 
-dsps_fft2r_fc32_arp4_:
+dsps_fft2r_fc32_arp4_: 
 //esp_err_t dsps_fft2r_fc32_arp4_(float *data, int N, float* dsps_fft_w_table_fc32)
 
     add sp,sp,-16
@@ -32,7 +32,7 @@ dsps_fft2r_fc32_arp4_:
     srli t6, a1, 1 // a6 = N2 = N/2
     li   t0, 1     // a7 - ie
 
-.fft2r_l1:
+.fft2r_l1: 
         li t1, 0    // a8 - j
         li t4, 0    // a11 = ia = 0;
 
@@ -43,7 +43,7 @@ dsps_fft2r_fc32_arp4_:
             flw     fa0, 0(t3)
             flw     fa1, 4(t3)
 
-            esp.lp.setup    0, t6, .fft2r_l3    // .fft2r_l3 - label to the last executed instruction
+            esp.lp.setup    0, t6, .fft2r_l3    // .fft2r_l3 - label to the last executed instruction   
                 add      t5, t4, t6   // a12 = m = ia + N2
 
                 slli     a4, t5, 3    // a14 - pointer for m*2
@@ -59,7 +59,7 @@ dsps_fft2r_fc32_arp4_:
                 fmul.s          ft6, fa0, fa4       // re_temp =  c * data[2 * m]
                 fmul.s          ft7, fa0, fa5       // im_temp =  c * data[2 * m + 1]
                 fmadd.s         ft6, fa1, fa5, ft6  // re_temp += s * data[2 * m + 1];
-                fnmsub.s        ft7, fa1, fa4, ft7  // im_temp -= s * data[2 * m];
+                fnmsub.s        ft7, fa1, fa4, ft7  // im_temp -= s * data[2 * m];            
                 fsub.s          ft8, fa2, ft6       // = data[2 * ia] - re_temp;
                 fsub.s          ft9, fa3, ft7       // = data[2 * ia + 1] - im_temp;
 
@@ -72,7 +72,7 @@ dsps_fft2r_fc32_arp4_:
                 fsw      ft11, 4(a3)
 
 .fft2r_l3:      add     t4, t4, 1       // ia++
-
+      
             add     t4, t4, t6
             add     t1, t1, 1           // j++
 
@@ -87,4 +87,11 @@ dsps_fft2r_fc32_arp4_:
         ret
 
 #endif // dsps_fft2r_fc32_arp4_enabled
-#endif
+#elif defined(WIO_TERMINAL)
+// dummy code, added for old ARM toolchain
+.syntax unified
+.thumb
+.cpu cortex-m0
+
+.section .text
+#endif // EIDSP_USE_ESP_DSP

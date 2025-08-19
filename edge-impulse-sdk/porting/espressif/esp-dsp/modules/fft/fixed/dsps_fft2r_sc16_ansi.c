@@ -315,4 +315,5 @@ esp_err_t dsps_cplx2real_sc16_ansi(int16_t *data, int N)
     }
     return ESP_OK;
 }
+
 #endif // EIDSP_USE_ESP_DSP

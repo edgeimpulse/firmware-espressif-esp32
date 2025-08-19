@@ -63,4 +63,5 @@ esp_err_t dsps_bit_rev_lookup_fc32_ae32(float *data, int reverse_size, uint16_t 
     return ESP_OK;
 }
 #endif // dsps_bit_rev_lookup_fc32_ae32_enabled
+
 #endif // EIDSP_USE_ESP_DSP

@@ -12,7 +12,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License.
+// limitations under the License. 
 
 #include "dsps_fft2r_platform.h"
 
@@ -45,7 +45,7 @@ dsps_fft2r_sc16_arp4_:
     li   t0, 1     // t0 - ie
     li   t2, 2     // t2 = 2 : limit for the loop N2 > 2
 
-.fft2r_l1:
+.fft2r_l1: 
         li t1, 0    // t1 - j
         li t4, 0    // t4 = ia = 0;
         mv x26, a2  // x26 - pointer to w
@@ -53,7 +53,7 @@ dsps_fft2r_sc16_arp4_:
 
             esp.vldbc.32.ip     q5, x26, 4
             add      t5, t4, t6   // t5 = m = ia + N2
-
+            
             slli     a4, t5, 2    // a4 - pointer for m
             slli     a3, t4, 2    // a3 - pointer for ia
             add      a4, a4, a0   // a4 = &data[m*2]
@@ -66,7 +66,7 @@ dsps_fft2r_sc16_arp4_:
 
             esp.lp.setup    0, a7, .fft2r_l3        // main butterfly loop
                 esp.vld.128.ip      q0, x25, 0      // Load data[m  .. m + 3]
-                esp.vld.128.ip      q2, x24, 0      // Load data[ia .. ia + 3]
+                esp.vld.128.ip      q2, x24, 0      // Load data[ia .. ia + 3] 
                 esp.cmul.s16        q1, q5, q0, 2
                 esp.vmul.s16        q2, q2, q6      // q0 = in_data_ia*0x7fff
                 esp.cmul.s16        q1, q5, q0, 3
@@ -75,7 +75,7 @@ dsps_fft2r_sc16_arp4_:
                 esp.vadd.s16.st.incp   q3, x25, q4, q2, q1
 .fft2r_l3:      esp.vst.128.ip         q4, x24, 16
 
-.fft2r_l3_skeep:
+.fft2r_l3_skeep:    
             add     t4, t4, t6          // ia += N2
             add     t1, t1, 1           // j++
         BNE  t1, t0, .fft2r_l2
@@ -92,14 +92,14 @@ dsps_fft2r_sc16_arp4_:
         esp.vldbc.32.ip     q7, x26, 4
         esp.vunzip.32       q2, q7
 
-        esp.vld.l.64.ip     q0, x24, 8
-        esp.vld.l.64.ip     q1, x24, 8
-        esp.vld.h.64.ip     q0, x24, 8
+        esp.vld.l.64.ip     q0, x24, 8 
+        esp.vld.l.64.ip     q1, x24, 8 
+        esp.vld.h.64.ip     q0, x24, 8 
         esp.vld.h.64.ip     q1, x24, -24
 
         esp.vmul.s16        q0, q0, q6
-        esp.cmul.s16        q3, q2, q1, 2
-        esp.cmul.s16        q3, q2, q1, 3
+        esp.cmul.s16        q3, q2, q1, 2 
+        esp.cmul.s16        q3, q2, q1, 3 
         esp.vsub.s16        q4, q0, q3
         esp.vadd.s16        q5, q0, q3
 
@@ -127,7 +127,7 @@ dsps_fft2r_sc16_arp4_:
         esp.vadd.s16        q0, q0, q3
 
         esp.vzip.32         q0, q1
-
+        
         esp.vst.128.ip      q0, x24, 16
 .fft2r_l2_0: esp.vst.128.ip      q1, x24, 16
 
@@ -139,4 +139,12 @@ dsps_fft2r_sc16_arp4_:
     ret
 
 #endif // dsps_fft2r_sc16_arp4_enabled
-#endif
+
+#elif defined(WIO_TERMINAL)
+// dummy code, added for old ARM toolchain
+.syntax unified
+.thumb
+.cpu cortex-m0
+
+.section .text
+#endif // EIDSP_USE_ESP_DSP

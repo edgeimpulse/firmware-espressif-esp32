@@ -49,7 +49,7 @@
 //}
 
 
-dsps_fft2r_fc32_ae32_:
+dsps_fft2r_fc32_ae32_: 
 //esp_err_t dsps_fft2r_fc32_ansi(float *data, int N, float* dsps_fft_w_table_fc32)
 
 	entry	a1, 16
@@ -124,4 +124,11 @@ dsps_fft2r_fc32_ae32_:
 	retw.n
 
 #endif // dsps_fft2r_fc32_ae32_enabled
-#endif
+#elif defined(WIO_TERMINAL)
+// dummy code, added for old ARM toolchain
+.syntax unified
+.thumb
+.cpu cortex-m0
+
+.section .text
+#endif // EIDSP_USE_ESP_DSP

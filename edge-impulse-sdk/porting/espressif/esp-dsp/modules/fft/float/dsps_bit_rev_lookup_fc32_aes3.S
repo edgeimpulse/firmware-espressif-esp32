@@ -12,7 +12,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License.
+// limitations under the License. 
 
 #include "dsps_fft2r_platform.h"
 
@@ -25,7 +25,7 @@
 	.global dsps_bit_rev_lookup_fc32_aes3
 	.type   dsps_bit_rev_lookup_fc32_aes3,@function
 
-dsps_bit_rev_lookup_fc32_aes3:
+dsps_bit_rev_lookup_fc32_aes3: 
 //esp_err_t dsps_bit_rev_lookup_fc32_aes3(float *data, int reverse_size, uint16_t *reverse_tab)
 
 	entry	a1, 16
@@ -53,4 +53,11 @@ dsps_bit_rev_lookup_fc32_aes3:
 
 #endif // dsps_fft2r_fc32_aes3_enabled
 #endif // dsps_bit_rev_lookup_fc32_ae32_enabled
-#endif
+#elif defined(WIO_TERMINAL)
+// dummy code, added for old ARM toolchain
+.syntax unified
+.thumb
+.cpu cortex-m0
+
+.section .text
+#endif // EIDSP_USE_ESP_DSP
