@@ -227,7 +227,7 @@ EI_IMPULSE_ERROR run_gmm_anomaly(
 
     ei_learning_block_config_tflite_graph_t ei_learning_block_config_gmm = {
         .implementation_version = 1,
-        .block_id = 0,
+        .block_id = block_config->block_id,
         .output_tensors_indices = ei_output_tensor_indices_gmm,
         .output_tensors_size = ei_output_tensor_size_gmm,
         .quantized = 0,

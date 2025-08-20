@@ -315,6 +315,7 @@ typedef struct {
 
 typedef struct {
     uint16_t implementation_version;
+    uint32_t block_id;
     const uint16_t *anom_axis;
     uint16_t anom_axes_size;
     const ei_classifier_anom_cluster_t *anom_clusters;
@@ -325,6 +326,7 @@ typedef struct {
 
 typedef struct {
     uint16_t implementation_version;
+    uint32_t block_id;
     const uint16_t *anom_axis;
     uint16_t anom_axes_size;
     void* graph_config;
