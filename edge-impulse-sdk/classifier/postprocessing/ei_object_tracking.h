@@ -35,6 +35,7 @@
 #ifndef EI_OBJECT_TRACKING_H
 #define EI_OBJECT_TRACKING_H
 
+#include <cstring>
 #include "edge-impulse-sdk/dsp/numpy_types.h"
 #include "edge-impulse-sdk/dsp/returntypes.hpp"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
@@ -444,20 +445,20 @@ EI_IMPULSE_ERROR process_object_tracking(ei_impulse_handle_t *handle,
                                          void *config_ptr,
                                          void *state)
 {
-    const ei_impulse_t *impulse = handle->impulse;
     Tracker *object_tracker = (Tracker *)state;
 
-    if (impulse->sensor == EI_CLASSIFIER_SENSOR_CAMERA) {
-        if((void *)object_tracker != NULL) {
-            ei_impulse_result_bounding_box_t *bbs = result->bounding_boxes;
-            uint32_t bbs_num = result->bounding_boxes_count;
-            std::vector<ei_impulse_result_bounding_box_t> detections(bbs, bbs + bbs_num);
+    if((void *)object_tracker != NULL) {
+        ei_impulse_result_bounding_box_t *bbs = result->bounding_boxes;
+        uint32_t bbs_num = result->bounding_boxes_count;
+        std::vector<ei_impulse_result_bounding_box_t> detections(bbs, bbs + bbs_num);
 
-            object_tracker->process_new_detections(detections);
+        object_tracker->process_new_detections(detections);
 
-            result->postprocessed_output.object_tracking_output.open_traces = object_tracker->object_tracking_output.data();
-            result->postprocessed_output.object_tracking_output.open_traces_count = object_tracker->object_tracking_output.size();
-        }
+        result->postprocessed_output.object_tracking_output.open_traces = object_tracker->object_tracking_output.data();
+        result->postprocessed_output.object_tracking_output.open_traces_count = object_tracker->object_tracking_output.size();
+    }
+    else {
+        EI_LOGW("process_object_tracking: object_tracker is NULL, did you forget to call run_classifier_init()?\n");
     }
 
     return EI_IMPULSE_OK;
