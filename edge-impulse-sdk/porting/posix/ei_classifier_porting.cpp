@@ -60,20 +60,21 @@ uint64_t ei_read_timer_ms() {
 }
 
 uint64_t ei_read_timer_us() {
-    uint64_t us; // Milliseconds
-    uint64_t s;  // Seconds
+#if defined(__APPLE__) && EI_CLASSIFIER_USE_GPU_DELEGATES==1
+    return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) / 1e3;
+#else
+
+#if EI_CLASSIFIER_USE_GPU_DELEGATES==1
+    clockid_t clock_id = CLOCK_MONOTONIC;
+#else
+    clockid_t clock_id = CLOCK_PROCESS_CPUTIME_ID;
+#endif
+
     struct timespec spec;
-
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &spec);
-
-    s  = spec.tv_sec;
-    us = round(spec.tv_nsec / 1.0e3); // Convert nanoseconds to micros
-    if (us > 999999) {
-        s++;
-        us = 0;
-    }
-
-    return (s * 1000000) + us;
+    clock_gettime(clock_id, &spec);
+    return ((static_cast<uint64_t>(spec.tv_sec) * 1e6) +
+            (static_cast<uint64_t>(spec.tv_nsec) / 1e3));
+#endif
 }
 
 __attribute__((weak)) void ei_printf(const char *format, ...) {
