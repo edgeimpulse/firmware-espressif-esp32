@@ -32,6 +32,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/** @note
+ * This file contains the porting layer for the Edge Impulse SDK on a STM device in IAR.
+ * To use this file with different hardware, please update the hardware-specific implementations.
+ */
+
 #include "../ei_classifier_porting.h"
 #if EI_PORTING_IAR == 1
 
