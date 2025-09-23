@@ -2284,7 +2284,6 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov11_f32(ei_impulse_h
 /**
  * Fill the result structure from a quantized output tensor
 */
-template<typename T>
 __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov11_i8(ei_impulse_handle_t *handle,
                                                                     uint32_t block_index,
                                                                     uint32_t input_block_id,
