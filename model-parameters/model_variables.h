@@ -138,13 +138,18 @@ const ei_postprocessing_block_t ei_postprocessing_blocks_44_1[ei_postprocessing_
     },
 };
 
+const uint8_t freeform_outputs_44_1_size = 0;
+
+uint32_t *freeform_outputs_44_1 = nullptr;
+
+
 const ei_impulse_t impulse_44_1 = {
     .project_id = 44,
     .project_owner = "Edge Impulse Profiling",
     .project_name = "Demo: Keyword Spotting",
     .impulse_id = 1,
     .impulse_name = "Impulse #1",
-    .deploy_version = 11,
+    .deploy_version = 19,
 
     .nn_input_frame_size = 650,
     .raw_sample_count = 16000,
@@ -165,6 +170,8 @@ const ei_impulse_t impulse_44_1 = {
     .postprocessing_blocks_size = ei_postprocessing_blocks_44_1_size,
     .postprocessing_blocks = ei_postprocessing_blocks_44_1,
 
+    .output_tensors_size = 1,
+
     .inferencing_engine = EI_CLASSIFIER_TFLITE,
 
     .sensor = EI_CLASSIFIER_SENSOR_MICROPHONE,
@@ -174,7 +181,9 @@ const ei_impulse_t impulse_44_1 = {
 
     .has_anomaly = EI_ANOMALY_TYPE_UNKNOWN,
     .label_count = 3,
-    .categories = ei_classifier_inferencing_categories_44_1
+    .categories = ei_classifier_inferencing_categories_44_1,
+    .freeform_outputs_size = freeform_outputs_44_1_size,
+    .freeform_outputs = freeform_outputs_44_1
 };
 
 ei_impulse_handle_t impulse_handle_44_1 = ei_impulse_handle_t( &impulse_44_1 );

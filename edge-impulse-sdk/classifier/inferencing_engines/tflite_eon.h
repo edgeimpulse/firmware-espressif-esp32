@@ -58,12 +58,13 @@ static EI_IMPULSE_ERROR inference_tflite_setup(
     ei_learning_block_config_tflite_graph_t *block_config,
     uint64_t *ctx_start_us,
     TfLiteTensor* input,
-    TfLiteTensor** outputs,
+    TfLiteTensor** output_arg,
     ei_unique_ptr_t& p_tensor_arena) {
 
-    ei_config_tflite_eon_graph_t *graph_config = (ei_config_tflite_eon_graph_t*)block_config->graph_config;
-
     *ctx_start_us = ei_read_timer_us();
+
+    TfLiteTensor *outputs = *output_arg;
+    ei_config_tflite_eon_graph_t *graph_config = (ei_config_tflite_eon_graph_t*)block_config->graph_config;
 
     TfLiteStatus init_status = graph_config->model_init(ei_aligned_calloc);
     if (init_status != kTfLiteOk) {
@@ -79,7 +80,7 @@ static EI_IMPULSE_ERROR inference_tflite_setup(
     }
 
     for (uint8_t i = 0; i < block_config->output_tensors_size; i++) {
-        status = graph_config->model_output(block_config->output_tensors_indices[i], outputs[i]);
+        status = graph_config->model_output(block_config->output_tensors_indices[i], &outputs[i]);
         if (status != kTfLiteOk) {
             return EI_IMPULSE_TFLITE_ERROR;
         }
@@ -257,7 +258,6 @@ EI_IMPULSE_ERROR run_nn_inference(
         for (int dim_num = 0; dim_num < output->dims->size; dim_num++) {
             output_size *= output->dims->data[dim_num];
         }
-
         switch (output->type) {
             case kTfLiteFloat32: {
                 result->_raw_outputs[learn_block_index + output_ix].matrix = new matrix_t(1, output_size);

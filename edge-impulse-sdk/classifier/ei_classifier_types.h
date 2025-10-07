@@ -303,7 +303,6 @@ typedef struct {
      */
     void* _padding;
 #endif
-    bool copy_output;
 #if EI_CLASSIFIER_HAS_VISUAL_ANOMALY || __DOXYGEN__
     /**
      * Array of grid cells of the detected visual anomalies, if visual anomaly detection

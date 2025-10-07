@@ -71,8 +71,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
     ei_config_aton_graph_t *graph_config = (ei_config_aton_graph_t*)block_config->graph_config;
 
-    extern uint8_t *global_camera_buffer;
-    extern uint8_t *snapshot_buf;
     // this needs to be changed for multi-model, multi-impulse
     static bool first_run = true;
 
@@ -103,9 +101,9 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
         first_run = false;
     }
 
-    memcpy(nn_in, snapshot_buf, impulse->input_width * impulse->input_height * 3);
+    signal->get_data(0, impulse->nn_input_frame_size, (float*) nn_in);
     #ifdef USE_DCACHE
-    SCB_CleanInvalidateDCache_by_Addr(nn_in, impulse->input_width * impulse->input_height * 3);
+    SCB_CleanInvalidateDCache_by_Addr(nn_in, impulse->nn_input_frame_size);
     #endif
 
     LL_ATON_RT_Main(&NN_Instance_Default);

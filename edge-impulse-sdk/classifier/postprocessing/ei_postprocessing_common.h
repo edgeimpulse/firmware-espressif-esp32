@@ -280,11 +280,11 @@ __attribute__((unused)) static void process_cubes(ei_impulse_result_t *result, s
  * Fill the result structure from an unquantized output tensor
  */
 EI_IMPULSE_ERROR process_classification_f32(ei_impulse_handle_t *handle,
-                                uint32_t block_index,
-                                uint32_t input_block_id,
-                                ei_impulse_result_t *result,
-                                void *config_ptr,
-                                void *state)
+                                            uint32_t block_index,
+                                            uint32_t input_block_id,
+                                            ei_impulse_result_t *result,
+                                            void *config_ptr,
+                                            void *state)
 {
     const ei_impulse_t *impulse = handle->impulse;
 
@@ -295,9 +295,9 @@ EI_IMPULSE_ERROR process_classification_f32(ei_impulse_handle_t *handle,
 #endif
 
     ei::matrix_t* raw_output_mtx = NULL;
-    bool status = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
-    if (!status) {
-        return EI_IMPULSE_POSTPROCESSING_ERROR;
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
     }
 
     for (uint32_t ix = 0; ix < stop_count; ix++) {
@@ -323,16 +323,19 @@ EI_IMPULSE_ERROR process_classification_f32(ei_impulse_handle_t *handle,
  * Fill the result structure from a quantized output tensor
  */
 __attribute__((unused)) static EI_IMPULSE_ERROR process_classification_i8(ei_impulse_handle_t *handle,
-                                                                    uint32_t block_index,
-                                                                    uint32_t input_block_id,
-                                                                    ei_impulse_result_t *result,
-                                                                    void *config_ptr,
-                                                                    void *state) {
+                                                                          uint32_t block_index,
+                                                                          uint32_t input_block_id,
+                                                                          ei_impulse_result_t *result,
+                                                                          void *config_ptr,
+                                                                          void *state) {
     const ei_impulse_t *impulse = handle->impulse;
     const ei_fill_result_classification_i8_config_t *config = (ei_fill_result_classification_i8_config_t*)config_ptr;
 
     ei::matrix_i8_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     for (uint32_t ix = 0; ix < impulse->label_count; ix++) {
         float value = static_cast<float>(raw_output_mtx->buffer[ix] - config->zero_point) * config->scale;
@@ -366,7 +369,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_classification_u8(ei_imp
 
     // legacy unsigned quantized output
     ei::matrix_u8_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     for (uint32_t ix = 0; ix < impulse->label_count; ix++) {
         float value = static_cast<float>(raw_output_mtx->buffer[ix] - config->zero_point) * config->scale;
@@ -384,6 +390,126 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_classification_u8(ei_imp
     return EI_IMPULSE_OK;
 }
 
+#if EI_CLASSIFIER_FREEFORM_OUTPUT == 1
+/**
+ * Fill the result structure from an unquantized output tensor
+ */
+EI_IMPULSE_ERROR process_freeform_f32(ei_impulse_handle_t *handle,
+                                      uint32_t block_index,
+                                      uint32_t input_block_id,
+                                      ei_impulse_result_t *result,
+                                      void *config_ptr,
+                                      void *state)
+{
+    const ei_impulse_t *impulse = handle->impulse;
+
+    if (handle->freeform_outputs == NULL) {
+        EI_LOGE("ERR: handle->freeform_outputs is NULL. You'll need to call ei_set_freeform_output before running your impulse.\n");
+        return EI_IMPULSE_FREEFORM_OUTPUT_NULL;
+    }
+
+    for (size_t ix = 0; ix < impulse->freeform_outputs_size; ix++) {
+        ei::matrix_t* raw_output_mtx = NULL;
+        bool status = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id + ix, impulse->output_tensors_size);
+        if (!status) {
+            return EI_IMPULSE_POSTPROCESSING_ERROR;
+        }
+
+        matrix_t& freeform_output = handle->freeform_outputs[ix];
+        // Should not be possible, we've validated the matrices in ei_set_freeform_output, so don't add another EI_LOGE here
+        // to save flash.
+        if (freeform_output.rows * freeform_output.cols != raw_output_mtx->rows * raw_output_mtx->cols) {
+            return EI_IMPULSE_FREEFORM_OUTPUT_SIZE_MISMATCH;
+        }
+
+        memcpy(freeform_output.buffer, raw_output_mtx->buffer, raw_output_mtx->rows * raw_output_mtx->cols * sizeof(float));
+    }
+
+    return EI_IMPULSE_OK;
+}
+
+/**
+ * Fill the result structure from a quantized output tensor
+ */
+__attribute__((unused)) static EI_IMPULSE_ERROR process_freeform_i8(ei_impulse_handle_t *handle,
+                                                                    uint32_t block_index,
+                                                                    uint32_t input_block_id,
+                                                                    ei_impulse_result_t *result,
+                                                                    void *config_ptr,
+                                                                    void *state) {
+    const ei_impulse_t *impulse = handle->impulse;
+    const ei_fill_result_classification_i8_config_t *config = (ei_fill_result_classification_i8_config_t*)config_ptr;
+
+    if (handle->freeform_outputs == NULL) {
+        EI_LOGE("ERR: handle->freeform_outputs is NULL. You'll need to call ei_set_freeform_output before running your impulse.\n");
+        return EI_IMPULSE_FREEFORM_OUTPUT_NULL;
+    }
+
+    for (size_t ix = 0; ix < impulse->freeform_outputs_size; ix++) {
+        ei::matrix_i8_t* raw_output_mtx = NULL;
+        bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id + ix, impulse->output_tensors_size);
+        if (!find_mtx_res) {
+            return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+        }
+
+        matrix_t& freeform_output = handle->freeform_outputs[ix];
+        if (freeform_output.rows * freeform_output.cols != raw_output_mtx->rows * raw_output_mtx->cols) {
+            // Should not be possible, we've validated the matrices in ei_set_freeform_output, so don't add another EI_LOGE here
+            // to save flash.
+            return EI_IMPULSE_FREEFORM_OUTPUT_SIZE_MISMATCH;
+        }
+
+        for (uint32_t ix = 0; ix < freeform_output.rows * freeform_output.cols; ix++) {
+            float value = static_cast<float>(raw_output_mtx->buffer[ix] - config->zero_point) * config->scale;
+            freeform_output.buffer[ix] = value;
+        }
+    }
+
+    return EI_IMPULSE_OK;
+}
+
+/**
+ * Fill the result structure from a quantized output tensor
+ */
+__attribute__((unused)) static EI_IMPULSE_ERROR process_freeform_u8(ei_impulse_handle_t *handle,
+                                                                    uint32_t block_index,
+                                                                    uint32_t input_block_id,
+                                                                    ei_impulse_result_t *result,
+                                                                    void *config_ptr,
+                                                                    void *state) {
+
+    const ei_impulse_t *impulse = handle->impulse;
+    const ei_fill_result_classification_i8_config_t *config = (ei_fill_result_classification_i8_config_t*)config_ptr;
+
+    if (handle->freeform_outputs == NULL) {
+        EI_LOGE("ERR: handle->freeform_outputs is NULL. You'll need to call ei_set_freeform_output before running your impulse.\n");
+        return EI_IMPULSE_FREEFORM_OUTPUT_NULL;
+    }
+
+    for (size_t ix = 0; ix < impulse->freeform_outputs_size; ix++) {
+        ei::matrix_u8_t* raw_output_mtx = NULL;
+        bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id + ix, impulse->output_tensors_size);
+        if (!find_mtx_res) {
+            return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+        }
+
+        matrix_t& freeform_output = handle->freeform_outputs[ix];
+        if (freeform_output.rows * freeform_output.cols != raw_output_mtx->rows * raw_output_mtx->cols) {
+            // Should not be possible, we've validated the matrices in ei_set_freeform_output, so don't add another EI_LOGE here
+            // to save flash.
+            return EI_IMPULSE_FREEFORM_OUTPUT_SIZE_MISMATCH;
+        }
+
+        for (uint32_t ix = 0; ix < freeform_output.rows * freeform_output.cols; ix++) {
+            float value = static_cast<float>(raw_output_mtx->buffer[ix] - config->zero_point) * config->scale;
+            freeform_output.buffer[ix] = value;
+        }
+    }
+
+    return EI_IMPULSE_OK;
+}
+#endif // #if EI_CLASSIFIER_FREEFORM_OUTPUT == 1
+
 /**
  * Fill the result structure from a quantized output tensor
  */
@@ -396,9 +522,9 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_anomaly(ei_impulse_handl
     const ei_impulse_t *impulse = handle->impulse;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    bool status = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
-    if (!status) {
-        return EI_IMPULSE_POSTPROCESSING_ERROR;
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
     }
 
     result->anomaly = raw_output_mtx->buffer[0];
@@ -421,7 +547,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_fomo_f32(ei_impulse_hand
     int out_width_factor = impulse->input_width / config->out_width;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     for (size_t y = 0; y < config->out_width; y++) {
         for (size_t x = 0; x < config->out_height; x++) {
@@ -458,7 +587,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_fomo_i8(ei_impulse_handl
     int out_width_factor = impulse->input_width / config->out_width;
 
     ei::matrix_i8_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     for (size_t y = 0; y < config->out_width; y++) {
         for (size_t x = 0; x < config->out_height; x++) {
@@ -498,7 +630,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_visual_ad_f32(ei_impulse
     float sum_val = 0;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     for (uint32_t ix = 0; ix < config->grid_size_x * config->grid_size_y; ix++) {
         float value = raw_output_mtx->buffer[ix];
@@ -562,9 +697,9 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_ssd_f32(ei_impulse_handl
     ei::matrix_t* scores_mtx = NULL;
     ei::matrix_t* labels_mtx = NULL;
 
-    find_mtx_by_idx(result->_raw_outputs, &data_mtx, input_block_id + 1, impulse->learning_blocks_size + 3);
-    find_mtx_by_idx(result->_raw_outputs, &scores_mtx, input_block_id + 0, impulse->learning_blocks_size + 3);
-    find_mtx_by_idx(result->_raw_outputs, &labels_mtx, input_block_id + 3, impulse->learning_blocks_size + 3);
+    find_mtx_by_idx(result->_raw_outputs, &data_mtx, input_block_id + 1, impulse->output_tensors_size);
+    find_mtx_by_idx(result->_raw_outputs, &scores_mtx, input_block_id + 0, impulse->output_tensors_size);
+    find_mtx_by_idx(result->_raw_outputs, &labels_mtx, input_block_id + 3, impulse->output_tensors_size);
 
     for (size_t ix = 0; ix < config->object_detection_count; ix++) {
         float score = scores_mtx->buffer[ix];
@@ -620,9 +755,9 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov5_f32(ei_impulse_ha
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    bool status = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
-    if (!status) {
-        return EI_IMPULSE_POSTPROCESSING_ERROR;
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
     }
 
     static std::vector<ei_impulse_result_bounding_box_t> results;
@@ -724,7 +859,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov5_i8(ei_impulse_han
 
     // yolov5 is the only exception that uses legacy unsigned quantized output
     ei::matrix_u8_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     static std::vector<ei_impulse_result_bounding_box_t> results;
     results.clear();
@@ -824,7 +962,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolox_f32(ei_impulse_han
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     static std::vector<ei_impulse_result_bounding_box_t> results;
     results.clear();
@@ -1036,7 +1177,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolox_detect_f32(ei_impu
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     static std::vector<ei_impulse_result_bounding_box_t> results;
     results.clear();
@@ -1109,7 +1253,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov7_f32(ei_impulse_ha
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     static std::vector<ei_impulse_result_bounding_box_t> results;
     results.clear();
@@ -1262,7 +1409,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov2_f32(ei_impulse_ha
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     static std::vector<ei_impulse_result_bounding_box_t> results;
     results.clear();
@@ -1805,7 +1955,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_tao_detection_i8(ei_impu
     const ei_fill_result_object_detection_i8_config_t *config = (ei_fill_result_object_detection_i8_config_t*)config_ptr;
 
     ei::matrix_i8_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     EI_IMPULSE_ERROR res = process_tao_decode_detections_common(impulse,
                                                                result,
@@ -1834,7 +1987,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_tao_detection_f32(ei_imp
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     EI_IMPULSE_ERROR res = process_tao_decode_detections_common(impulse,
                                                                result,
@@ -1862,7 +2018,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_tao_yolov3_f32(ei_impuls
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     EI_IMPULSE_ERROR res = process_tao_yolov3_common(impulse,
                                                      result,
@@ -1890,7 +2049,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_tao_yolov3_i8(ei_impulse
     const ei_fill_result_object_detection_i8_config_t *config = (ei_fill_result_object_detection_i8_config_t*)config_ptr;
 
     ei::matrix_i8_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     EI_IMPULSE_ERROR res = process_tao_yolov3_common(impulse,
                                                      result,
@@ -1918,7 +2080,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_tao_yolov4_f32(ei_impuls
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     EI_IMPULSE_ERROR res = process_tao_yolov4_common(impulse,
                                                      result,
@@ -1946,7 +2111,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_tao_yolov4_i8(ei_impulse
     const ei_fill_result_object_detection_i8_config_t *config = (ei_fill_result_object_detection_i8_config_t*)config_ptr;
 
     ei::matrix_i8_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     EI_IMPULSE_ERROR res = process_tao_yolov4_common(impulse,
                                                      result,
@@ -2076,7 +2244,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolo_pro_f32(ei_impulse_
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
     EI_IMPULSE_ERROR res = fill_result_struct_yolo_pro_common(impulse,
                                                                 result,
                                                                 raw_output_mtx->buffer,
@@ -2103,7 +2274,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolo_pro_i8(ei_impulse_h
     const ei_fill_result_object_detection_i8_config_t *config = (ei_fill_result_object_detection_i8_config_t*)config_ptr;
 
     ei::matrix_i8_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     EI_IMPULSE_ERROR res = fill_result_struct_yolo_pro_common(impulse,
                                                     result,
@@ -2264,7 +2438,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov11_f32(ei_impulse_h
     const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
 
     ei::matrix_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     return fill_result_struct_yolov11_common(impulse,
                                              result,
@@ -2295,7 +2472,10 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov11_i8(ei_impulse_ha
     const ei_fill_result_object_detection_i8_config_t *config = (ei_fill_result_object_detection_i8_config_t*)config_ptr;
 
     ei::matrix_i8_t* raw_output_mtx = NULL;
-    find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
 
     return fill_result_struct_yolov11_common(impulse,
                                              result,

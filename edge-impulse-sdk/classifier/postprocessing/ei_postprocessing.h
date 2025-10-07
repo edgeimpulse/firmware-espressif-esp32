@@ -124,7 +124,7 @@ extern "C" EI_IMPULSE_ERROR run_postprocessing(ei_impulse_handle_t *handle,
     }
 
     // free raw results
-    for (size_t ix = 0; ix < impulse->learning_blocks_size; ix++) {
+    for (size_t ix = 0; ix < impulse->output_tensors_size; ix++) {
         if (result->_raw_outputs[ix].matrix) {
             delete result->_raw_outputs[ix].matrix;
             result->_raw_outputs[ix].matrix = nullptr;

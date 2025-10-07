@@ -261,14 +261,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     memset(result, 0, sizeof(ei_impulse_result_t));
 #endif
 
-    // smart pointer to results array
-    // currently only SSD has multiple outputs
-    // need to be refactored to something more generic
-#if (EI_CLASSIFIER_OBJECT_DETECTION_LAST_LAYER == EI_CLASSIFIER_LAST_LAYER_SSD)
-    uint32_t num_results = handle->impulse->learning_blocks_size + 3;
-#else
-    uint32_t num_results = handle->impulse->learning_blocks_size;
-#endif
+    uint8_t num_results = handle->impulse->output_tensors_size;
 
     std::unique_ptr<ei_feature_t[]> raw_results_ptr(new ei_feature_t[num_results]);
 
@@ -1070,6 +1063,81 @@ __attribute__((unused)) EI_IMPULSE_ERROR run_classifier(
 {
     return process_impulse(impulse, signal, result, debug);
 }
+
+#if EI_CLASSIFIER_FREEFORM_OUTPUT
+/**
+ * Set the location for freeform outputs. For impulses with freeform output the application needs to allocate
+ * memory for all output tensors, and pass it to ei_set_freeform_output. This memory is owned by the application.
+ * Example usage:
+ *
+ * ei_impulse_handle_t &impulse_handle = ei_default_impulse;
+ * std::vector<matrix_t> freeform_outputs;
+ * freeform_outputs.reserve(impulse_handle.impulse->freeform_outputs_size);
+ * for (size_t ix = 0; ix < impulse_handle.impulse->freeform_outputs_size; ++ix) {
+ *     freeform_outputs.emplace_back(impulse_handle.impulse->freeform_outputs[ix], 1);
+ * }
+ *
+ * int res = ei_set_freeform_output(&impulse_handle, freeform_outputs.data(), freeform_outputs.size());
+ * // Check that res == EI_IMPULSE_OK
+ *
+ * @param[in] impulse_handle Pointer to an `ei_impulse_handle_t` struct that contains the model and
+ *  preprocessing information.
+ * @param[in] freeform_outputs Pointer to array of ei::matrix structs that are sized according to the
+ *  ei_impulse_handle_t.impulse->freeform_outputs array.
+ * @param[in] freeform_outputs_size Number of elements in freeform_outputs
+ * @return Error code as defined by `EI_IMPULSE_ERROR` enum. Will be `EI_IMPULSE_OK` if setting the output
+ *  was successful.
+ */
+__attribute__((unused)) EI_IMPULSE_ERROR ei_set_freeform_output(
+    ei_impulse_handle_t *impulse_handle,
+    ei::matrix_t *freeform_outputs,
+    size_t freeform_outputs_size
+) {
+    // Check size of freeform_outputs_size
+    if (freeform_outputs_size != impulse_handle->impulse->freeform_outputs_size) {
+        EI_LOGE("ERR: freeform_outputs_size should be of size %d, but was %d. You can get the required number of freeform outputs via impulse->freeform_outputs_size.\n",
+            (int)freeform_outputs_size, (int)impulse_handle->impulse->freeform_outputs_size);
+        return EI_IMPULSE_FREEFORM_OUTPUT_SIZE_MISMATCH;
+    }
+
+    // Check size of each individual matrix
+    for (size_t ix = 0; ix < freeform_outputs_size; ix++) {
+        matrix_t& freeform_output = freeform_outputs[ix];
+        if (freeform_output.rows * freeform_output.cols != impulse_handle->impulse->freeform_outputs[ix]) {
+            EI_LOGE("ERR: freeform_outputs at index %d has the wrong size. Expected %d elements, but freeform_output is %d elements. You can get the required size via impulse->freeform_outputs[%d].\n",
+                (int)ix,
+                (int)impulse_handle->impulse->freeform_outputs[ix],
+                (int)freeform_output.rows * freeform_output.cols,
+                (int)ix);
+            return EI_IMPULSE_FREEFORM_OUTPUT_SIZE_MISMATCH;
+        }
+    }
+
+    impulse_handle->freeform_outputs = freeform_outputs;
+
+    return EI_IMPULSE_OK;
+}
+
+/**
+ * @brief Set the location for freeform outputs. For impulses with freeform output the application needs to allocate
+ * memory for all output tensors, and pass it to ei_set_freeform_output. This memory is owned by the application.
+ *
+ * Overloaded function [ei_set_freeform_output()](#ei_set_freeform_output-0) that defaults to the default impulse.
+ *
+ * @param[in] freeform_outputs Pointer to array of ei::matrix structs that are sized according to the
+ *  ei_impulse_handle_t.impulse->freeform_outputs array.
+ * @param[in] freeform_outputs_size Number of elements in freeform_outputs
+ *
+ * @return Error code as defined by `EI_IMPULSE_ERROR` enum. Will be `EI_IMPULSE_OK` if setting the output
+ *  was successful.
+ */
+extern "C" EI_IMPULSE_ERROR ei_set_freeform_output(
+    ei::matrix_t *freeform_outputs,
+    size_t freeform_outputs_size
+) {
+    return ei_set_freeform_output(&ei_default_impulse, freeform_outputs, freeform_outputs_size);
+}
+#endif // #if EI_CLASSIFIER_FREEFORM_OUTPUT
 
 /** @} */ // end of ei_functions Doxygen group
 
