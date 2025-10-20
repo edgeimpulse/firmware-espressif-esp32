@@ -54,6 +54,18 @@ public:
 #endif
 #endif
 
+#if EI_CLASSIFIER_EEG_ENABLED
+#if EI_CLASSIFIER_EEG_LIB
+// Forward declare only the part of the class we need to link later
+class eeg_class {
+public:
+    static DspHandle* create(void* config, float frequency);
+};
+#else
+#include "edge-impulse-sdk/dsp/ei_eeg.hpp"
+#endif
+#endif
+
 #if defined(__cplusplus) && EI_C_LINKAGE == 1
 extern "C" {
     extern void ei_printf(const char *format, ...);
@@ -90,6 +102,23 @@ __attribute__((unused)) int extract_hr_features(
     return ret;
 #else
     ei_printf("ERR: Please contact EI sales to enable heart rate processing in deployment");
+    return EIDSP_NOT_SUPPORTED;
+#endif
+}
+
+__attribute__((unused)) int extract_eeg_features(
+    signal_t *signal,
+    matrix_t *output_matrix,
+    void *config_ptr,
+    const float frequency)
+{
+#if EI_CLASSIFIER_EEG_ENABLED
+    auto handle = eeg_class::create(config_ptr, frequency);
+    auto ret = handle->extract(signal, output_matrix, config_ptr, frequency, nullptr);
+    delete handle;
+    return ret;
+#else
+    ei_printf("ERR: Please contact EI sales to enable EEG processing in deployment");
     return EIDSP_NOT_SUPPORTED;
 #endif
 }
