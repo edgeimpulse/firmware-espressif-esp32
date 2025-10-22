@@ -61,7 +61,7 @@
 #define EI_CLASSIFIER_ATON                       14
 #define EI_CLASSIFIER_CEVA_NPN                   15
 
-#define EI_CLASSIFIER_SENSOR_UNKNOWN             -1
+#define EI_CLASSIFIER_SENSOR_UNKNOWN             255
 #define EI_CLASSIFIER_SENSOR_MICROPHONE          1
 #define EI_CLASSIFIER_SENSOR_ACCELEROMETER       2
 #define EI_CLASSIFIER_SENSOR_CAMERA              3
