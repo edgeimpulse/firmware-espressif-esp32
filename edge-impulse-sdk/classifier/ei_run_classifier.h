@@ -43,14 +43,15 @@
 #include "ei_signal_with_axes.h"
 #include "postprocessing/ei_postprocessing.h"
 #include "edge-impulse-sdk/classifier/ei_data_normalization.h"
+#include "edge-impulse-sdk/classifier/ei_print_results.h"
 
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/porting/ei_logging.h"
 #include <memory>
 
-#if EI_CLASSIFIER_HAS_ANOMALY
+#if EI_CLASSIFIER_LOAD_ANOMALY_H
 #include "inferencing_engines/anomaly.h"
-#endif
+#endif // EI_CLASSIFIER_LOAD_ANOMALY_H
 
 #if defined(EI_CLASSIFIER_HAS_SAMPLER) && EI_CLASSIFIER_HAS_SAMPLER == 1
 #include "ei_sampler.h"
@@ -82,6 +83,8 @@
 #include "edge-impulse-sdk/classifier/inferencing_engines/aton.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_CEVA_NPN
 #include "edge-impulse-sdk/classifier/inferencing_engines/ceva_npn.h"
+#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_NORDIC_AXON
+#include "edge-impulse-sdk/classifier/inferencing_engines/nordic_axon.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_NONE
 // noop
 #else
@@ -121,67 +124,7 @@ therefore changes are allowed. */
  */
 __attribute__((unused)) void display_results(ei_impulse_handle_t *handle, ei_impulse_result_t* result)
 {
-    // print the predictions
-    ei_printf("Predictions (DSP: ");
-    result->timing.dsp_us ? ei_printf_float((float)result->timing.dsp_us/1000) : ei_printf("%d", result->timing.dsp);
-    ei_printf(" ms., Classification: ");
-    result->timing.classification_us ? ei_printf_float((float)result->timing.classification_us/1000) : ei_printf("%d", result->timing.classification);
-    ei_printf(" ms., Anomaly: ");
-    result->timing.anomaly_us ? ei_printf_float((float)result->timing.anomaly_us/1000) : ei_printf("%d", result->timing.anomaly);
-    ei_printf("ms.): \n");
-
-#if EI_CLASSIFIER_OBJECT_DETECTION == 1
-    ei_printf("#Object detection results:\r\n");
-    bool bb_found = result->bounding_boxes[0].value > 0;
-    for (size_t ix = 0; ix < result->bounding_boxes_count; ix++) {
-        auto bb = result->bounding_boxes[ix];
-        if (bb.value == 0) {
-            continue;
-        }
-        ei_printf("    %s (", bb.label);
-        ei_printf_float(bb.value);
-        ei_printf(") [ x: %u, y: %u, width: %u, height: %u ]\n", bb.x, bb.y, bb.width, bb.height);
-    }
-
-    if (!bb_found) {
-        ei_printf("    No objects found\n");
-    }
-
-#elif (EI_CLASSIFIER_LABEL_COUNT == 1) && (!EI_CLASSIFIER_HAS_ANOMALY)// regression
-    ei_printf("#Regression results:\r\n");
-    ei_printf("    %s: ", result->classification[0].label);
-    ei_printf_float(result->classification[0].value);
-    ei_printf("\n");
-
-#elif EI_CLASSIFIER_LABEL_COUNT > 1 // if there is only one label, this is an anomaly only
-    ei_printf("#Classification results:\r\n");
-    for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++) {
-        ei_printf("    %s: ", result->classification[ix].label);
-        ei_printf_float(result->classification[ix].value);
-        ei_printf("\n");
-    }
-#endif
-#if EI_CLASSIFIER_HAS_ANOMALY == 3 // visual AD
-    ei_printf("#Visual anomaly grid results:\r\n");
-    for (uint32_t i = 0; i < result->visual_ad_count; i++) {
-        ei_impulse_result_bounding_box_t bb = result->visual_ad_grid_cells[i];
-        if (bb.value == 0) {
-            continue;
-        }
-        ei_printf("    %s (", bb.label);
-        ei_printf_float(bb.value);
-        ei_printf(") [ x: %u, y: %u, width: %u, height: %u ]\n", bb.x, bb.y, bb.width, bb.height);
-    }
-    ei_printf("Visual anomaly values: Mean ");
-    ei_printf_float(result->visual_ad_result.mean_value);
-    ei_printf(" Max ");
-    ei_printf_float(result->visual_ad_result.max_value);
-    ei_printf("\r\n");
-#elif (EI_CLASSIFIER_HAS_ANOMALY > 0) // except for visual AD
-    ei_printf("Anomaly prediction: ");
-    ei_printf_float(result->anomaly);
-    ei_printf("\r\n");
-#endif
+    ei_print_results(handle, result);
     display_postprocessing(handle, result);
 }
 
@@ -256,10 +199,35 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
         return EI_IMPULSE_INFERENCE_ERROR;
     }
 
-#ifndef EI_DSP_RESULT_OVERRIDE
-    // Don't wipe in CI, as we store a pointer
     memset(result, 0, sizeof(ei_impulse_result_t));
-#endif
+
+#if EI_IMPULSE_RESULT_CLASSIFICATION_IS_STATICALLY_ALLOCATED == 0
+    static std::vector<ei_impulse_result_classification_t> classification_results;
+    classification_results.clear(); // todo, should not clear and re-gen this every time...
+
+    if (handle->impulse->results_type == EI_CLASSIFIER_TYPE_CLASSIFICATION ||
+        handle->impulse->results_type == EI_CLASSIFIER_TYPE_REGRESSION) {
+    #ifdef EI_DSP_RESULT_OVERRIDE
+        for (size_t ix = 0; ix < EI_DSP_RESULT_OVERRIDE; ix++) {
+            ei_impulse_result_classification_t classification = {
+                .label = "",
+                .value = 0.0f
+            };
+            classification_results.push_back(classification);
+        }
+    #else
+        for (size_t ix = 0; ix < handle->impulse->label_count; ix++) {
+            ei_impulse_result_classification_t classification = {
+                .label = handle->impulse->categories[ix],
+                .value = 0.0f
+            };
+            classification_results.push_back(classification);
+        }
+    #endif // EI_DSP_RESULT_OVERRIDE
+    }
+
+    result->classification = classification_results.data();
+#endif // EI_IMPULSE_RESULT_CLASSIFICATION_IS_STATICALLY_ALLOCATED == 0
 
     uint8_t num_results = handle->impulse->output_tensors_size;
 
@@ -448,15 +416,51 @@ extern "C" EI_IMPULSE_ERROR init_impulse(ei_impulse_handle_t *handle) {
  * @return     The ei impulse error.
  */
 extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *handle,
-                                            signal_t *signal,
-                                            ei_impulse_result_t *result,
-                                            bool debug = false)
+                                                       signal_t *signal,
+                                                       ei_impulse_result_t *result,
+                                                       bool debug = false)
 {
     if ((handle == nullptr) || (handle->impulse  == nullptr) || (result  == nullptr) || (signal  == nullptr)) {
         return EI_IMPULSE_INFERENCE_ERROR;
     }
 
     memset(result, 0, sizeof(ei_impulse_result_t));
+
+#if EI_IMPULSE_RESULT_CLASSIFICATION_IS_STATICALLY_ALLOCATED == 0
+    static std::vector<ei_impulse_result_classification_t> classification_results;
+    classification_results.clear(); // todo, should not clear and re-gen this every time...
+
+    if (handle->impulse->results_type == EI_CLASSIFIER_TYPE_CLASSIFICATION ||
+        handle->impulse->results_type == EI_CLASSIFIER_TYPE_REGRESSION) {
+    #ifdef EI_DSP_RESULT_OVERRIDE
+        for (size_t ix = 0; ix < EI_DSP_RESULT_OVERRIDE; ix++) {
+            ei_impulse_result_classification_t classification = {
+                .label = "",
+                .value = 0.0f
+            };
+            classification_results.push_back(classification);
+        }
+    #else
+        for (size_t ix = 0; ix < handle->impulse->label_count; ix++) {
+            ei_impulse_result_classification_t classification = {
+                .label = handle->impulse->categories[ix],
+                .value = 0.0f
+            };
+            classification_results.push_back(classification);
+        }
+    #endif
+    }
+
+    result->classification = classification_results.data();
+
+#else // EI_IMPULSE_RESULT_CLASSIFICATION_IS_STATICALLY_ALLOCATED == 1
+
+    for (int i = 0; i < handle->impulse->label_count; i++) {
+        // set label correctly in the result struct if we have no results (otherwise is nullptr)
+        result->classification[i].label = handle->impulse->categories[(uint32_t)i];
+    }
+
+#endif // EI_IMPULSE_RESULT_CLASSIFICATION_IS_STATICALLY_ALLOCATED == 0
 
     // smart pointer to results array
     std::unique_ptr<ei_feature_t[]> raw_results_ptr(new ei_feature_t[handle->impulse->learning_blocks_size]);
@@ -533,11 +537,6 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
     result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
-    for (int i = 0; i < impulse->label_count; i++) {
-        // set label correctly in the result struct if we have no results (otherwise is nullptr)
-        result->classification[i].label = impulse->categories[(uint32_t)i];
-    }
-
     if (classifier_continuous_features_written >= impulse->nn_input_frame_size) {
         dsp_start_us = ei_read_timer_us();
 
@@ -610,8 +609,14 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
         }
 
         ei_impulse_error = run_inference(handle, features, result, debug);
+        if (ei_impulse_error != EI_IMPULSE_OK) {
+            return ei_impulse_error;
+        }
         delete[] matrix_ptrs;
         ei_impulse_error = run_postprocessing(handle, result);
+        if (ei_impulse_error != EI_IMPULSE_OK) {
+            return ei_impulse_error;
+        }
     }
 
     return ei_impulse_error;

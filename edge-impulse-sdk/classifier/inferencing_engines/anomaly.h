@@ -35,7 +35,7 @@
 #ifndef _EDGE_IMPULSE_INFERENCING_ANOMALY_H_
 #define _EDGE_IMPULSE_INFERENCING_ANOMALY_H_
 
-#if (EI_CLASSIFIER_HAS_ANOMALY)
+#if (EI_CLASSIFIER_LOAD_ANOMALY_H)
 
 #include <cmath>
 #include <stdlib.h>
@@ -52,6 +52,7 @@
 namespace {
 #endif // __cplusplus
 
+#if EI_CLASSIFIER_HAS_ANOMALY_KMEANS
 /**
  * Standard scaler, scales all values in the input vector
  * Note that this *modifies* the array in place!
@@ -60,7 +61,7 @@ namespace {
  * @param mean Array of mean values (obtain from StandardScaler in Python)
  * @param input_size Size of input, scale and mean arrays
  */
-void standard_scaler(float *input, const float *scale, const float *mean, size_t input_size) {
+static void standard_scaler(float *input, const float *scale, const float *mean, size_t input_size) {
     for (size_t ix = 0; ix < input_size; ix++) {
         input[ix] = (input[ix] - mean[ix]) / scale[ix];
     }
@@ -72,7 +73,7 @@ void standard_scaler(float *input, const float *scale, const float *mean, size_t
  * @param input_size Size of the input array
  * @param cluster A cluster (number of centroids should match input_size)
  */
-float calculate_cluster_distance(float *input, size_t input_size, const ei_classifier_anom_cluster_t *cluster) {
+static float calculate_cluster_distance(float *input, size_t input_size, const ei_classifier_anom_cluster_t *cluster) {
     // todo: check input_size and centroid size?
 
     float dist = 0.0f;
@@ -89,7 +90,7 @@ float calculate_cluster_distance(float *input, size_t input_size, const ei_class
  * @param clusters Array of clusters
  * @param cluster_size Size of cluster array
  */
-float get_min_distance_to_cluster(float *input, size_t input_size, const ei_classifier_anom_cluster_t *clusters, size_t cluster_size) {
+static float get_min_distance_to_cluster(float *input, size_t input_size, const ei_classifier_anom_cluster_t *clusters, size_t cluster_size) {
     float min = 1000.0f;
     for (size_t ix = 0; ix < cluster_size; ix++) {
         float dist = calculate_cluster_distance(input, input_size, &clusters[ix]);
@@ -99,6 +100,7 @@ float get_min_distance_to_cluster(float *input, size_t input_size, const ei_clas
     }
     return min;
 }
+#endif // EI_CLASSIFIER_HAS_ANOMALY_KMEANS
 
 #ifdef __cplusplus
 }
@@ -166,7 +168,7 @@ EI_IMPULSE_ERROR extract_anomaly_input_values(
     return EI_IMPULSE_OK;
 }
 
-
+#if EI_CLASSIFIER_HAS_ANOMALY_KMEANS
 EI_IMPULSE_ERROR run_kmeans_anomaly(
     const ei_impulse_t *impulse,
     ei_feature_t *fmatrix,
@@ -208,8 +210,9 @@ EI_IMPULSE_ERROR run_kmeans_anomaly(
 
     return EI_IMPULSE_OK;
 }
+#endif // EI_CLASSIFIER_HAS_ANOMALY_KMEANS
 
-#if (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_NONE)
+#if EI_CLASSIFIER_HAS_ANOMALY_GMM
 EI_IMPULSE_ERROR run_gmm_anomaly(
     const ei_impulse_t *impulse,
     ei_feature_t *fmatrix,
@@ -252,7 +255,8 @@ EI_IMPULSE_ERROR run_gmm_anomaly(
 
     return EI_IMPULSE_OK;
 }
-#endif // (EI_CLASSIFIER_INFERENCING_ENGINE != EI_CLASSIFIER_NONE)
+#endif // EI_CLASSIFIER_HAS_ANOMALY_GMM
 
-#endif //#if (EI_CLASSIFIER_HAS_ANOMALY == 1)
+#endif // EI_CLASSIFIER_LOAD_ANOMALY_H
+
 #endif // _EDGE_IMPULSE_INFERENCING_ANOMALY_H_

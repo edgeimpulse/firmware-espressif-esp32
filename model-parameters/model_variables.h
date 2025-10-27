@@ -41,7 +41,6 @@
 
 #include <stdint.h>
 #include "model_metadata.h"
-
 #include "tflite-model/tflite_learn_44_13_compiled.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "edge-impulse-sdk/classifier/inferencing_engines/engines.h"
@@ -142,14 +141,13 @@ const uint8_t freeform_outputs_44_1_size = 0;
 
 uint32_t *freeform_outputs_44_1 = nullptr;
 
-
 const ei_impulse_t impulse_44_1 = {
     .project_id = 44,
     .project_owner = "Edge Impulse Profiling",
     .project_name = "Demo: Keyword Spotting",
     .impulse_id = 1,
     .impulse_name = "Impulse #1",
-    .deploy_version = 19,
+    .deploy_version = 27,
 
     .nn_input_frame_size = 650,
     .raw_sample_count = 16000,
@@ -182,14 +180,15 @@ const ei_impulse_t impulse_44_1 = {
     .has_anomaly = EI_ANOMALY_TYPE_UNKNOWN,
     .label_count = 3,
     .categories = ei_classifier_inferencing_categories_44_1,
+    .results_type = EI_CLASSIFIER_TYPE_CLASSIFICATION,
     .freeform_outputs_size = freeform_outputs_44_1_size,
     .freeform_outputs = freeform_outputs_44_1
 };
 
 ei_impulse_handle_t impulse_handle_44_1 = ei_impulse_handle_t( &impulse_44_1 );
+
 ei_impulse_handle_t& ei_default_impulse = impulse_handle_44_1;
 constexpr auto& ei_classifier_inferencing_categories = ei_classifier_inferencing_categories_44_1;
 const auto ei_dsp_blocks_size = ei_dsp_blocks_44_1_size;
 ei_model_dsp_t *ei_dsp_blocks = ei_dsp_blocks_44_1;
-
 #endif // _EI_CLASSIFIER_MODEL_VARIABLES_H_
