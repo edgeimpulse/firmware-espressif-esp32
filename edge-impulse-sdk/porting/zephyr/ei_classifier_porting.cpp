@@ -39,6 +39,7 @@
 // Zpehyr 3.1.x and newer uses different include scheme
 #if (KERNEL_VERSION_MAJOR > 3) || ((KERNEL_VERSION_MAJOR == 3) && (KERNEL_VERSION_MINOR >= 1))
 #include <zephyr/kernel.h>
+#include <zephyr/sys_clock.h>
 #include <zephyr/drivers/uart.h>
 #else
 #include <zephyr.h>
@@ -65,8 +66,15 @@ uint64_t ei_read_timer_ms() {
 }
 
 uint64_t ei_read_timer_us() {
+#if (KERNEL_VERSION_MAJOR > 3) || ((KERNEL_VERSION_MAJOR == 3) && (KERNEL_VERSION_MINOR >= 1))
+    uint64_t cycles = k_cycle_get_64();
+    uint64_t freq = sys_clock_hw_cycles_per_sec();
+    return(uint64_t)((cycles * 1000000ULL) / freq);
+#else
     return k_uptime_get() * 1000;
+#endif
 }
+
 
 EI_WEAK_FN char ei_getchar()
 {

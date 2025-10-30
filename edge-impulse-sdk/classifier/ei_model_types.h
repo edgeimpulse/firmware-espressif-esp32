@@ -257,6 +257,8 @@ typedef struct {
 typedef struct {
     uint16_t implementation_version;
     uint8_t quant_type;
+    float input_scale;
+    float input_zeropoint;
 } ei_config_nordic_axon_graph_t;
 
 /** Configuration for the aton.h */
