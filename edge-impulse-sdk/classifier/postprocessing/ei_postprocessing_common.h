@@ -36,6 +36,8 @@
 #define EI_POSTPROCESSING_COMMON_H
 
 #include "model-parameters/model_metadata.h"
+#include "edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_types.h"
+#include "edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_ai_hub.h"
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 #include "edge-impulse-sdk/classifier/ei_classifier_types.h"
 #include "edge-impulse-sdk/classifier/ei_nms.h"
@@ -51,64 +53,6 @@ int16_t get_block_number(ei_impulse_handle_t *handle, void *init_func)
     }
     return -1;
 }
-
-typedef struct cube {
-    uint32_t x;
-    uint32_t y;
-    uint32_t width;
-    uint32_t height;
-    float confidence;
-    const char *label;
-} ei_classifier_cube_t;
-
-typedef struct {
-    float threshold;
-} ei_fill_result_object_detection_threshold_config_t;
-
-typedef struct {
-    float threshold;
-    uint8_t version;
-    uint32_t object_detection_count;
-    uint32_t output_features_count;
-    ei_object_detection_nms_config_t nms_config;
-} ei_fill_result_object_detection_f32_config_t;
-
-typedef struct {
-    float threshold;
-    uint8_t version;
-    uint32_t object_detection_count;
-    uint32_t output_features_count;
-    float zero_point;
-    float scale;
-    ei_object_detection_nms_config_t nms_config;
-} ei_fill_result_object_detection_i8_config_t;
-
-typedef struct {
-    float zero_point;
-    float scale;
-} ei_fill_result_classification_i8_config_t;
-
-typedef struct {
-    float threshold;
-    uint16_t out_width;
-    uint16_t out_height;
-    uint32_t object_detection_count;
-} ei_fill_result_fomo_f32_config_t;
-
-typedef struct {
-    float threshold;
-    uint16_t out_width;
-    uint16_t out_height;
-    uint32_t object_detection_count;
-    float zero_point;
-    float scale;
-} ei_fill_result_fomo_i8_config_t;
-
-typedef struct {
-    float threshold;
-    uint16_t grid_size_x;
-    uint16_t grid_size_y;
-} ei_fill_result_visual_ad_f32_config_t;
 
 /**
  * Checks whether a new section overlaps with a cube,
@@ -1532,40 +1476,6 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov2_f32(ei_impulse_ha
     return EI_IMPULSE_LAST_LAYER_NOT_AVAILABLE;
 #endif // #if EI_HAS_YOLOV2
 }
-
-#if (EI_HAS_TAO_DECODE_DETECTIONS == 1) || (EI_HAS_TAO_YOLO == 1) || (EI_HAS_YOLO_PRO == 1) || (EI_HAS_YOLOV11 == 1)
-
-__attribute__((unused)) static void prepare_nms_results_common(size_t object_detection_count,
-                                                               ei_impulse_result_t *result,
-                                                               std::vector<ei_impulse_result_bounding_box_t> *results) {
-    #define EI_CLASSIFIER_OBJECT_DETECTION_KEEP_TOPK 200
-
-    // if we didn't detect min required objects, fill the rest with fixed value
-    size_t added_boxes_count = results->size();
-    if (added_boxes_count < object_detection_count) {
-        results->resize(object_detection_count);
-        for (size_t ix = added_boxes_count; ix < object_detection_count; ix++) {
-            (*results)[ix].value = 0.0f;
-        }
-    }
-
-    // we sort in reverse order across all classes,
-    // since results for each class are pushed to the end.
-    std::sort(results->begin(), results->end(), [ ]( const ei_impulse_result_bounding_box_t& lhs, const ei_impulse_result_bounding_box_t& rhs )
-    {
-        return lhs.value > rhs.value;
-    });
-
-    // keep topK
-    if (results->size() > EI_CLASSIFIER_OBJECT_DETECTION_KEEP_TOPK) {
-        results->erase(results->begin() + EI_CLASSIFIER_OBJECT_DETECTION_KEEP_TOPK, results->end());
-    }
-
-    result->bounding_boxes = results->data();
-    result->bounding_boxes_count = added_boxes_count;
-}
-
-#endif
 
 #if EI_HAS_TAO_DECODE_DETECTIONS
 template<typename T>

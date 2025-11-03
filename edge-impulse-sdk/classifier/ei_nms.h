@@ -40,7 +40,7 @@
 #include "edge-impulse-sdk/classifier/ei_classifier_types.h"
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 
-#if (EI_HAS_YOLOV5 || EI_HAS_YOLOX || EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLOV3 || EI_HAS_TAO_YOLOV4 || EI_HAS_YOLOV2 || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11)
+#if (EI_HAS_YOLOV5 || EI_HAS_YOLOX || EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLOV3 || EI_HAS_TAO_YOLOV4 || EI_HAS_YOLOV2 || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE)
 
 // The code below comes from tensorflow/lite/kernels/internal/reference/non_max_suppression.h
 // Copyright 2019 The TensorFlow Authors.  All rights reserved.
@@ -377,5 +377,39 @@ EI_IMPULSE_ERROR ei_run_nms(
 
 }
 
-#endif // (EI_HAS_YOLOV5 || EI_HAS_YOLOX || EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLOV3 || EI_HAS_TAO_YOLOV4 || EI_HAS_YOLOV2 || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11)
+#endif // (EI_HAS_YOLOV5 || EI_HAS_YOLOX || EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLOV3 || EI_HAS_TAO_YOLOV4 || EI_HAS_YOLOV2 || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE)
+
+#if (EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLO || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE)
+
+__attribute__((unused)) static void prepare_nms_results_common(size_t object_detection_count,
+                                                               ei_impulse_result_t *result,
+                                                               std::vector<ei_impulse_result_bounding_box_t> *results) {
+    #define EI_CLASSIFIER_OBJECT_DETECTION_KEEP_TOPK 200
+
+    // if we didn't detect min required objects, fill the rest with fixed value
+    size_t added_boxes_count = results->size();
+    if (added_boxes_count < object_detection_count) {
+        results->resize(object_detection_count);
+        for (size_t ix = added_boxes_count; ix < object_detection_count; ix++) {
+            (*results)[ix].value = 0.0f;
+        }
+    }
+
+    // we sort in reverse order across all classes,
+    // since results for each class are pushed to the end.
+    std::sort(results->begin(), results->end(), [ ]( const ei_impulse_result_bounding_box_t& lhs, const ei_impulse_result_bounding_box_t& rhs )
+    {
+        return lhs.value > rhs.value;
+    });
+
+    // keep topK
+    if (results->size() > EI_CLASSIFIER_OBJECT_DETECTION_KEEP_TOPK) {
+        results->erase(results->begin() + EI_CLASSIFIER_OBJECT_DETECTION_KEEP_TOPK, results->end());
+    }
+
+    result->bounding_boxes = results->data();
+    result->bounding_boxes_count = added_boxes_count;
+}
+
+#endif // (EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLO || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE)
 #endif // _EDGE_IMPULSE_NMS_H_
