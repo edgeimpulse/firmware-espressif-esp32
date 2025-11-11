@@ -22,6 +22,9 @@
 #include <malloc.h>
 #include "dsp_tests.h"
 
+#ifndef M_PI
+#define M_PI 3.1415926
+#endif
 
 int16_t *dsps_fft_w_table_sc16;
 int dsps_fft_w_table_sc16_size;
