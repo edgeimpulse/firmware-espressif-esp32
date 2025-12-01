@@ -99,7 +99,7 @@ __attribute__((weak)) void ei_printf_float(float f) {
 // due to https://github.com/espressif/esp-nn/issues/7
 __attribute__((weak)) void *ei_malloc(size_t size) {
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 1)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
     return heap_caps_aligned_alloc(16, size, MALLOC_CAP_DEFAULT);
 #else
     return aligned_alloc(16, size);
@@ -110,7 +110,7 @@ __attribute__((weak)) void *ei_malloc(size_t size) {
 
 __attribute__((weak)) void *ei_calloc(size_t nitems, size_t size) {
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 1)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
     return heap_caps_calloc(nitems, size, MALLOC_CAP_DEFAULT);
 #else
     void *p;

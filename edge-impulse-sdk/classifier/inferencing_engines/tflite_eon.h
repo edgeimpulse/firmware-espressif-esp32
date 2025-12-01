@@ -292,7 +292,7 @@ EI_IMPULSE_ERROR run_nn_inference(
             }
         }
 
-        result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+        result->_raw_outputs[learn_block_index + output_ix].blockId = block_config->block_id + output_ix;
     }
 
     graph_config->model_reset(ei_aligned_free);
@@ -429,7 +429,7 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
             }
         }
 
-        result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+        result->_raw_outputs[learn_block_index + output_ix].blockId = block_config->block_id + output_ix;
     }
 
     graph_config->model_reset(ei_aligned_free);

@@ -51,11 +51,11 @@ __attribute__((weak)) EI_IMPULSE_ERROR ei_sleep(int32_t time_ms) {
     return EI_IMPULSE_OK;
 }
 
-uint64_t ei_read_timer_ms() {
+__attribute__((weak)) uint64_t ei_read_timer_ms() {
     return HAL_GetTick();
 }
 
-uint64_t ei_read_timer_us() {
+__attribute__((weak)) uint64_t ei_read_timer_us() {
     return HAL_GetTick() * 1000;
 }
 

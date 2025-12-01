@@ -66,7 +66,7 @@ uint64_t ei_read_timer_ms() {
 }
 
 uint64_t ei_read_timer_us() {
-#if (KERNEL_VERSION_MAJOR > 3) || ((KERNEL_VERSION_MAJOR == 3) && (KERNEL_VERSION_MINOR >= 1))
+#if defined(CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER)
     uint64_t cycles = k_cycle_get_64();
     uint64_t freq = sys_clock_hw_cycles_per_sec();
     return(uint64_t)((cycles * 1000000ULL) / freq);

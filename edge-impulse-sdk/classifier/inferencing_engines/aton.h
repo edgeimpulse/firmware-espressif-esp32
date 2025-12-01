@@ -83,7 +83,7 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     #endif
     static uint32_t nn_out_len;
 
-    if(first_run == true) {
+    if (first_run == true) {
 
         nn_in_info = LL_ATON_Input_Buffers_Info_Default();
         nn_out_info = LL_ATON_Output_Buffers_Info_Default();
@@ -118,6 +118,9 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     #endif
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
+    if (result->timing.classification_us) {
+        result->timing.classification = result->timing.classification_us / 1000;
+    }
 
     size_t output_size = nn_out_len;
 
@@ -171,7 +174,106 @@ EI_IMPULSE_ERROR run_nn_inference(
     void *config_ptr,
     bool debug = false)
 {
+    ei_learning_block_config_tflite_graph_t *block_config = (ei_learning_block_config_tflite_graph_t*)config_ptr;
+    ei_config_aton_graph_t *graph_config = (ei_config_aton_graph_t*)block_config->graph_config;
 
+    // this needs to be changed for multi-model, multi-impulse
+    static bool first_run = true;
+
+    uint64_t ctx_start_us = ei_read_timer_us();
+
+    #if DATA_OUT_FORMAT_FLOAT32
+    static float32_t *nn_out;
+    #else
+    static uint8_t *nn_out;
+    #endif
+    static uint32_t nn_out_len;
+
+    if (first_run == true) {
+
+        nn_in_info = LL_ATON_Input_Buffers_Info_Default();
+        nn_out_info = LL_ATON_Output_Buffers_Info_Default();
+
+        nn_in = (uint8_t *) LL_Buffer_addr_start(&nn_in_info[0]);
+        uint32_t nn_in_len = LL_Buffer_len(&nn_in_info[0]);
+
+        #if DATA_OUT_FORMAT_FLOAT32
+        nn_out = (float32_t *) nn_out_info[0].addr_base.p;
+        #else
+        nn_out = (uint8_t *) LL_Buffer_addr_start(&nn_out_info[0]);
+        #endif
+        nn_out_len = LL_Buffer_len(&nn_out_info[0]);
+
+        first_run = false;
+    }
+
+    // fill input
+    ei::matrix_t* matrix = fmatrix[0].matrix;
+    size_t mtx_size = impulse->dsp_blocks_size + impulse->learning_blocks_size;
+    for (size_t i = 0; i < input_block_ids_size; i++) {
+#if EI_CLASSIFIER_SINGLE_FEATURE_INPUT == 0
+        uint16_t cur_mtx = input_block_ids[i];
+        ei::matrix_t* matrix = NULL;
+
+        if (!find_mtx_by_idx(fmatrix, &matrix, cur_mtx, mtx_size)) {
+            ei_printf("ERR: Cannot find matrix with id %zu\n", cur_mtx);
+            return EI_IMPULSE_INVALID_SIZE;
+        }
+#else
+        ei::matrix_t* matrix = fmatrix[0].matrix;
+#endif
+
+    }
+    // copy rescale the input features to int8 and copy to input buffer
+    size_t matrix_els = matrix->rows * matrix->cols;
+    for (size_t ix = 0; ix < matrix_els; ix++) {
+        //TODO: get scale and zero point from the model
+        nn_in[ix] = (int8_t)((matrix->buffer[ix] / graph_config->input_scale) + graph_config->input_zeropoint);
+    }
+
+    #ifdef USE_DCACHE
+    SCB_CleanInvalidateDCache_by_Addr(nn_in, impulse->nn_input_frame_size);
+    #endif
+
+    LL_ATON_RT_Main(&NN_Instance_Default);
+
+    /* Discard all nn_out regions to avoid Dcache evictions during nn inference */
+    #ifdef USE_DCACHE
+    int i = 0;
+    while (nn_out_info[i].name != NULL) {
+            SCB_InvalidateDCache_by_Addr((float32_t *) LL_Buffer_addr_start(&nn_out_info[i]), LL_Buffer_len(&nn_out_info[i]));
+            i++;
+    }
+    #endif
+
+    result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
+    if (result->timing.classification_us) {
+        result->timing.classification = result->timing.classification_us / 1000;
+    }
+
+    // fill output
+    for (uint32_t output_ix = 0; output_ix < block_config->output_tensors_size; output_ix++) {
+
+        size_t output_size = nn_out_len;
+        switch (graph_config->quant_type) {
+            case kTfLiteInt8: {
+                    result->_raw_outputs[learn_block_index + output_ix].matrix_i8 = new matrix_i8_t(1, output_size);
+                    memcpy(result->_raw_outputs[learn_block_index + output_ix].matrix_i8->buffer, (int8_t *)nn_out, output_size * sizeof(int8_t));
+            }
+            break;
+            case kTfLiteUInt8: {
+                result->_raw_outputs[learn_block_index].matrix_u8 = new matrix_u8_t(1, output_size);
+                memcpy(result->_raw_outputs[learn_block_index].matrix_u8->buffer, (uint8_t *)nn_out, output_size * sizeof(uint8_t));
+            }
+            break;
+            default: {
+                ei_printf("ERR: Cannot handle output type (%d)\n", graph_config->quant_type);
+                return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
+            }
+        }
+
+        result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+    }
 
     return EI_IMPULSE_OK;
 }

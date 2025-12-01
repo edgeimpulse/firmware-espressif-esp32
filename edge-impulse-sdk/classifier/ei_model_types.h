@@ -251,6 +251,9 @@ typedef struct {
 typedef struct {
     uint16_t implementation_version;
     uint8_t quant_type;
+    float input_scale;
+    float input_zeropoint;
+    int8_t object_detection_last_layer;
 } ei_config_aton_graph_t;
 
 /** Configuration for the nordic_axon.h */
