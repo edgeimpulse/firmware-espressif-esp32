@@ -73,7 +73,8 @@ max_pool2d_nchw(const T* input,
                 int padding)
 {
     if (kernel_size <= 0 || stride <= 0 || padding < 0) {
-        EI_LOGE("kernel_size/stride must be >0 and padding >=0");
+        EI_LOGE("kernel_size/stride must be >0 and padding >=0\n");
+        EI_LOGE("kernel_size =%d, stride=%d, padding=%d\n", kernel_size, stride, padding);
         return {{}, {}};
     }
 
@@ -85,7 +86,11 @@ max_pool2d_nchw(const T* input,
     // Output shape (floor behavior)
     if (pad_shape.H < static_cast<size_t>(kernel_size) ||
         pad_shape.W < static_cast<size_t>(kernel_size)) {
-        EI_LOGE("Kernel larger than padded input.");
+        EI_LOGE("Kernel larger than padded input.\n");
+        EI_LOGE("Padded H: %d, W: %d, kernel_size: %d\n",
+                static_cast<int>(pad_shape.H),
+                static_cast<int>(pad_shape.W),
+                kernel_size);
         return {{}, {}};
     }
 
@@ -201,11 +206,13 @@ std::vector<BBox>
 detect(const std::vector<T>& hm,
        const std::vector<T>& box,
        const std::vector<T>& landmark,
+       const uint32_t grid_size_x,
+       const uint32_t grid_size_y,
        float threshold, float nms_iou_val, int stride = 8)
 {
-    Shape4 hm_shape({1, 1, 60, 80});
-    Shape4 box_shape({1, 4, 60, 80});
-    Shape4 lm_shape({1, 10, 60, 80});
+    Shape4 hm_shape({1, 1, grid_size_y, grid_size_x});
+    Shape4 box_shape({1, 4, grid_size_y, grid_size_x});
+    Shape4 lm_shape({1, 10, grid_size_y, grid_size_x});
 
     const std::size_t H = hm_shape.H, W = hm_shape.W;
     const std::size_t plane = H * W;
@@ -224,7 +231,7 @@ detect(const std::vector<T>& hm,
     const Shape4 hm_pool_shape = ret_max_pool2d.second;
     if (hm_pool_shape.N != hm_shape.N || hm_pool_shape.C != hm_shape.C ||
         hm_pool_shape.H != hm_shape.H || hm_pool_shape.W != hm_shape.W) {
-        EI_LOGE("max_pool2d output shape mismatch");
+        EI_LOGE("max_pool2d output shape mismatch\n");
         return {};
     }
 
@@ -349,25 +356,26 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_qc_face_det_lite_common(
                                                                                 ei_object_detection_nms_config_t nms_config) {
     const int width = impulse->input_width;
     const int height = impulse->input_height;
+    const uint32_t grid_size_x = width / 8;
+    const uint32_t grid_size_y = height / 8;
     static std::vector<ei_impulse_result_bounding_box_t> results;
 
     results.clear();
 
     // raw_output_mtx has three matrixes:
-    // heatmap: 1, 60, 80, 1 (4800)
-    // bbox: 1, 60, 80, 4 (19200)
-    // landmark: 1, 60, 80, 10 (48000)
-    // total: 72000 elements
+    // heatmap:  1, grid_size_y, grid_size_x, 1
+    // bbox:     1, grid_size_y, grid_size_x, 4
+    // landmark: 1, grid_size_y, grid_size_x, 1
 
     std::vector<T> heatmap(heatmap_buf, heatmap_buf + heatmap_buf_size);
     std::vector<T> bbox(bbox_buf, bbox_buf + bbox_buf_size);
     std::vector<T> landmark(landmark_buf, landmark_buf + landmark_buf_size);
 
-    nhwc_to_nchw_inplace(heatmap, 1, 60, 80, 1);
-    nhwc_to_nchw_inplace(bbox, 1, 60, 80, 4);
-    nhwc_to_nchw_inplace(landmark, 1, 60, 80, 10);
+    nhwc_to_nchw_inplace(heatmap, 1, grid_size_y, grid_size_x, 1);
+    nhwc_to_nchw_inplace(bbox, 1, grid_size_y, grid_size_x, 4);
+    nhwc_to_nchw_inplace(landmark, 1, grid_size_y, grid_size_x, 10);
 
-    auto dets = detect(heatmap, bbox, landmark, threshold, nms_config.iou_threshold);
+    auto dets = detect(heatmap, bbox, landmark, grid_size_x, grid_size_y, threshold, nms_config.iou_threshold);
 
     std::vector<float> boxes;
     std::vector<float> scores;
@@ -451,23 +459,36 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_qc_face_det_lite_f32(ei_
     find_mtx_by_idx(result->_raw_outputs, &bbox_mtx, input_block_id + 1, impulse->learning_blocks_size + 3);
     find_mtx_by_idx(result->_raw_outputs, &landmark_mtx, input_block_id + 2, impulse->learning_blocks_size + 3);
 
+    const uint32_t width = impulse->input_width;
+    const uint32_t height = impulse->input_height;
+
+    // by design, width and height must be multiples of 32
+    if (width % 32 != 0 || height % 32 != 0) {
+        EI_LOGE("Input width and height must be multiples of 32\n");
+        return EI_IMPULSE_POSTPROCESSING_ERROR;
+    }
+
+    // however, the grid cell size is 8x8, not 32x32
+    const uint32_t grid_size_x = width / 8;
+    const uint32_t grid_size_y = height / 8;
+
     if (heatmap_mtx == NULL || bbox_mtx == NULL || landmark_mtx == NULL) {
-        EI_LOGE("Could not find required matrices in raw outputs");
+        EI_LOGE("Could not find required matrices in raw outputs\n");
         return EI_IMPULSE_POSTPROCESSING_ERROR;
     }
 
-    if(heatmap_mtx->cols * heatmap_mtx->rows != 4800) {
-        EI_LOGE("Heat map size is incorrect %d != 4800", heatmap_mtx->cols * heatmap_mtx->rows);
+    if(heatmap_mtx->cols * heatmap_mtx->rows != grid_size_x * grid_size_y) {
+        EI_LOGE("Heat map size is incorrect %d != %d\n", heatmap_mtx->cols * heatmap_mtx->rows, grid_size_x * grid_size_y);
         return EI_IMPULSE_POSTPROCESSING_ERROR;
     }
 
-    if(bbox_mtx->cols * bbox_mtx->rows != 19200) {
-        EI_LOGE("Bounding box size is incorrect %d != 19200", bbox_mtx->cols * bbox_mtx->rows);
+    if(bbox_mtx->cols * bbox_mtx->rows != grid_size_x * grid_size_y * 4) {
+        EI_LOGE("Bounding box size is incorrect %d != %d\n", bbox_mtx->cols * bbox_mtx->rows, grid_size_x * grid_size_y * 4);
         return EI_IMPULSE_POSTPROCESSING_ERROR;
     }
 
-    if(landmark_mtx->cols * landmark_mtx->rows != 48000) {
-        EI_LOGE("Landmark size is incorrect %d != 48000", landmark_mtx->cols * landmark_mtx->rows);
+    if(landmark_mtx->cols * landmark_mtx->rows != grid_size_x * grid_size_y * 10) {
+        EI_LOGE("Landmark size is incorrect %d != %d\n", landmark_mtx->cols * landmark_mtx->rows, grid_size_x * grid_size_y * 10);
         return EI_IMPULSE_POSTPROCESSING_ERROR;
     }
 
