@@ -167,7 +167,7 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     const char *label;
     int32_t score;
-    int16_t class_idx = axon_nn_get_classification(&model_wrapper, &label, &score, NULL);
+    int16_t class_idx = axon_nn_get_classification(&model_wrapper, NULL, &label, &score, NULL);
 
     if (class_idx >= 0) {
         if (debug) {
