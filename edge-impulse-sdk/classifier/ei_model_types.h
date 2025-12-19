@@ -111,6 +111,7 @@
 #define EI_CLASSIFIER_MODE_FREEFORM            8
 #define EI_CLASSIFIER_MODE_ANOMALY_CUSTOM      9
 
+// Types of post-processing blocks
 #define EI_CLASSIFIER_TYPE_NONE                0
 #define EI_CLASSIFIER_TYPE_CLASSIFICATION      1
 #define EI_CLASSIFIER_TYPE_REGRESSION          2
