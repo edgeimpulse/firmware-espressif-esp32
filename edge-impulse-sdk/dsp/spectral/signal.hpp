@@ -112,14 +112,16 @@ public:
         {
             assert(num_sections > 0);
             coeff = coeff_;
-            zi_vec.assign(zi_, zi_ + (num_sections * 2));
+
+            if (zi_) {
+                zi_vec.assign(zi_, zi_ + (num_sections * 2));
+            }
         }
 
         void update(const float* coeff_, const float* zi_, size_t num_sections_)
         {
             num_sections = num_sections_;
-            coeff = coeff_;
-            zi_vec.assign(zi_, zi_ + (num_sections * 2));
+            update(coeff_, zi_);
         }
 
         /**

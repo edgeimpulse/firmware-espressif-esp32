@@ -34,6 +34,9 @@
 #include "edge-impulse-sdk/dsp/ei_dsp_handle.h"
 #include "edge-impulse-enterprise/eeg/eeg.hpp"
 
+// Include the generated header
+#include "model-parameters/coeffs.hpp"
+
 // Wrapper to use ei_malloc for allocation
 class eeg_wrap : public ei::eeg_processor {
 public:
@@ -82,6 +85,12 @@ public:
               config->axes,
               config->scale_axes,
               config->motion_sensitivity,
+              (const float*)ei::eeg::filter_coeff,
+              (const float*)ei::eeg::filter_zi,
+              ei::eeg::num_sections,
+              (const float*)ei::eeg::tapers,
+              ei::eeg::num_tapers,
+              ei::eeg::win_size,
               true)
     {
         // Any additional config setup can go here

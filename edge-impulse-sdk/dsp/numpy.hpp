@@ -1875,6 +1875,20 @@ public:
         }
     }
 
+    /**
+     * @brief Scale an array. Supports in place!
+     *
+     * @param input Input array
+     * @param scale Scale factor
+     * @param output Output array
+     * @param size Size of the arrays
+     */
+    static void scale(float* input, float scale, float* output, size_t size) {
+        for (size_t ix = 0; ix < size; ix++) {
+            output[ix] = input[ix] * scale;
+        }
+    }
+
     __attribute__((unused)) static void scale(fvec& v, float scale) {
         for (auto& x : v) {
             x *= scale;
@@ -2147,6 +2161,36 @@ public:
         return ret;
     }
 
+    /**
+     * @brief Multiply two arrays. Supports in place!
+     *
+     * @param x First array
+     * @param y Second array
+     * @param z Result array
+     * @param n Size of the arrays
+     */
+    static void mult(const float* x, const float* y, float* z, size_t n) {
+        for (size_t i = 0; i < n; i++) {
+            z[i] = x[i] * y[i];
+        }
+        // Test and move to header when merged: https://github.com/edgeimpulse/edgeimpulse/pull/13855
+        // arm_mult_f32(x, y, z, n);
+    }
+
+    /**
+     * @brief Add two arrays. Supports in place!
+     *
+     * @param x First array
+     * @param y Second array
+     * @param z Result array
+     * @param n Size of the arrays
+     */
+    static void add(const float* x, const float* y, float* z, size_t n) {
+        for (size_t i = 0; i < n; i++) {
+            z[i] = x[i] + y[i];
+        }
+    }
+
 private:
     /**
      * Helper function to handle FFT hardware acceleration failures and logging
@@ -2173,6 +2217,7 @@ private:
         }
         return true;
     }
+
 
 };
 
