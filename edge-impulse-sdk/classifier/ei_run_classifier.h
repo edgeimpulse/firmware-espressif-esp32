@@ -164,10 +164,12 @@ extern "C" EI_IMPULSE_ERROR run_inference(
         }
 
 #if EI_CLASSIFIER_LOAD_IMAGE_SCALING
-        // undo scaling
-        scale_res = ei_unscale_fmatrix(&block, fmatrix[0].matrix);
-        if (scale_res != EI_IMPULSE_OK) {
-            return scale_res;
+        // undo scaling, only if we have multiple learn blocks... otherwise just leave scaled
+        if (impulse->learning_blocks_size > 1) {
+            scale_res = ei_unscale_fmatrix(&block, fmatrix[0].matrix);
+            if (scale_res != EI_IMPULSE_OK) {
+                return scale_res;
+            }
         }
 #endif
     }
@@ -701,24 +703,14 @@ EI_IMPULSE_ERROR ei_scale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fmat
         }
     }
     else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_MIN128_127) {
-        int scale_res = numpy::scale(fmatrix, 255.0f);
-        if (scale_res != EIDSP_OK) {
-            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
-            return EI_IMPULSE_DSP_ERROR;
-        }
-        scale_res = numpy::subtract(fmatrix, 128.0f);
+        int scale_res = numpy::scale_and_add(fmatrix, 255.0f, -128.0f);
         if (scale_res != EIDSP_OK) {
             ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
             return EI_IMPULSE_DSP_ERROR;
         }
     }
     else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_MIN1_1) {
-        int scale_res = numpy::scale(fmatrix, 2.0f);
-        if (scale_res != EIDSP_OK) {
-            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
-            return EI_IMPULSE_DSP_ERROR;
-        }
-        scale_res = numpy::subtract(fmatrix, 1.0f);
+        int scale_res = numpy::scale_and_add(fmatrix, 2.0f, -1.0f);
         if (scale_res != EIDSP_OK) {
             ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
             return EI_IMPULSE_DSP_ERROR;
@@ -752,24 +744,14 @@ EI_IMPULSE_ERROR ei_unscale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fm
         }
     }
     else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_MIN128_127) {
-        int scale_res = numpy::add(fmatrix, 128.0f);
-        if (scale_res != EIDSP_OK) {
-            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
-            return EI_IMPULSE_DSP_ERROR;
-        }
-        scale_res = numpy::scale(fmatrix, 1 / 255.0f);
+        int scale_res = numpy::scale_and_add(fmatrix, 1.0f / 255.0f, 128.0f / 255.0f);
         if (scale_res != EIDSP_OK) {
             ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
             return EI_IMPULSE_DSP_ERROR;
         }
     }
     else if (block->image_scaling == EI_CLASSIFIER_IMAGE_SCALING_MIN1_1) {
-        int scale_res = numpy::add(fmatrix, 1.0f);
-        if (scale_res != EIDSP_OK) {
-            ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
-            return EI_IMPULSE_DSP_ERROR;
-        }
-        scale_res = numpy::scale(fmatrix, 1 / 2.0f);
+        int scale_res = numpy::scale_and_add(fmatrix, 1.0f / 2.0f, 1.0f / 2.0f);
         if (scale_res != EIDSP_OK) {
             ei_printf("ERR: Failed to scale matrix (%d)\n", scale_res);
             return EI_IMPULSE_DSP_ERROR;

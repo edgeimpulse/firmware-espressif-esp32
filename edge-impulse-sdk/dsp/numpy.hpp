@@ -113,6 +113,10 @@
 #include <functional>
 #endif // __MBED__
 
+#if EIDSP_USE_NEON
+#include <arm_neon.h>
+#endif // EIDSP_USE_NEON
+
 #define EI_MAX_UINT16 65535
 
 #ifndef M_PI
@@ -753,9 +757,7 @@ public:
         EI_RETURN_IF_ERROR(hw_mat_scale_inplace(matrix->buffer,
             static_cast<uint16_t>(matrix->rows), static_cast<uint16_t>(matrix->cols), scale));
 #else
-        for (size_t ix = 0; ix < matrix->rows * matrix->cols; ix++) {
-            matrix->buffer[ix] *= scale;
-        }
+        return scale_and_add(matrix, scale, 0.0f);
 #endif
         return EIDSP_OK;
     }
@@ -794,10 +796,7 @@ public:
      * @returns 0 if OK
      */
     static int add(matrix_t *matrix, float addition) {
-        for (uint32_t ix = 0; ix < matrix->rows * matrix->cols; ix++) {
-            matrix->buffer[ix] += addition;
-        }
-        return EIDSP_OK;
+        return scale_and_add(matrix, 1.0f, addition);
     }
 
     /**
@@ -833,10 +832,7 @@ public:
      * @returns 0 if OK
      */
     static int subtract(matrix_t *matrix, float subtraction) {
-        for (uint32_t ix = 0; ix < matrix->rows * matrix->cols; ix++) {
-            matrix->buffer[ix] -= subtraction;
-        }
-        return EIDSP_OK;
+        return scale_and_add(matrix, 1.0f, -subtraction);
     }
 
     /**
@@ -861,6 +857,93 @@ public:
                 EIDSP_ERR(ret);
             }
         }
+
+        return EIDSP_OK;
+    }
+
+    static int scale_and_add(matrix_t *matrix, float scale, float add) {
+        if (scale == 1.0f && add == 0.0f) {
+            return EIDSP_OK;
+        }
+
+#if EIDSP_USE_CMSIS_DSP
+        if (matrix->rows > EI_MAX_UINT16 || matrix->cols > EI_MAX_UINT16) {
+            // fall back to sw implementation, arm_matrix_instance_f32 is limited to uint16_t for r/c
+            for (uint32_t ix = 0; ix < matrix->rows * matrix->cols; ix++) {
+                matrix->buffer[ix] = (matrix->buffer[ix] * scale) + add;
+            }
+            return EIDSP_OK;
+        }
+
+        // first scale
+        if (scale != 1.0f) {
+            const arm_matrix_instance_f32 mi = { static_cast<uint16_t>(matrix->rows), static_cast<uint16_t>(matrix->cols), matrix->buffer };
+            arm_matrix_instance_f32 mo = { static_cast<uint16_t>(matrix->rows), static_cast<uint16_t>(matrix->cols), matrix->buffer };
+            int status = arm_mat_scale_f32(&mi, scale, &mo);
+            if (status != ARM_MATH_SUCCESS) {
+                return status;
+            }
+        }
+
+        if (add != 0.0f) {
+            // then add
+            arm_offset_f32(matrix->buffer, add, matrix->buffer, matrix->rows * matrix->cols);
+        }
+
+#elif EIDSP_USE_NEON
+
+        float bias = add;
+        float* ptr = matrix->buffer;
+        size_t remaining = matrix->rows * matrix->cols;
+
+        // Broadcast scale/bias
+        const float32x4_t vbias  = vdupq_n_f32(bias);
+
+        // We'll use vmlaq_n_f32: vbias + vdata * scale
+        const float scale_val = scale;
+
+        // Process 16 elements per loop (4x float32x4_t)
+        while (remaining >= 16) {
+            float32x4_t v0 = vld1q_f32(ptr +  0);
+            float32x4_t v1 = vld1q_f32(ptr +  4);
+            float32x4_t v2 = vld1q_f32(ptr +  8);
+            float32x4_t v3 = vld1q_f32(ptr + 12);
+
+            v0 = vmlaq_n_f32(vbias, v0, scale_val);  // vbias + v0 * scale
+            v1 = vmlaq_n_f32(vbias, v1, scale_val);
+            v2 = vmlaq_n_f32(vbias, v2, scale_val);
+            v3 = vmlaq_n_f32(vbias, v3, scale_val);
+
+            vst1q_f32(ptr +  0, v0);
+            vst1q_f32(ptr +  4, v1);
+            vst1q_f32(ptr +  8, v2);
+            vst1q_f32(ptr + 12, v3);
+
+            ptr       += 16;
+            remaining -= 16;
+        }
+
+        // Process 4 elements at a time
+        while (remaining >= 4) {
+            float32x4_t v = vld1q_f32(ptr);
+            v = vmlaq_n_f32(vbias, v, scale_val);     // vbias + v * scale
+            vst1q_f32(ptr, v);
+
+            ptr       += 4;
+            remaining -= 4;
+        }
+
+        // Scalar tail
+        while (remaining > 0) {
+            *ptr = scale * (*ptr) + bias;
+            ++ptr;
+            --remaining;
+        }
+#else
+        for (uint32_t ix = 0; ix < matrix->rows * matrix->cols; ix++) {
+            matrix->buffer[ix] = (matrix->buffer[ix] * scale) + add;
+        }
+#endif
 
         return EIDSP_OK;
     }

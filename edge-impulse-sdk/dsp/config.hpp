@@ -69,6 +69,14 @@
 #define EIDSP_i8                 int8_t
 #endif // EIDSP_USE_CMSIS_DSP
 
+#ifndef EIDSP_USE_NEON
+    #if defined(__ARM_NEON) || defined(__aarch64__)
+        #define EIDSP_USE_NEON      1
+    #else
+        #define EIDSP_USE_NEON      0
+    #endif
+#endif // EIDSP_USE_NEON
+
 #ifndef EIDSP_USE_ASSERTS
 #define EIDSP_USE_ASSERTS        0
 #endif // EIDSP_USE_ASSERTS
