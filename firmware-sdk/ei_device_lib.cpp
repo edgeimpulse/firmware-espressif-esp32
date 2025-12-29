@@ -47,7 +47,7 @@ extern "C" EI_IMPULSE_ERROR run_classifier(
     bool debug = false);
 
 float *features;
-extern char* ei_classifier_inferencing_categories[];
+extern ei_impulse_handle_t& ei_default_impulse;
 
 /**
  * @brief      Call this function periocally during inference to
@@ -248,7 +248,7 @@ EI_IMPULSE_ERROR ei_start_impulse_static_data(bool debug, float* data, size_t si
 #else
     ei_printf("Predictions:\r\n");
     for (uint16_t i = 0; i < EI_CLASSIFIER_LABEL_COUNT; i++) {
-        ei_printf("  %s: ", ei_classifier_inferencing_categories[i]);
+        ei_printf("  %s: ", ei_default_impulse.impulse->categories[i]);
         ei_printf_float(result.classification[i].value);
         ei_printf("\r\n");
     }
