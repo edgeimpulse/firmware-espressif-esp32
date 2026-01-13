@@ -126,7 +126,7 @@ void ei_print_results(ei_impulse_handle_t *impulse_handle, ei_impulse_result_t *
     }
 #endif // EI_CLASSIFIER_FREEFORM_OUTPUT
 #if EI_CLASSIFIER_HAS_VISUAL_ANOMALY
-    else if (impulse->has_anomaly == EI_ANOMALY_TYPE_VISUAL_GMM || impulse->has_anomaly == EI_ANOMALY_TYPE_VISUAL_PATCHCORE) {
+    else if (impulse->has_anomaly != EI_ANOMALY_TYPE_UNKNOWN) {
         ei_printf("Visual anomalies:\n");
         for (uint32_t i = 0; i < result.visual_ad_count; i++) {
             ei_impulse_result_bounding_box_t bb = result.visual_ad_grid_cells[i];
