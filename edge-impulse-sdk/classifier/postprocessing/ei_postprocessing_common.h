@@ -44,6 +44,12 @@
 #include "edge-impulse-sdk/dsp/ei_vector.h"
 #include <string>
 
+#ifdef EI_HAS_PADDLEOCR_DETECTOR
+#include <utility>
+#include <queue>
+#include <limits>
+#endif // EI_HAS_PADDLEOCR_DETECTOR
+
 int16_t get_block_number(ei_impulse_handle_t *handle, void *init_func)
 {
     for (size_t i = 0; i < handle->impulse->postprocessing_blocks_size; i++) {
@@ -2360,50 +2366,376 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_yolov11_i8(ei_impulse_ha
 #endif // #if EI_HAS_YOLOV11
 }
 
-EI_IMPULSE_ERROR set_threshold_postprocessing(int16_t block_number, void* block_config, uint8_t type, float threshold) {
+#if EI_HAS_PADDLEOCR_DETECTOR
 
-    switch (type) {
-        case EI_CLASSIFIER_MODE_OBJECT_DETECTION: {
-            ei_fill_result_object_detection_threshold_config_t *config = (ei_fill_result_object_detection_threshold_config_t*)block_config;
-            config->threshold = threshold;
-            break;
-        }
-        case EI_CLASSIFIER_MODE_VISUAL_ANOMALY: {
-            ei_fill_result_visual_ad_f32_config_t *config = (ei_fill_result_visual_ad_f32_config_t*)block_config;
-            config->threshold = threshold;
-            break;
-        }
-        default: {
-            return EI_IMPULSE_POSTPROCESSING_ERROR;
+struct ei_paddleocr_contour_t {
+    int min_r = std::numeric_limits<int>::max();
+    int max_r = std::numeric_limits<int>::min();
+    int min_c = std::numeric_limits<int>::max();
+    int max_c = std::numeric_limits<int>::min();
+};
+
+// Rough equivalent of cv2.findContours(mask*255, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+template <typename MatrixT, typename GetPixelFn>
+static std::vector<ei_paddleocr_contour_t> ei_paddleocr_find_contours_from_output_impl(
+    const MatrixT& m,
+    float minimum_confidence_rating,
+    GetPixelFn get_pixel
+) {
+    std::vector<ei_paddleocr_contour_t> contours;
+
+    const int rows = (int)m.rows;
+    const int cols = (int)m.cols;
+    if (rows <= 0 || cols <= 0) return contours;
+
+    std::vector<uint8_t> visited((size_t)rows * (size_t)cols, 0);
+
+    auto idx = [cols](int r, int c) -> size_t {
+        return (size_t)r * (size_t)cols + (size_t)c;
+    };
+
+    const int dr[4] = {-1, 1, 0, 0};
+    const int dc[4] = {0, 0, -1, 1};
+
+    std::queue<std::pair<int,int>> q;
+
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            const size_t i = idx(r, c);
+            if (visited[i]) continue;
+
+            const float v0 = get_pixel(m, r, c);
+            if (v0 < minimum_confidence_rating) continue;
+
+            ei_paddleocr_contour_t contour;
+            visited[i] = 1;
+            q.push({r, c});
+
+            while (!q.empty()) {
+                auto p = q.front(); q.pop();
+                const int cr = p.first;
+                const int cc = p.second;
+
+                // bbox
+                if (cr < contour.min_r) contour.min_r = cr;
+                if (cr > contour.max_r) contour.max_r = cr;
+                if (cc < contour.min_c) contour.min_c = cc;
+                if (cc > contour.max_c) contour.max_c = cc;
+
+                for (int k = 0; k < 4; ++k) {
+                    const int nr = cr + dr[k];
+                    const int nc = cc + dc[k];
+                    if ((int)nr >= (int)rows) continue;
+                    if ((int)nc >= (int)cols) continue;
+
+                    const size_t ni = idx(nr, nc);
+                    if (visited[ni]) continue;
+
+                    const float nv = get_pixel(m, nr, nc);
+                    if (nv < minimum_confidence_rating) continue;
+
+                    visited[ni] = 1;
+                    q.push({nr, nc});
+                }
+            }
+
+            contours.push_back(contour);
         }
     }
 
-    return EI_IMPULSE_OK;
+    return contours;
 }
 
-EI_IMPULSE_ERROR get_threshold_postprocessing(std::string* type_str, std::string* threshold_name_str, void* block_config, uint8_t type, float* threshold) {
+static std::vector<ei_paddleocr_contour_t>
+ei_paddleocr_find_contours_from_output_f32(
+    const ei::matrix_t& m,
+    float minimum_confidence_rating
+) {
+    return ei_paddleocr_find_contours_from_output_impl(
+        m,
+        minimum_confidence_rating,
+        [](const ei::matrix_t& m, int r, int c) -> float {
+            return m.buffer[(size_t)r * m.cols + (size_t)c];
+        }
+    );
+}
 
-    switch (type) {
-        case EI_CLASSIFIER_MODE_OBJECT_DETECTION: {
-            ei_fill_result_object_detection_threshold_config_t *config = (ei_fill_result_object_detection_threshold_config_t*)block_config;
-            *threshold = config->threshold;
-            *type_str = "object_detection";
-            *threshold_name_str = "min_score";
-            break;
+static std::vector<ei_paddleocr_contour_t>
+ei_paddleocr_find_contours_from_output_i8(
+    const ei::matrix_i8_t& m,
+    float minimum_confidence_rating,
+    float zero_point,
+    float scale
+) {
+    return ei_paddleocr_find_contours_from_output_impl(
+        m,
+        minimum_confidence_rating,
+        [zero_point, scale](const ei::matrix_i8_t& m, int r, int c) -> float {
+            const int8_t v = m.buffer[(size_t)r * m.cols + (size_t)c];
+            return (float(v) - zero_point) * scale;
         }
-        case EI_CLASSIFIER_MODE_VISUAL_ANOMALY: {
-            ei_fill_result_visual_ad_f32_config_t *config = (ei_fill_result_visual_ad_f32_config_t*)block_config;
-            *threshold = config->threshold;
-            *type_str = "anomaly_gmm";
-            *threshold_name_str = "min_anomaly_score";
-            break;
-        }
-        default: {
-            return EI_IMPULSE_POSTPROCESSING_ERROR;
+    );
+}
+
+static void ei_paddleocr_map_contour_to_bb(
+    const ei_impulse_t *impulse,
+    const ei_paddleocr_contour_t *contour,
+    ei_impulse_result_bounding_box_t *box,
+    const ei::matrix_t& m,
+    float unclip_ratio
+) {
+    uint32_t x = (uint32_t)contour->min_c;
+    uint32_t y = (uint32_t)contour->min_r;
+    uint32_t width  = (uint32_t)(contour->max_c - contour->min_c + 1);
+    uint32_t height = (uint32_t)(contour->max_r - contour->min_r + 1);
+
+    // bbox mean (f32)
+    float total = 0.0f;
+    uint32_t count = 0;
+    for (uint32_t row = y; row < y + height; ++row) {
+        const float* rowptr = m.buffer + (size_t)row * m.cols;
+        for (uint32_t col = x; col < x + width; ++col) {
+            total += rowptr[col];
+            count++;
         }
     }
+    const float value = count ? (total / (float)count) : 0.0f;
+
+    // unclip
+    uint32_t area = width * height;
+    uint32_t perimeter = 2 * (width + height);
+
+    uint32_t d = 0;
+    if (perimeter > 0) {
+        d = (area * unclip_ratio) / perimeter;
+    }
+
+    // Expand rectangle by distance d on all sides
+    x = x - d;
+    y = y - d;
+    width = width + (d * 2); // expand on both sides
+    height = height + (d * 2); // expand on both sides
+
+    // clamp to image bounds
+    if (x < 0) {
+        x = 0;
+    }
+    if (y < 0) {
+        y = 0;
+    }
+    if ((x + width) > impulse->input_width) {
+        width = impulse->input_width - x;
+    }
+    if ((y + height) > impulse->input_height) {
+        height = impulse->input_height - y;
+    }
+
+    box->x = x;
+    box->y = y;
+    box->width = width;
+    box->height = height;
+    box->value = value;
+}
+
+static void ei_paddleocr_map_contour_to_bb(
+    const ei_impulse_t *impulse,
+    const ei_paddleocr_contour_t *contour,
+    ei_impulse_result_bounding_box_t *box,
+    const ei::matrix_i8_t& m,
+    float zero_point,
+    float scale,
+    float unclip_ratio
+) {
+    uint32_t x = (uint32_t)contour->min_c;
+    uint32_t y = (uint32_t)contour->min_r;
+    uint32_t width  = (uint32_t)(contour->max_c - contour->min_c + 1);
+    uint32_t height = (uint32_t)(contour->max_r - contour->min_r + 1);
+
+    // bbox mean (dequantized)
+    float total = 0.0f;
+    uint32_t count = 0;
+    for (uint32_t row = y; row < y + height; ++row) {
+        const int8_t* rowptr = m.buffer + (size_t)row * m.cols;
+        for (uint32_t col = x; col < x + width; ++col) {
+            total += (float(rowptr[col]) - zero_point) * scale;
+            count++;
+        }
+    }
+    const float value = count ? (total / (float)count) : 0.0f;
+
+    // unclip
+    uint32_t area = width * height;
+    uint32_t perimeter = 2 * (width + height);
+
+    uint32_t d = 0;
+    if (perimeter > 0) {
+        d = (area * unclip_ratio) / perimeter;
+    }
+
+    // Expand rectangle by distance d on all sides
+    x = x - d;
+    y = y - d;
+    width = width + (d * 2); // expand on both sides
+    height = height + (d * 2); // expand on both sides
+
+    // clamp to image bounds
+    if (x < 0) {
+        x = 0;
+    }
+    if (y < 0) {
+        y = 0;
+    }
+    if ((x + width) > impulse->input_width) {
+        width = impulse->input_width - x;
+    }
+    if ((y + height) > impulse->input_height) {
+        height = impulse->input_height - y;
+    }
+
+    box->x = x;
+    box->y = y;
+    box->width = width;
+    box->height = height;
+    box->value = value;
+}
+
+#endif // EI_HAS_PADDLEOCR_DETECTOR
+
+/**
+  * Fill the result structure from an unquantized output tensor
+  */
+__attribute__((unused)) static EI_IMPULSE_ERROR process_paddleocr_f32(ei_impulse_handle_t *handle,
+                                                                      uint32_t block_index,
+                                                                      uint32_t input_block_id,
+                                                                      ei_impulse_result_t *result,
+                                                                      void *config_ptr,
+                                                                      void *state) {
+#if EI_HAS_PADDLEOCR_DETECTOR
+    const ei_impulse_t *impulse = handle->impulse;
+    const ei_fill_result_paddleocr_f32_config_t *config = (ei_fill_result_paddleocr_f32_config_t*)config_ptr;
+
+    ei::matrix_t* raw_output_mtx = NULL;
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->learning_blocks_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
+
+    // our algorithm requires properly set rows/cols
+    raw_output_mtx->rows = impulse->input_height;
+    raw_output_mtx->cols = impulse->input_width;
+
+    static std::vector<ei_impulse_result_bounding_box_t> results;
+    results.clear();
+
+    auto contours = ei_paddleocr_find_contours_from_output_f32(*raw_output_mtx, config->min_score_pixel);
+
+    for (const auto& contour : contours) {
+        ei_impulse_result_bounding_box_t tmp = {
+            .label = impulse->categories[0],
+            .x = 0,
+            .y = 0,
+            .width = 0,
+            .height = 0,
+            .value = 0.0f,
+        };
+        ei_paddleocr_map_contour_to_bb(impulse, &contour, &tmp, *raw_output_mtx, config->unclip_ratio);
+
+        if (tmp.value < config->min_score_box) continue;
+
+        results.push_back(tmp);
+    }
+
+    // sort hi->lo
+    std::sort(results.begin(), results.end(),
+        [](const ei_impulse_result_bounding_box_t& a,
+            const ei_impulse_result_bounding_box_t& b) {
+            return a.value > b.value;
+        });
+
+    result->bounding_boxes = results.data();
+    result->bounding_boxes_count = results.size();
 
     return EI_IMPULSE_OK;
+#else
+    return EI_IMPULSE_LAST_LAYER_NOT_AVAILABLE;
+#endif // #ifdef EI_HAS_PADDLEOCR_DETECTOR
+}
+
+/**
+ * Fill the result structure from a quantized output tensor
+*/
+__attribute__((unused)) static EI_IMPULSE_ERROR process_paddleocr_i8(ei_impulse_handle_t *handle,
+                                                                     uint32_t block_index,
+                                                                     uint32_t input_block_id,
+                                                                     ei_impulse_result_t *result,
+                                                                     void *config_ptr,
+                                                                     void *state) {
+#if EI_HAS_PADDLEOCR_DETECTOR
+    const ei_impulse_t *impulse = handle->impulse;
+    const ei_fill_result_paddleocr_i8_config_t *config = (ei_fill_result_paddleocr_i8_config_t*)config_ptr;
+
+    ei::matrix_i8_t* raw_output_mtx = NULL;
+    bool find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &raw_output_mtx, input_block_id, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
+
+    // our algorithm requires properly set rows/cols
+    raw_output_mtx->rows = impulse->input_height;
+    raw_output_mtx->cols = impulse->input_width;
+
+    static std::vector<ei_impulse_result_bounding_box_t> results;
+    results.clear();
+
+    auto contours = ei_paddleocr_find_contours_from_output_i8(*raw_output_mtx, config->min_score_pixel, config->zero_point, config->scale);
+
+    for (const auto& contour : contours) {
+        ei_impulse_result_bounding_box_t tmp = {
+            .label = impulse->categories[0],
+            .x = 0,
+            .y = 0,
+            .width = 0,
+            .height = 0,
+            .value = 0.0f,
+        };
+        ei_paddleocr_map_contour_to_bb(impulse, &contour, &tmp, *raw_output_mtx, config->zero_point, config->scale, config->unclip_ratio);
+
+        if (tmp.value < config->min_score_box) continue;
+
+        results.push_back(tmp);
+    }
+
+    // sort hi->lo
+    std::sort(results.begin(), results.end(),
+        [](const ei_impulse_result_bounding_box_t& a,
+            const ei_impulse_result_bounding_box_t& b) {
+            return a.value > b.value;
+        });
+
+    result->bounding_boxes = results.data();
+    result->bounding_boxes_count = results.size();
+
+    return EI_IMPULSE_OK;
+#else
+    return EI_IMPULSE_LAST_LAYER_NOT_AVAILABLE;
+#endif // #if EI_HAS_PADDLEOCR_DETECTOR
+}
+
+// Removed threshold setting/getting functions (replaced by edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)
+template <typename T = void>
+[[deprecated("The call signature set_threshold_postprocessing(int16_t, void*, uint8_t, float) has been removed in favor of set_threshold_postprocessing(const ei_postprocessing_block_t *, std::string, float) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)")]]
+EI_IMPULSE_ERROR set_threshold_postprocessing(int16_t block_number, void* block_config, uint8_t type, float threshold) {
+    static_assert(ei_dependent_false_v<T>::value,
+        "The call signature set_threshold_postprocessing(int16_t, void*, uint8_t, float) has been removed in favor of set_threshold_postprocessing(const ei_postprocessing_block_t *, std::string, float) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)");
+    return EI_IMPULSE_CALL_SIGNATURE_REMOVED;
+}
+
+template <typename T = void>
+[[deprecated("get_threshold_postprocessing() has been removed in favor of get_thresholds_postprocessing(const ei_postprocessing_block_t *, std::vector<ei_threshold_desc_t>&) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)")]]
+EI_IMPULSE_ERROR get_threshold_postprocessing(std::string* type_str, std::string* threshold_name_str, void* block_config, uint8_t type, float* threshold) {
+    static_assert(ei_dependent_false_v<T>::value,
+        "get_threshold_postprocessing() has been removed in favor of get_thresholds_postprocessing(const ei_postprocessing_block_t *, std::vector<ei_threshold_desc_t>&) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)");
+    return EI_IMPULSE_CALL_SIGNATURE_REMOVED;
 }
 
 #endif // EI_POSTPROCESSING_COMMON_H

@@ -140,13 +140,13 @@ EI_IMPULSE_ERROR run_nn_inference(
     uint32_t vector_size = model_static_info->inputs[0].dimensions.height * model_static_info->inputs[0].dimensions.width;
     int8_t input_vector[vector_size];
 
+    uint64_t ctx_start_us = ei_read_timer_us();
+
     // copy rescale the input features to int8 and copy to input buffer
     for (size_t i = 0; i < matrix->rows * matrix->cols; i++) {
         //TODO: get scale and zero point from the model
         input_vector[i] = (int8_t)((matrix->buffer[i] / graph_config->input_scale) + graph_config->input_zeropoint);
     }
-
-    uint64_t ctx_start_us = ei_read_timer_us();
 
     AxonResultEnum result_axon_infer = axon_nn_model_infer_sync(
         axon_handle, // your hardware handle
@@ -163,7 +163,6 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     // ei_sleep(3); // let the axon finish processing
     result->timing.classification_us = (int64_t)(ei_read_timer_us() - ctx_start_us);
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     const char *label;
     int32_t score;

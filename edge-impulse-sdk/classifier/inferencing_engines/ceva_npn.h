@@ -124,13 +124,14 @@ EI_IMPULSE_ERROR run_nn_inference(
 #endif
     }
 
+    // get start time of the inference
+    uint64_t ctx_start_us = ei_read_timer_us();
+
     // copy rescale the input features to int8 and copy to input buffer
     for (size_t i = 0; i < matrix->rows * matrix->cols; i++) {
         //TODO: get scale and zero point from the model
         input_data[i] = (int8_t)((matrix->buffer[i] / graph_config->input_scale) + graph_config->input_zeropoint);
     }
-    // get start time of the inference
-    uint64_t ctx_start_us = ei_read_timer_us();
 
     // not required since 24.1.4, left for possible fallback to 24.1.3
     // ceva_set_model_state_for_inference(&model_state);
@@ -142,7 +143,6 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     // calculate inference time
     result->timing.classification_us = ctx_end_us - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     size_t output_size = graph_config->output_features_count;
 

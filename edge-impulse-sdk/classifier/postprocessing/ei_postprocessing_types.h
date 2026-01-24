@@ -67,6 +67,9 @@
 #ifndef EI_POSTPROCESSING_TYPES_H
 #define EI_POSTPROCESSING_TYPES_H
 
+#include <functional>
+#include <string>
+#include <type_traits>
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
 
 typedef struct cube {
@@ -101,6 +104,26 @@ typedef struct {
 } ei_fill_result_object_detection_i8_config_t;
 
 typedef struct {
+    float min_score_pixel;
+    float min_score_box;
+    float unclip_ratio;
+    uint32_t object_detection_count;
+    uint32_t output_features_count;
+    ei_object_detection_nms_config_t nms_config;
+} ei_fill_result_paddleocr_f32_config_t;
+
+typedef struct {
+    float min_score_pixel;
+    float min_score_box;
+    float unclip_ratio;
+    uint32_t object_detection_count;
+    uint32_t output_features_count;
+    float zero_point;
+    float scale;
+    ei_object_detection_nms_config_t nms_config;
+} ei_fill_result_paddleocr_i8_config_t;
+
+typedef struct {
     float zero_point;
     float scale;
 } ei_fill_result_classification_i8_config_t;
@@ -126,5 +149,18 @@ typedef struct {
     uint16_t grid_size_x;
     uint16_t grid_size_y;
 } ei_fill_result_visual_ad_f32_config_t;
+
+// A struct which contains threshold descriptions (used in ei_postprocessing_common.h)
+typedef struct {
+    std::string type;
+    std::string name;
+    float value;
+    std::function<void(float)> set_value;
+} ei_threshold_desc_t;
+
+template <typename>
+struct ei_dependent_false_v {
+    enum { value = 0 };
+};
 
 #endif /* EI_POSTPROCESSING_TYPES_H */

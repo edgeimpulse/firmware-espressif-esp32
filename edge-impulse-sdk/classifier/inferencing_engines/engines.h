@@ -67,6 +67,16 @@ EI_IMPULSE_ERROR run_nn_inference(
     void *config_ptr,
     bool debug);
 
+EI_IMPULSE_ERROR run_vlm_inference(
+    const ei_impulse_t *impulse,
+    ei_feature_t *fmatrix,
+    uint32_t learn_block_index,
+    uint32_t* input_block_ids,
+    uint32_t input_block_ids_size,
+    ei_impulse_result_t *result,
+    void *config_ptr,
+    bool debug);
+
 int extract_tflite_eon_features(ei::signal_t *signal, ei::matrix_t *output_matrix,
                                 void *config_ptr, const float frequency);
 

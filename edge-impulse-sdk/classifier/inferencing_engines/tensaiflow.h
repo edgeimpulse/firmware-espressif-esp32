@@ -106,7 +106,6 @@ EI_IMPULSE_ERROR run_nn_inference(
     // Inference results returned by post_process() and copied into infer_results
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, graph_config->output_features_count);
     result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
@@ -159,7 +158,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     }
 
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
-    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
     if (debug) {
         ei_printf("Features (%d ms.): ", result->timing.dsp);
@@ -188,7 +186,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     }
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
     return EI_IMPULSE_OK;
 }
 

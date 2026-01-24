@@ -169,6 +169,9 @@ EI_IMPULSE_ERROR run_nn_inference(
         return EI_IMPULSE_INVALID_SIZE;
     }
 
+    // get start time of the inference
+    uint64_t ctx_start_us = ei_read_timer_us();
+
     // copy rescale the input features to int8 and copy to input buffer
     for (size_t i = 0; i < ifmSize; i++) {
         buffer->data()[i] = (int8_t)((matrix->buffer[i] / io_details->input_scale) + io_details->input_zeropoint);
@@ -180,9 +183,6 @@ EI_IMPULSE_ERROR run_nn_inference(
     // create a buffer for the output tensor
     auto ofmSize = network->getOfmDims()[0];
     ofm.push_back(std::make_shared<EthosU::Buffer>(device, ofmSize));
-
-    // get start time of the inference
-    uint64_t ctx_start_us = ei_read_timer_us();
 
     // start inference
     EthosU::Inference inference(network, ifm.begin(), ifm.end(), ofm.begin(), ofm.end());
@@ -204,7 +204,6 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     // calculate inference time
     result->timing.classification_us = ctx_end_us - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     size_t output_size = io_details->output_features_count;
 

@@ -185,6 +185,14 @@ static void ei_print_timing(ei_impulse_result_t *result_ptr) {
     else {
         ei_printf(", anomaly %d ms", result.timing.anomaly);
     }
+    if (result.timing.postprocessing_us != 0) {
+        if (result.timing.postprocessing_us < 1000) {
+            ei_printf(", postprocessing %ld us", (long int)result.timing.postprocessing_us);
+        }
+        else {
+            ei_printf(", postprocessing %d ms", result.timing.postprocessing);
+        }
+    }
     ei_printf("\n");
 }
 

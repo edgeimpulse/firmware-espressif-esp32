@@ -171,6 +171,8 @@ EI_IMPULSE_ERROR run_nn_inference(
         }
     }
 
+    uint64_t ctx_start_us = ei_read_timer_us();
+
     auto input_res = fill_input_tensor_from_matrix(fmatrix,
                                                    result->_raw_outputs,
                                                    input,
@@ -182,14 +184,11 @@ EI_IMPULSE_ERROR run_nn_inference(
         return input_res;
     }
 
-    uint64_t ctx_start_us = ei_read_timer_us();
-
     interpreter->Invoke();
 
     uint64_t ctx_end_us = ei_read_timer_us();
 
     result->timing.classification_us = ctx_end_us - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     if (debug) {
         ei_printf("LOG_INFO tensors size: %ld \n", interpreter->tensors_size());

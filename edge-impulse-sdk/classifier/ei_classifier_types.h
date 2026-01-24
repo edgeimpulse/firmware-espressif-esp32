@@ -207,6 +207,11 @@ typedef struct {
     int classification;
 
     /**
+     * Amount of time (in milliseconds) it took to run the postprocessing functions
+     */
+    int postprocessing;
+
+    /**
      * Amount of time (in milliseconds) it took to run anomaly detection. Valid only if
      * the impulse contains an anomaly detection block, otherwise 0.
      */
@@ -221,6 +226,11 @@ typedef struct {
      * Amount of time (in microseconds) it took to run the inference block
      */
     int64_t classification_us;
+
+    /**
+     * Amount of time (in microseconds) it took to run the postprocessing blocks
+     */
+    int64_t postprocessing_us;
 
     /**
      * Amount of time (in microseconds) it took to run anomaly detection. Valid only if

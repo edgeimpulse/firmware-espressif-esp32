@@ -118,9 +118,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     #endif
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
-    if (result->timing.classification_us) {
-        result->timing.classification = result->timing.classification_us / 1000;
-    }
 
     size_t output_size = nn_out_len;
 
@@ -247,9 +244,6 @@ EI_IMPULSE_ERROR run_nn_inference(
     #endif
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
-    if (result->timing.classification_us) {
-        result->timing.classification = result->timing.classification_us / 1000;
-    }
 
     // fill output
     for (uint32_t output_ix = 0; output_ix < block_config->output_tensors_size; output_ix++) {

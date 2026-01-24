@@ -260,7 +260,6 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     // get inference time
     result->timing.classification_us = libeitrt::getInferenceUs(ei_trt_handle, learn_block_index);
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
     result->_raw_outputs[learn_block_index].blockId = block_config->block_id;

@@ -294,7 +294,6 @@ EI_IMPULSE_ERROR run_nn_inference(
     }
 
     result->timing.classification_us = ctx_end_us - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     engine_info.str("");
     engine_info << "Inferences per second: " << (1000000 / result->timing.classification_us);
@@ -359,7 +358,7 @@ EI_IMPULSE_ERROR run_nn_inference(
     std::vector<size_t> input_shape = {1, impulse->input_width, impulse->input_height, 3};
     py::array_t<float> input_data(input_shape); // = zeroes(input_shape, 0);
 
-    printf("impulse->w=%d h=%d\n", impulse->input_width, impulse->input_height);
+    uint64_t ctx_start_us = ei_read_timer_us();
 
     /*
      * convert features data to the expected shape (4dim)
@@ -395,13 +394,11 @@ EI_IMPULSE_ERROR run_nn_inference(
     py::tuple args = py::make_tuple(py::none(), 0.00, 0.00);
     // run inference in sumualtor
     printf("start inference\n");
-    uint64_t ctx_start_us = ei_read_timer_us();
     args = runmodel("inputs"_a=input_data,"frames"_a=1);
     uint64_t ctx_end_us = ei_read_timer_us();
     printf("end of inference\n");
 
     result->timing.classification_us = ctx_end_us - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     engine_info.str("");
     engine_info << "Inferences per second: " << (1000000 / result->timing.classification_us);

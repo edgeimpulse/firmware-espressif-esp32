@@ -50,6 +50,8 @@
 #include "edge-impulse-sdk/classifier/postprocessing/ei_object_counting.h"
 #endif
 
+#include "edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h"
+
 extern "C" EI_IMPULSE_ERROR init_postprocessing(ei_impulse_handle_t *handle) {
     if (!handle) {
         return EI_IMPULSE_OUT_OF_MEMORY;
@@ -101,6 +103,8 @@ extern "C" EI_IMPULSE_ERROR deinit_postprocessing(ei_impulse_handle_t *handle) {
 
 extern "C" EI_IMPULSE_ERROR run_postprocessing(ei_impulse_handle_t *handle,
                                                ei_impulse_result_t *result) {
+    auto start_us = ei_read_timer_us();
+
     if (!handle) {
         return EI_IMPULSE_OUT_OF_MEMORY;
     }
@@ -119,6 +123,7 @@ extern "C" EI_IMPULSE_ERROR run_postprocessing(ei_impulse_handle_t *handle,
                                                                                 impulse->postprocessing_blocks[ix].config,
                                                                                 state);
         if (res != EI_IMPULSE_OK) {
+            result->timing.postprocessing_us = ei_read_timer_us() - start_us;
             return res;
         }
     }
@@ -130,6 +135,8 @@ extern "C" EI_IMPULSE_ERROR run_postprocessing(ei_impulse_handle_t *handle,
             result->_raw_outputs[ix].matrix = nullptr;
         }
     }
+
+    result->timing.postprocessing_us = ei_read_timer_us() - start_us;
 
     return EI_IMPULSE_OK;
 }

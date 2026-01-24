@@ -404,7 +404,6 @@ EI_IMPULSE_ERROR run_nn_inference(
 #endif
 
     result->timing.classification_us = ctx_end_us - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     // clear info
     engine_info.str("");

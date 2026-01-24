@@ -204,7 +204,7 @@ EI_IMPULSE_ERROR run_kmeans_anomaly(
     }
 
     result->timing.anomaly_us = anomaly_end_us - anomaly_start_us;
-    result->timing.anomaly = (int)(result->timing.anomaly_us/1000);
+    result->timing.anomaly = (int)(result->timing.anomaly_us / 1000);
     result->anomaly = anomaly;
     ei_free(input);
 

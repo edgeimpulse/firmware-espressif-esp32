@@ -78,6 +78,8 @@ typedef enum {
     EI_IMPULSE_FREEFORM_OUTPUT_NULL = -31, /**< Error when result.freeform_output is null */
     EI_IMPULSE_FREEFORM_OUTPUT_SIZE_MISMATCH = -32, /**< Error when result.freeform_output is the wrong size */
     EI_IMPULSE_OUTPUT_TENSOR_NULL = -33, /**< Error when the output tensor cannot be found in result->_raw_outputs */
+    EI_IMPULSE_POSTPROCESSING_THRESHOLD_KEY_NOT_FOUND = -34, /**< Trying to set a threshold whose key cannot be found */
+    EI_IMPULSE_CALL_SIGNATURE_REMOVED = -35, /**< This function has been removed, on GCC this will error out at compile time (with a migration message), but not all compilers support this */
 } EI_IMPULSE_ERROR;
 
 #endif // _EIDSP_RETURN_TYPES_H_

@@ -83,6 +83,8 @@
 #include "edge-impulse-sdk/classifier/inferencing_engines/aton.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_CEVA_NPN
 #include "edge-impulse-sdk/classifier/inferencing_engines/ceva_npn.h"
+#elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_VLM_CONNECTOR
+#include "edge-impulse-sdk/classifier/inferencing_engines/vlm_connector.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_NORDIC_AXON
 #include "edge-impulse-sdk/classifier/inferencing_engines/nordic_axon.h"
 #elif EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_NONE
@@ -102,6 +104,7 @@ namespace {
 extern "C" EI_IMPULSE_ERROR run_inference(ei_impulse_handle_t *handle, ei_feature_t *fmatrix, ei_impulse_result_t *result, bool debug);
 extern "C" EI_IMPULSE_ERROR run_classifier_image_quantized(const ei_impulse_t *impulse, signal_t *signal, ei_impulse_result_t *result, bool debug);
 static EI_IMPULSE_ERROR can_run_classifier_image_quantized(const ei_impulse_t *impulse, ei_learning_block_t block_ptr);
+static void ei_result_struct_timing_us_to_ms(ei_impulse_result_t *result);
 
 #if EI_CLASSIFIER_LOAD_IMAGE_SCALING
 EI_IMPULSE_ERROR ei_scale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fmatrix);
@@ -150,12 +153,16 @@ extern "C" EI_IMPULSE_ERROR run_inference(
         ei_learning_block_t block = impulse->learning_blocks[ix];
 
 #if EI_CLASSIFIER_LOAD_IMAGE_SCALING
+        auto start_scale_matrix_us = ei_read_timer_us();
+
         // we do not plan to have multiple dsp blocks with image
         // so just apply scaling to the first one
         EI_IMPULSE_ERROR scale_res = ei_scale_fmatrix(&block, fmatrix[0].matrix);
         if (scale_res != EI_IMPULSE_OK) {
             return scale_res;
         }
+
+        auto end_scale_matrix_us = ei_read_timer_us();
 #endif
 
         EI_IMPULSE_ERROR res = block.infer_fn(impulse, fmatrix, ix, (uint32_t*)block.input_block_ids, block.input_block_ids_size, result, block.config, debug);
@@ -164,6 +171,8 @@ extern "C" EI_IMPULSE_ERROR run_inference(
         }
 
 #if EI_CLASSIFIER_LOAD_IMAGE_SCALING
+        auto start_unscale_matrix_us = ei_read_timer_us();
+
         // undo scaling, only if we have multiple learn blocks... otherwise just leave scaled
         if (impulse->learning_blocks_size > 1) {
             scale_res = ei_unscale_fmatrix(&block, fmatrix[0].matrix);
@@ -171,6 +180,12 @@ extern "C" EI_IMPULSE_ERROR run_inference(
                 return scale_res;
             }
         }
+
+        auto end_unscale_matrix_us = ei_read_timer_us();
+
+        // count scaling in the DSP timing
+        result->timing.dsp_us += (end_unscale_matrix_us - start_unscale_matrix_us) +
+                                 (end_scale_matrix_us - start_scale_matrix_us);
 #endif
     }
 
@@ -238,19 +253,30 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     result->_raw_outputs = raw_results_ptr.get();
     memset(result->_raw_outputs, 0, sizeof(ei_feature_t) * num_results);
 
+    EI_IMPULSE_ERROR res = EI_IMPULSE_OK;
+    (void)res; // Get around -Werror=unused-variable if neither of the calls below are compiled in (e.g. unit-tests/hr)
+
+#if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_VLM_CONNECTOR)
+    // Shortcut for vlm models
+    res = run_vlm_inference(handle, signal, 0, result, handle->impulse->learning_blocks[0].config, false);
+    if (res != EI_IMPULSE_OK) {
+        return res;
+    }
+    res = run_postprocessing(handle, result);
+    return res;
+#endif // EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_VLM_CONNECTOR
 #if (EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ATON)
     // Shortcut for quantized image models
     ei_learning_block_t block = handle->impulse->learning_blocks[0];
     if (can_run_classifier_image_quantized(handle->impulse, block) == EI_IMPULSE_OK) {
-        EI_IMPULSE_ERROR res = run_classifier_image_quantized(handle->impulse, signal, result, debug);
+        res = run_classifier_image_quantized(handle->impulse, signal, result, debug);
         if (res != EI_IMPULSE_OK) {
             return res;
         }
         res = run_postprocessing(handle, result);
         return res;
     }
-#endif
-
+#endif // EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ATON
     uint32_t block_num = handle->impulse->dsp_blocks_size;
 
     // smart pointer to features array
@@ -359,7 +385,6 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
 #endif
 
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
-    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
     if (debug) {
         ei_printf("Features (%d ms.): ", result->timing.dsp);
@@ -380,15 +405,23 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     }
 
 #if EI_CLASSIFIER_DSP_ONLY
+    ei_result_struct_timing_us_to_ms(result);
+
     return EI_IMPULSE_OK;
 #else
-    EI_IMPULSE_ERROR res = run_inference(handle, features, result, debug);
+    res = run_inference(handle, features, result, debug);
     if (res != EI_IMPULSE_OK) {
         return res;
     }
-    else {
-        return run_postprocessing(handle, result);
+
+    res = run_postprocessing(handle, result);
+    if (res != EI_IMPULSE_OK) {
+        return res;
     }
+
+    ei_result_struct_timing_us_to_ms(result);
+
+    return EI_IMPULSE_OK;
 #endif
 }
 
@@ -537,7 +570,6 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
     }
 
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
-    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
     if (classifier_continuous_features_written >= impulse->nn_input_frame_size) {
         dsp_start_us = ei_read_timer_us();
@@ -598,7 +630,6 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
         }
 
         result->timing.dsp_us += ei_read_timer_us() - dsp_start_us;
-        result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
         if (debug) {
             ei_printf("Feature Matrix: \n");
@@ -620,6 +651,8 @@ extern "C" EI_IMPULSE_ERROR process_impulse_continuous(ei_impulse_handle_t *hand
             return ei_impulse_error;
         }
     }
+
+    ei_result_struct_timing_us_to_ms(result);
 
     return ei_impulse_error;
 }
@@ -781,6 +814,21 @@ EI_IMPULSE_ERROR ei_unscale_fmatrix(ei_learning_block_t *block, ei::matrix_t *fm
     return EI_IMPULSE_OK;
 }
 #endif
+
+/**
+ * Internally we store data in the timing.*_us fields -> sync them to the non-us fields
+ * as users might use those instead.
+ */
+static void ei_result_struct_timing_us_to_ms(ei_impulse_result_t *result) {
+    // This does the same as:
+    //   result->timing.dsp = (int)round((float)result->timing.dsp_us / 1000.0f);
+    // but this requires floating point math (e.g. loads in _arm_addsubsf3.o -> ~600 extra bytes flash)
+
+    result->timing.dsp = (int)((result->timing.dsp_us + 500) / 1000);
+    result->timing.classification = (int)((result->timing.classification_us + 500) / 1000);
+    result->timing.anomaly = (int)((result->timing.anomaly_us + 500) / 1000);
+    result->timing.postprocessing = (int)((result->timing.postprocessing_us + 500) / 1000);
+}
 
 /* Public functions ------------------------------------------------------- */
 
@@ -1125,6 +1173,80 @@ extern "C" EI_IMPULSE_ERROR ei_set_freeform_output(
     return ei_set_freeform_output(&ei_default_impulse, freeform_outputs, freeform_outputs_size);
 }
 #endif // #if EI_CLASSIFIER_FREEFORM_OUTPUT
+
+/**
+ * @brief Get image input parameters from an impulse
+ *
+ * @param handle ei_impulse_handle_t
+ * @param width uint32_t
+ * @param height uint32_t
+ * @param channels uint8_t
+ *
+ * @return EI_IMPULSE_OK
+ *
+ * @brief This function retrieves the width, height, and channels of the input
+ *     parameters from the given impulse. If the input parameters are not available,
+ *     it returns the default values based on the impulse's input size.
+ */
+#if EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_VLM_CONNECTOR
+__attribute__((unused)) EI_IMPULSE_ERROR ei_get_image_input_params(
+    ei_impulse_handle_t *handle,
+    uint32_t *width,
+    uint32_t *height,
+    uint8_t *channels
+) {
+    const ei_impulse_t *impulse = handle->impulse;
+    if (handle->input_params == nullptr) {
+        *width = impulse->input_width;
+        *height = impulse->input_height;
+        *channels = impulse->nn_input_frame_size / (impulse->input_width * impulse->input_height);
+    }
+    else {
+        *width = handle->input_params->input_width;
+        *height = handle->input_params->input_height;
+        *channels = handle->input_params->nn_input_frame_size / (handle->input_params->input_width * handle->input_params->input_height);
+    }
+
+    return EI_IMPULSE_OK;
+}
+
+/**
+ * @brief Set the image input parameters (width, height, and channels) for the given impulse handle.
+ *
+ * This function sets the dimensions and channel count of the input image for the given impulse handle.
+ * It allocates and initializes a new `ei_input_params` structure with the specified parameters.
+ *
+ * @param[in] handle Pointer to the impulse handle to update.
+ * @param[in] width Width of the input image.
+ * @param[in] height Height of the input image.
+ * @param[in] channels Number of channels in the input image.
+ *
+ * @return Error code as defined by `EI_IMPULSE_ERROR` enum. Returns `EI_IMPULSE_OK` if successful, or `EI_IMPULSE_OUT_OF_MEMORY` if memory allocation fails.
+ */
+__attribute__((unused)) EI_IMPULSE_ERROR ei_set_image_input_params(
+    ei_impulse_handle_t *handle,
+    uint32_t width,
+    uint32_t height,
+    uint8_t channels
+) {
+    std::unique_ptr<ei_input_params> params(new ei_input_params());
+    if (params == nullptr) {
+        return EI_IMPULSE_OUT_OF_MEMORY;
+    }
+    params->nn_input_frame_size = width * height * channels;
+    params->raw_sample_count = width * height;
+    params->raw_samples_per_frame = width * height;
+    params->dsp_input_frame_size = width * height;
+    params->input_width = width;
+    params->input_height = height;
+    params->input_frames = 1;
+    params->interval_ms = 0.0f;
+    params->frequency = 0.0f;
+
+    handle->input_params = params.release();
+    return EI_IMPULSE_OK;
+}
+#endif // #if EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_VLM_CONNECTOR
 
 /** @} */ // end of ei_functions Doxygen group
 

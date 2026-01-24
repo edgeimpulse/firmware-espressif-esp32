@@ -33,6 +33,7 @@ limitations under the License.
 #include "edge-impulse-sdk/tensorflow/lite/kernels/padding.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/kernels/kernel_util.h"
 #include "edge-impulse-sdk/tensorflow/lite/micro/micro_log.h"
+#include "edge-impulse-sdk/tensorflow/lite/kernels/internal/portable_tensor_utils.h"
 
 namespace tflite {
 namespace {
@@ -195,6 +196,67 @@ TfLiteStatus EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
   TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
   TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
   TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 4);
+
+  // This is valid in TFLite (and reference kernel) and is present in paddleocr recognizer models (see impulse67);
+  // but not in the CMSIS-NN version we have on Jan. 13, 2026.
+  // If you're upgrading the CMSIS-NN kernels and see this line in your diff -> most likely can be removed -
+  // as the master CMSIS-NN kernel no longer has this assert.
+  // https://github.com/edgeimpulse/edgeimpulse/pull/14697#issuecomment-3740394779
+  if (input_shape.Dims(3) != filter_shape.Dims(3)) {
+#if !EI_CMSIS_NN_CONV_REFERENCE_KERNEL_FALLBACK
+    MicroPrintf("conv.cc: encountered input_shape with dims=[ %d, %d, %d, %d ] and filter_shape with dims=[ %d, %d, %d, %d ]. "
+      "The CMSIS-NN kernel requires the last dimension to be the same. Set EI_CMSIS_NN_CONV_REFERENCE_KERNEL_FALLBACK=1 "
+      "to fall back to the reference kernel.",
+      (int)input_shape.Dims(0), (int)input_shape.Dims(1), (int)input_shape.Dims(2), (int)input_shape.Dims(3),
+      (int)filter_shape.Dims(0), (int)filter_shape.Dims(1), (int)filter_shape.Dims(2), (int)filter_shape.Dims(3)
+    );
+    return kTfLiteError;
+#else
+    // fall back to reference kernel
+    switch (filter->type) {
+      case kTfLiteInt4: {
+        int8_t* unpacked_filter_data = static_cast<int8_t*>(
+            context->GetScratchBuffer(context, data.reference_op_data.filter_buffer_index));
+        tflite::tensor_utils::UnpackDenseInt4IntoInt8(
+            tflite::micro::GetTensorData<int8_t>(filter),
+            tflite::micro::GetTensorShape(filter).FlatSize(),
+            unpacked_filter_data);
+        reference_integer_ops::ConvPerChannel(
+            ConvParamsQuantized(params, data.reference_op_data),
+            data.reference_op_data.per_channel_output_multiplier, data.reference_op_data.per_channel_output_shift,
+            tflite::micro::GetTensorShape(input),
+            tflite::micro::GetTensorData<int8_t>(input),
+            tflite::micro::GetTensorShape(filter), unpacked_filter_data,
+            tflite::micro::GetTensorShape(bias),
+            tflite::micro::GetOptionalTensorData<int32_t>(bias),
+            tflite::micro::GetTensorShape(output),
+            tflite::micro::GetTensorData<int8_t>(output));
+        break;
+      }
+      case kTfLiteInt8: {
+        reference_integer_ops::ConvPerChannel(
+            ConvParamsQuantized(params, data.reference_op_data),
+            data.reference_op_data.per_channel_output_multiplier, data.reference_op_data.per_channel_output_shift,
+            tflite::micro::GetTensorShape(input),
+            tflite::micro::GetTensorData<int8_t>(input),
+            tflite::micro::GetTensorShape(filter),
+            tflite::micro::GetTensorData<int8_t>(filter),
+            tflite::micro::GetTensorShape(bias),
+            tflite::micro::GetOptionalTensorData<int32_t>(bias),
+            tflite::micro::GetTensorShape(output),
+            tflite::micro::GetTensorData<int8_t>(output));
+        break;
+      }
+      default:
+        MicroPrintf("Weight type %s (%d) not supported.",
+                    TfLiteTypeGetName(filter->type), filter->type);
+        return kTfLiteError;
+    }
+
+    return kTfLiteOk;
+#endif // !EI_CMSIS_NN_CONV_REFERENCE_KERNEL_FALLBACK
+  }
+
   const int batch_size = MatchingDim(input_shape, 0, output_shape, 0);
   const int input_depth = MatchingDim(input_shape, 3, filter_shape, 3);
   const int output_depth = MatchingDim(filter_shape, 0, output_shape, 3);

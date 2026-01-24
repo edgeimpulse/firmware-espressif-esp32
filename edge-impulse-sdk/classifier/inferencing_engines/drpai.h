@@ -648,7 +648,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     }
 
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
-    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
     if (debug) {
       ei_printf("Features (%d ms.): ", result->timing.dsp);
       for (size_t ix = 0; ix < EI_CLASSIFIER_NN_INPUT_FRAME_SIZE; ix++) {
@@ -699,7 +698,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     }
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
     return EI_IMPULSE_OK;
 }
 

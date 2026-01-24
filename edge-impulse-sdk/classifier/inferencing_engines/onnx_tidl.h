@@ -379,7 +379,6 @@ static EI_IMPULSE_ERROR inference_onnx_run(const ei_impulse_t *impulse,
 
     uint64_t ctx_end_us = ei_read_timer_us();
     result->timing.classification_us = ctx_end_us - ctx_start_us;
-    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
     ONNXTensorElementDataType output_tensor_type = (*output_tensors).at(0).GetTypeInfo().GetTensorTypeAndShapeInfo().GetElementType();
     void *out_data = output_tensors->front().GetTensorMutableData<void>();
@@ -482,7 +481,6 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     uint64_t dsp_chw_end_us = ei_read_timer_us();
     result->timing.dsp_us += dsp_chw_end_us - dsp_chw_start_us;
-    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
     if (debug) {
         ei_printf("After Features (%ld us.): ", result->timing.dsp_us);
@@ -613,7 +611,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     }
 
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
-    result->timing.dsp = (int)(result->timing.dsp_us / 1000);
 
     if (debug) {
         ei_printf("Features (%d ms.): ", result->timing.dsp);
