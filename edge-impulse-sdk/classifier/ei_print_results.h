@@ -57,7 +57,7 @@ void ei_print_results(ei_impulse_handle_t *impulse_handle, ei_impulse_result_t *
     ei_impulse_result_t result = *result_ptr;
 
     if (impulse->results_type == EI_CLASSIFIER_TYPE_CLASSIFICATION) {
-        ei_printf("Classification predictions:\n");
+        ei_printf("#Classification predictions:\n");
         for (uint16_t i = 0; i < impulse->label_count; i++) {
             ei_printf("  %s: ", impulse->categories[i]);
             ei_printf_float(result.classification[i].value);
@@ -71,7 +71,7 @@ void ei_print_results(ei_impulse_handle_t *impulse_handle, ei_impulse_result_t *
         }
     }
     else if (impulse->results_type == EI_CLASSIFIER_TYPE_REGRESSION) {
-        ei_printf("Regression prediction: ");
+        ei_printf("#Regression prediction: ");
         ei_printf_float(result.classification[0].value);
         ei_printf("\n");
 
@@ -82,7 +82,7 @@ void ei_print_results(ei_impulse_handle_t *impulse_handle, ei_impulse_result_t *
         }
     }
     else if (impulse->results_type == EI_CLASSIFIER_TYPE_OBJECT_DETECTION) {
-        ei_printf("Object detection bounding boxes:\n");
+        ei_printf("#Object detection bounding boxes:\n");
         for (uint32_t i = 0; i < result.bounding_boxes_count; i++) {
             ei_impulse_result_bounding_box_t bb = result.bounding_boxes[i];
             if (bb.value == 0) {
@@ -99,7 +99,7 @@ void ei_print_results(ei_impulse_handle_t *impulse_handle, ei_impulse_result_t *
     }
 #if EI_CLASSIFIER_OBJECT_TRACKING_ENABLED == 1
     else if (impulse->results_type == EI_CLASSIFIER_TYPE_OBJECT_TRACKING) {
-        ei_printf("Object tracking results:\n");
+        ei_printf("#Object tracking results:\n");
         for (uint32_t ix = 0; ix < result.postprocessed_output.object_tracking_output.open_traces_count; ix++) {
             ei_object_tracking_trace_t trace = result.postprocessed_output.object_tracking_output.open_traces[ix];
             ei_printf("  %s (ID %d) [ x: %u, y: %u, width: %u, height: %u ]\n", trace.label, (int)trace.id, trace.x, trace.y, trace.width, trace.height);
@@ -114,9 +114,9 @@ void ei_print_results(ei_impulse_handle_t *impulse_handle, ei_impulse_result_t *
     else if (impulse->results_type == EI_CLASSIFIER_TYPE_FREEFORM) {
 
         for (size_t ix = 0; ix < impulse_handle->impulse->freeform_outputs_size; ix++) {
-            ei_printf("Freeform output index=%d\n", (int)ix);
+            ei_printf("#Freeform output index=%d\n", (int)ix);
             ei_printf("  ");
-            const matrix_t& freeform_output = impulse_handle->freeform_outputs[ix];
+            const ei::matrix_t& freeform_output = impulse_handle->freeform_outputs[ix];
             for (size_t jx = 0; jx < freeform_output.rows * freeform_output.cols; jx++) {
                 ei_printf_float(freeform_output.buffer[jx]);
                 ei_printf(" ");
@@ -127,10 +127,10 @@ void ei_print_results(ei_impulse_handle_t *impulse_handle, ei_impulse_result_t *
 #endif // EI_CLASSIFIER_FREEFORM_OUTPUT
 #if EI_CLASSIFIER_HAS_VISUAL_ANOMALY
     else if (impulse->has_anomaly != EI_ANOMALY_TYPE_UNKNOWN) {
-        ei_printf("Visual anomalies:\n");
+        ei_printf("#Visual anomalies:\n");
         for (uint32_t i = 0; i < result.visual_ad_count; i++) {
             ei_impulse_result_bounding_box_t bb = result.visual_ad_grid_cells[i];
-            if (bb.value == 0) {
+            if (bb.value == 0.f) {
                 continue;
             }
             ei_printf("  %s (", bb.label);
@@ -167,13 +167,13 @@ static void ei_print_timing(ei_impulse_result_t *result_ptr) {
     ei_impulse_result_t result = *result_ptr;
 
     ei_printf("Timing: ");
-    if (result.timing.dsp_us < 1000) {
+    if (result.timing.dsp_us != 0 && result.timing.dsp_us < 1000) {
         ei_printf("DSP %ld us", (long int)result.timing.dsp_us);
     }
     else {
         ei_printf("DSP %d ms", result.timing.dsp);
     }
-    if (result.timing.classification_us < 1000) {
+    if (result.timing.classification_us != 0 && result.timing.classification_us < 1000) {
         ei_printf(", inference %ld us", (long int)result.timing.classification_us);
     }
     else {
@@ -195,6 +195,5 @@ static void ei_print_timing(ei_impulse_result_t *result_ptr) {
     }
     ei_printf("\n");
 }
-
 
 #endif // _EDGE_IMPULSE_CLASSIFIER_PRINT_RESULTS_H_

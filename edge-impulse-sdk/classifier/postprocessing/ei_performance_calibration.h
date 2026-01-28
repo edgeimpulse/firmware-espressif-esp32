@@ -210,7 +210,8 @@ public:
 
     void *operator new(size_t size)
     {
-        void *p = ei_malloc(size);
+        void *p = ei_calloc(size, 1);
+
         return p;
     }
 
@@ -275,6 +276,7 @@ EI_IMPULSE_ERROR process_perfcal(ei_impulse_handle_t *handle,
             // perfcal is configured
             static bool has_printed_msg = false;
             result->postprocessed_output.perf_cal_output = *std::unique_ptr<ei_perf_cal_output_t>(new ei_perf_cal_output_t).get();
+            result->postprocessed_output.perf_cal_output.detected_label = nullptr;
 
             if (!has_printed_msg) {
                 ei_printf("\nPerformance calibration is configured for your project. If no event is detected, all values are 0.\r\n\n");

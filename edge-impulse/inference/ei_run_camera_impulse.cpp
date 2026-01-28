@@ -38,6 +38,7 @@
 #if defined(EI_CLASSIFIER_SENSOR) && EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_CAMERA
 
 #include "edge-impulse-sdk/classifier/ei_run_classifier.h"
+#include "edge-impulse-sdk/classifier/ei_print_results.h"
 #include "edge-impulse-sdk/dsp/image/image.hpp"
 #include "ei_camera.h"
 #include "firmware-sdk/at_base64_lib.h"
@@ -188,7 +189,7 @@ void ei_run_impulse(void)
     }
     ei_free(snapshot_buf);
 
-    display_results(&ei_default_impulse, &result);
+    ei_print_results(&ei_default_impulse, &result);
 
     if (debug_mode) {
         ei_printf("\r\n----------------------------------\r\n");

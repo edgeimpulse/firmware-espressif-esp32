@@ -38,6 +38,7 @@
 #if defined(EI_CLASSIFIER_SENSOR) && EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_FUSION || EI_CLASSIFIER_SENSOR == EI_CLASSIFIER_SENSOR_ACCELEROMETER
 
 #include "edge-impulse-sdk/classifier/ei_run_classifier.h"
+#include "edge-impulse-sdk/classifier/ei_print_results.h"
 #include "edge-impulse-sdk/dsp/numpy.hpp"
 #include "firmware-sdk/ei_fusion.h"
 #include "ei_device_espressif_esp32.h"
@@ -146,12 +147,12 @@ void ei_run_impulse(void)
 
     if(continuous_mode == true) {
         if(++print_results >= (EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW >> 1)) {
-            display_results(&ei_default_impulse, &result);
+            ei_print_results(&ei_default_impulse, &result);
             print_results = 0;
         }
     }
     else {
-        display_results(&ei_default_impulse, &result);
+        ei_print_results(&ei_default_impulse, &result);
     }
 
     if(continuous_mode == true) {
