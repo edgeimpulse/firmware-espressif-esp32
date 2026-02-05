@@ -121,9 +121,6 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 
     size_t output_size = nn_out_len;
 
-    result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
-    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
-
     switch (graph_config->quant_type) {
         case kTfLiteFloat32: {
             result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);

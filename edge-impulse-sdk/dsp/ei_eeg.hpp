@@ -73,7 +73,7 @@ public:
             matrix_t temp(eeg.win_inc_samples, eeg.num_channels);
             signal->get_data(i, floats_per_inc, temp.buffer);
             // Create a temp psd output matrix structure, but just use the output matrix buffer
-            matrix_t psd_mat(eeg.num_channels, eeg.win_size_samples / 2, output_matrix->buffer + out_idx);
+            matrix_t psd_mat(eeg.num_channels, eeg.epoch_samples / 2, output_matrix->buffer + out_idx);
             eeg.stream(&temp, psd_mat);
             out_idx += psd_mat.rows * psd_mat.cols;
         }
@@ -90,7 +90,7 @@ public:
               ei::eeg::num_sections,
               (const float*)ei::eeg::tapers,
               ei::eeg::num_tapers,
-              ei::eeg::win_size,
+              (size_t)(frequency * config->epoch_length),
               true)
     {
         // Any additional config setup can go here
