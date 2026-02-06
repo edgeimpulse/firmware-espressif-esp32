@@ -274,6 +274,7 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
             return res;
         }
         res = run_postprocessing(handle, result);
+        ei_result_struct_timing_us_to_ms(result);
         return res;
     }
 #endif // EI_CLASSIFIER_QUANTIZATION_ENABLED == 1 && (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TFLITE || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_TENSAIFLOW || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ONNX_TIDL) || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_DRPAI || EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ATON
