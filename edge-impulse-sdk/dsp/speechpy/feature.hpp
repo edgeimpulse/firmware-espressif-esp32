@@ -714,7 +714,7 @@ public:
      */
     static int mfcc(matrix_t *out_features, signal_t *signal,
         uint32_t sampling_frequency, float frame_length, float frame_stride,
-        uint8_t num_cepstral, uint16_t num_filters, uint16_t fft_length,
+        uint16_t num_cepstral, uint16_t num_filters, uint16_t fft_length,
         uint32_t low_frequency, uint32_t high_frequency, bool dc_elimination,
         uint16_t version)
     {
