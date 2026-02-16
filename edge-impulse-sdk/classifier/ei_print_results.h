@@ -102,7 +102,9 @@ void ei_print_results(ei_impulse_handle_t *impulse_handle, ei_impulse_result_t *
         ei_printf("#Object tracking results:\n");
         for (uint32_t ix = 0; ix < result.postprocessed_output.object_tracking_output.open_traces_count; ix++) {
             ei_object_tracking_trace_t trace = result.postprocessed_output.object_tracking_output.open_traces[ix];
-            ei_printf("  %s (ID %d) [ x: %u, y: %u, width: %u, height: %u ]\n", trace.label, (int)trace.id, trace.x, trace.y, trace.width, trace.height);
+            ei_printf("  %s (ID %d) (", trace.label, (int)trace.id);
+            ei_printf_float(trace.value);
+            ei_printf(") [ x: %u, y: %u, width: %u, height: %u ]\n", trace.x, trace.y, trace.width, trace.height);
         }
 
         if (result.postprocessed_output.object_tracking_output.open_traces_count == 0) {

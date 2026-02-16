@@ -33,7 +33,7 @@
 
 // clang-format off
 #ifndef EIDSP_USE_CMSIS_DSP // __ARM_ARCH_PROFILE is a predefine of arm-gcc.  __TARGET_* is armcc
-#if (defined(__MBED__) || __ARM_ARCH_PROFILE == 'M' || defined(__TARGET_CPU_CORTEX_M0) || defined(__TARGET_CPU_CORTEX_M0PLUS) || defined(__TARGET_CPU_CORTEX_M3) || defined(__TARGET_CPU_CORTEX_M4) || defined(__TARGET_CPU_CORTEX_M7) || defined(USE_HAL_DRIVER) || defined(ARDUINO_NRF52_ADAFRUIT))
+#if (defined(__MBED__) || __ARM_ARCH_PROFILE == 'M' || defined(__TARGET_CPU_CORTEX_M0) || defined(__TARGET_CPU_CORTEX_M0PLUS) || defined(__TARGET_CPU_CORTEX_M3) || defined(__TARGET_CPU_CORTEX_M4) || defined(__TARGET_CPU_CORTEX_M7) || defined(__TARGET_CPU_CORTEX_M33) || defined(__TARGET_CPU_CORTEX_M55) || defined(__TARGET_CPU_CORTEX_M85) || defined(USE_HAL_DRIVER) || defined(ARDUINO_NRF52_ADAFRUIT))
     // Mbed OS versions before 5.7 are not based on CMSIS5, disable CMSIS-DSP and CMSIS-NN instructions
     #if defined(__MBED__)
         #include "mbed_version.h"

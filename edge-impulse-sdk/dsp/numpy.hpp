@@ -1526,6 +1526,7 @@ public:
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #endif
+
     /**
      * > 50% faster then the math.h log() function
      * in return for a small loss in accuracy (0.00001 average diff with log())
@@ -1572,12 +1573,42 @@ public:
         float f = m - 1.0f;
         float s = f * f;
         /* Compute log1p(f) for f in [-1/3, 1/3] */
+#if (EIDSP_USE_CMSIS_DSP) && ((defined (__FPU_PRESENT) && (__FPU_PRESENT == 1U)) && \
+     (defined (__FPU_USED   ) && (__FPU_USED    == 1U))) // potential issue on fmaf on arm gcc
+        float r;
+        __ASM volatile (
+            "vfma.f32 %0, %1, %2\n"
+            : "=t"(r)
+            : "t"(0.230836749f), "t"(f), "0"(-0.279208571f)
+        ); // 0x1.d8c0f0p-3, -0x1.1de8dap-2
+        float t;
+        __ASM volatile (
+            "vfma.f32 %0, %1, %2\n"
+            : "=t"(t)
+            : "t"(0.331826031f), "t"(f), "0"(-0.498910338f)
+        );  // 0x1.53ca34p-2, -0x1.fee25ap-2
+        __ASM volatile (
+            "vfma.f32 %0, %1, %2\n"
+            : "=t"(r)
+            : "t"(r), "t"(s), "0"(t)
+        );
+        __ASM volatile (
+            "vfma.f32 %0, %1, %2\n"
+            : "=t"(r)
+            : "t"(r), "t"(s), "0"(f)
+        );
+        __ASM volatile (
+            "vfma.f32 %0, %1, %2\n"
+            : "=t"(r)
+            : "t"(i), "t"(0.693147182f), "0"(r)
+        );
+#else
         float r = fmaf(0.230836749f, f, -0.279208571f); // 0x1.d8c0f0p-3, -0x1.1de8dap-2
         float t = fmaf(0.331826031f, f, -0.498910338f); // 0x1.53ca34p-2, -0x1.fee25ap-2
         r = fmaf(r, s, t);
         r = fmaf(r, s, f);
         r = fmaf(i, 0.693147182f, r); // 0x1.62e430p-1 // log(2)
-
+#endif
         return r;
     }
     /* End of 2-clause BSD licensed code */

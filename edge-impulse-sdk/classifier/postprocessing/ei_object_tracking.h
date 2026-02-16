@@ -384,6 +384,7 @@ public:
             trace_result.width = trace->last_prediction.width;
             trace_result.height = trace->last_prediction.height;
             trace_result.last_centroid_segment = trace->last_centroid_segment();
+            trace_result.value = trace->last_prediction.value;
 
             object_tracking_output.push_back(trace_result);
         }
