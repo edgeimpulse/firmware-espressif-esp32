@@ -89,7 +89,11 @@ __attribute__((weak)) void ei_printf(const char *format, ...) {
     va_end(args);
 
     if (r > 0) {
-        Serial.write(print_buf);
+#if defined(ARDUINO_ARCH_ZEPHYR)
+        Serial.write((const uint8_t *)print_buf, r);
+#else
+        Serial.print(print_buf);
+#endif
     }
 }
 
