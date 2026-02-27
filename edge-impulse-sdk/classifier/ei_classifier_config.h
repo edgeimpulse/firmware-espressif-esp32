@@ -80,19 +80,24 @@
 #endif // EI_CLASSIFIER_TFLITE_ENABLE_ARC
 
 #ifndef EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN
-    #if defined(ESP32)
+    // By default, if one of the CONFIG_IDF_TARGET_ESP32 is defined, it enables ESP-NN. 
+    // This can be overridden by defining EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN to 0 if the user doesn't want to use ESP-NN for some reason.
+    #if defined(ESP32)|| defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32P4) || defined(CONFIG_IDF_TARGET_ESP32C3)
         #include "sdkconfig.h"
         #define EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN      1
-        #define ESP_NN                                  1
+    #else
+        #define EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN      0
     #endif // ESP32 check
+#endif
+
+#if EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN == 1
+    #define ESP_NN                                  1
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
         #define EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN_S3      1
     #endif // ESP32S3 check
     #if defined(CONFIG_IDF_TARGET_ESP32P4)
         #define EI_CLASSIFIER_TFLITE_ENABLE_ESP_NN_P4      1
     #endif // ESP32P4 check
-#else
-    #define ESP_NN                                  1
 #endif
 
 // no include checks in the compiler? then just include metadata and then ops_define (optional if on EON model)

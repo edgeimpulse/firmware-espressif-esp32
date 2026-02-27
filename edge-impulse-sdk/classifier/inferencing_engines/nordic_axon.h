@@ -1,6 +1,6 @@
 /* The Clear BSD License
  *
- * Copyright (c) 2025 EdgeImpulse Inc.
+ * Copyright (c) 2026 EdgeImpulse Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,56 +44,78 @@
 #include "model-parameters/model_metadata.h"
 #include <string>
 #include "edge-impulse-sdk/classifier/ei_model_types.h"
-#include "axon_platform.h"
-#include "axon_driver.h"
-#include "axon_nn_infer.h"
-#include "axon_nn_infer_test.h"
-#include "axon_stringization.h"
+#include "axon/nrf_axon_platform.h"
+#include "drivers/axon/nrf_axon_driver.h"
+#include "drivers/axon/nrf_axon_nn_infer.h"
+#include "drivers/axon/nrf_axon_nn_infer_test.h"
+#include "axon/nrf_axon_stringization.h"
 #include <inttypes.h>
 
+#if !defined (NRF_AXON_MODEL_NAME)
+#error "NRF_AXON_MODEL_NAME is not defined. Please define NRF_AXON_MODEL_NAME"
+#endif
 
 /*
 * Create the model include header file name and structure from
 * the model name.
 */
-#define AXON_MODEL_FILE_NAME_ROOT axon_model_
-#define AXON_MODEL_LAYERS_FILE_NAME_ROOT AXON_MODEL_FILE_NAME_ROOT
-#define AXON_MODEL_TEST_VECTORS_FILE_NAME_ROOT AXON_MODEL_FILE_NAME_ROOT
-#define AXON_MODEL_TEST_VECTORS_FILE_NAME_END _test_vectors_.h
-#define AXON_MODEL_LAYERS_FILE_NAME_TAIL _layers_.h
+#define AXON_MODEL_FILE_NAME_ROOT nrf_axon_model_
+
 #define AXON_MODEL_DOT_H _.h
 
-#define AXON_MODEL_FILE_NAME STRINGIZE_3_CONCAT(AXON_MODEL_FILE_NAME_ROOT, AXON_MODEL_NAME, AXON_MODEL_DOT_H)
-#define AXON_MODEL_FILE_LAYERS_NAME STRINGIZE_3_CONCAT(AXON_MODEL_LAYERS_FILE_NAME_ROOT, AXON_MODEL_NAME, AXON_MODEL_LAYERS_FILE_NAME_TAIL)
-#define AXON_MODEL_TEST_VECTORS_FILE_NAME STRINGIZE_3_CONCAT(AXON_MODEL_TEST_VECTORS_FILE_NAME_ROOT, AXON_MODEL_NAME, AXON_MODEL_TEST_VECTORS_FILE_NAME_END)
+#define AXON_MODEL_FILE_NAME STRINGIZE_3_CONCAT(AXON_MODEL_FILE_NAME_ROOT, NRF_AXON_MODEL_NAME, AXON_MODEL_DOT_H)
 
-// // generate structure name model_<model_name>
 #define THE_REAL_MODEL_STRUCT_NAME(model_name) model_##model_name
 #define THE_MODEL_STRUCT_NAME(model_name) THE_REAL_MODEL_STRUCT_NAME(model_name)
 
-// // generate structure name model_<model_name>_layer_list
-#define THE_REAL_MODEL_LAYERS_STRUCT_NAME(model_name) model_##model_name##_layer_list
-#define THE_MODEL_LAYERS_STRUCT_NAME(model_name) THE_REAL_MODEL_LAYERS_STRUCT_NAME(model_name)
-
-// // generate structure name model_<model_name>_test_vectors
-#define THE_REAL_MODEL_TEST_VECTORS_STRUCT_NAME(model_name) model_##model_name##_test_vectors
-#define THE_MODEL_TEST_VECTORS_STRUCT_NAME(model_name) THE_REAL_MODEL_TEST_VECTORS_STRUCT_NAME(model_name)
-
-// generate structure name <model_name>_input_test_vectors
-#define THE_REAL_TEST_INPUT_VECTORS_LIST_NAME(model_name) model_name##_input_test_vectors
-#define THE_TEST_INPUT_VECTORS_LIST_NAME(model_name) THE_REAL_TEST_INPUT_VECTORS_LIST_NAME(model_name)
-
-// generate structure name <model_name>_expected_output_test_vectors
-#define THE_REAL_expected_output_vectors_NAME(model_name) model_name##_expected_output_vectors
-#define THE_expected_output_vectors_NAME(model_name) THE_REAL_expected_output_vectors_NAME(model_name)
-
-// generate structure name <model_name>_layer_vectors
-#define THE_REAL_layer_vectors_NAME(model_name) model_name##_layer_expected_output_vectors
-#define THE_layer_vectors_NAME(model_name) THE_REAL_layer_vectors_NAME(model_name)
+#define NRF_AXON_MODEL_ALLOCATE_PACKED_OUTPUT_BUFFER  1 // model allocates a dedicated buffer for the output.
 
 #include AXON_MODEL_FILE_NAME
 
-const axon_nn_compiled_model_struct *model_static_info;
+const nrf_axon_nn_compiled_model_s *nrf_axon_compiled_model;
+
+static bool nrf_axon_init = false;
+
+/**
+ * This code needs to be run one-time only.
+ */
+int one_time_init()
+{
+    nrf_axon_platform_init();
+    nrf_axon_result_e result_axon = nrf_axon_platform_init();
+
+    if (result_axon != NRF_AXON_RESULT_SUCCESS){
+        ei_printf("ERR: nrf_axon_platform_init failed!\n");
+        return EI_IMPULSE_NORDIC_AXON_ERROR;
+    }
+
+    nrf_axon_compiled_model = &THE_MODEL_STRUCT_NAME(NRF_AXON_MODEL_NAME);
+
+    result_axon = nrf_axon_nn_model_validate(nrf_axon_compiled_model);
+    if (result_axon != NRF_AXON_RESULT_SUCCESS){
+        ei_printf("ERR: nrf_axon_nn_model_validate failed!\n");
+        return EI_IMPULSE_NORDIC_AXON_ERROR;
+    }
+    return EI_IMPULSE_OK;
+}
+
+int one_time_cleanup()
+{
+    nrf_axon_platform_close();
+    return EI_IMPULSE_OK;
+}
+
+/**
+ * @brief Performs session initialization
+ * 
+ * A "session" is when inference is occuring regularlly on continuously streaming input.
+ * This function is needed for streaming style models that have internal state variables that need
+ * to be initialized at the start of a session.
+ */
+int streaming_session_init()
+{
+    return nrf_axon_nn_model_init_vars(nrf_axon_compiled_model);
+}
 
 EI_IMPULSE_ERROR run_nn_inference(
     const ei_impulse_t *impulse,
@@ -114,56 +136,50 @@ EI_IMPULSE_ERROR run_nn_inference(
         ei_printf("INFO: Start Platform!\n");
     }
 
-    AxonResultEnum result_axon = axon_platform_init();
-
-    if (result_axon != kAxonResultSuccess) {
-        ei_printf("ERR: axon_platform_init failed!\n");
-        return EI_IMPULSE_INFERENCE_ERROR;
+    if (nrf_axon_init == false) {
+        if (one_time_init() != EI_IMPULSE_OK) {
+            return EI_IMPULSE_NORDIC_AXON_ERROR;
+        }
+        nrf_axon_init = true;
     }
-    void *axon_handle = axon_driver_get_handle();
 
     if (debug) {
         ei_printf("INFO: Prepare and run Axon!\n");
     }
 
-    axon_nn_model_inference_wrapper_struct model_wrapper;
-    model_static_info = &THE_MODEL_STRUCT_NAME(AXON_MODEL_NAME);
-
-    int init_result = axon_nn_model_init(&model_wrapper, model_static_info);
-    if (init_result != 0) {
-        ei_printf("ERR: axon_nn_model_init failed: %d\n", init_result);
-        return EI_IMPULSE_INFERENCE_ERROR;
-    }
-
-    axon_nn_model_init_vars(&model_wrapper);
-
-    uint32_t vector_size = model_static_info->inputs[0].dimensions.height * model_static_info->inputs[0].dimensions.width;
+    uint32_t vector_size = nrf_axon_compiled_model->inputs[nrf_axon_compiled_model->external_input_ndx].dimensions.height * nrf_axon_compiled_model->inputs[nrf_axon_compiled_model->external_input_ndx].dimensions.width;
     int8_t input_vector[vector_size];
 
-    uint64_t ctx_start_us = ei_read_timer_us();
-
     // copy rescale the input features to int8 and copy to input buffer
+    /**
+     * @FIXME!!! CHECK IF MODEL IS TRANSPOSED! THIS INFO IS NOT STORED IN THE MODEL, BUT SHOULD BE!
+     */
     for (size_t i = 0; i < matrix->rows * matrix->cols; i++) {
         //TODO: get scale and zero point from the model
         input_vector[i] = (int8_t)((matrix->buffer[i] / graph_config->input_scale) + graph_config->input_zeropoint);
     }
 
-    AxonResultEnum result_axon_infer = axon_nn_model_infer_sync(
-        axon_handle, // your hardware handle
-        model_static_info,
-        &model_wrapper.cmd_buf_info,
-        input_vector,
-        vector_size
-    );
+    uint64_t ctx_start_us = ei_read_timer_us();
 
-    if (result_axon_infer != kAxonResultSuccess) {
-        printf("ERR: Inference failed!\n");
+    nrf_axon_result_e result_axon_infer = nrf_axon_nn_model_infer_sync(
+        nrf_axon_compiled_model,
+        input_vector,
+        nrf_axon_compiled_model->packed_output_buf);
+
+    if (result_axon_infer != NRF_AXON_RESULT_SUCCESS) {
+        ei_printf("ERR: Inference failed!\n");
         return EI_IMPULSE_INFERENCE_ERROR;
     }
 
     // ei_sleep(3); // let the axon finish processing
     result->timing.classification_us = (int64_t)(ei_read_timer_us() - ctx_start_us);
+    result->timing.classification = (int)(result->timing.classification_us / 1000);
 
+#if 0
+   /**
+    * get_classification isn't necessary to validate the result. It only applies to single 
+    * channel classification networks
+    */
     const char *label;
     int32_t score;
     int16_t class_idx = axon_nn_get_classification(&model_wrapper, NULL, &label, &score, NULL);
@@ -171,22 +187,32 @@ EI_IMPULSE_ERROR run_nn_inference(
     if (class_idx >= 0) {
         if (debug) {
             ei_printf("INFO: Axon inference successful.\n");
-            printf("INFO: Predicted class: %d\n", class_idx);
-            printf("INFO: Label: %s\n", label);
-            printf("INFO: Score: %d\n", score);
+            ei_printf("INFO: Predicted class: %d\n", class_idx);
+            ei_printf("INFO: Label: %s\n", label);
+            ei_printf("INFO: Score: %d\n", score);
         }
         // here channel is always one and byte width is always 1 for quantized models
-        uint32_t output_size = model_static_info->output_dimensions.height * model_static_info->output_dimensions.width;
+        uint32_t output_size = nrf_axon_compiled_model->output_dimensions.height * nrf_axon_compiled_model->output_dimensions.width * nrf_axon_compiled_model->output_dimensions.channel_cnt;
         result->_raw_outputs[learn_block_index + 0].matrix_i8 = new matrix_i8_t(1, output_size);
-        memcpy(result->_raw_outputs[learn_block_index + 0].matrix_i8->buffer, (int8_t *)model_static_info->output_ptr, output_size * sizeof(int8_t));
+        memcpy(result->_raw_outputs[learn_block_index + 0].matrix_i8->buffer, (int8_t *)nrf_axon_compiled_model->packed_output_buf, output_size * sizeof(int8_t));
         result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
     } else {
-        printf("ERR: axon Classification failed!\n");
+        ei_printf("ERR: axon Classification failed!\n");
         return EI_IMPULSE_INFERENCE_ERROR;
     }
-
-    axon_platform_close();
-
+#else
+    // here channel is always one and byte width is always 1 for quantized models
+    /**
+     * Not sure how output channels will always be 1... fomo models have multiple output channels.
+     * Also, is new matrix_i8_t(1, output_size) a memory leak? Or does it get freed elsewhere?
+     * If the matrix_i8 was pre-allocated, it could be passed to the infer function directly, saving an extra memcpy.
+     */
+    uint32_t output_size = nrf_axon_compiled_model->output_dimensions.height * nrf_axon_compiled_model->output_dimensions.width * nrf_axon_compiled_model->output_dimensions.channel_cnt;
+    result->_raw_outputs[learn_block_index + 0].matrix_i8 = new matrix_i8_t(1, output_size);
+    memcpy(result->_raw_outputs[learn_block_index + 0].matrix_i8->buffer, (int8_t *)nrf_axon_compiled_model->packed_output_buf, output_size * sizeof(int8_t));
+    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
+#endif
+    
     return EI_IMPULSE_OK;
 }
 
