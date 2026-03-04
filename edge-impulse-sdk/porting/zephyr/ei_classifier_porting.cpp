@@ -79,7 +79,7 @@ uint64_t ei_read_timer_us() {
 EI_WEAK_FN char ei_getchar()
 {
     uint8_t rcv_char = 0;
-    if(uart_fifo_read(uart, &rcv_char, 1) == 1) {
+    if (uart_fifo_read(uart, &rcv_char, 1) == 1) {
         return rcv_char;
     }
     else {
@@ -90,7 +90,7 @@ EI_WEAK_FN char ei_getchar()
 /**
  *  Printf function uses vsnprintf and output using Arduino Serial
  */
-__attribute__((weak)) void ei_printf(const char *format, ...) {
+EI_WEAK_FN void ei_printf(const char *format, ...) {
     static char print_buf[1024] = { 0 };
 
     va_list args;
@@ -99,31 +99,53 @@ __attribute__((weak)) void ei_printf(const char *format, ...) {
     va_end(args);
 
     if(r > 0) {
-        printf("%s", print_buf);
+        printk("%s", print_buf);
     }
 }
 
-__attribute__((weak)) void ei_printf_float(float f) {
-    printf("%f", f);
+EI_WEAK_FN void ei_printf_float(float f) {
+    printk("%f", f);
 }
 
-__attribute__((weak)) void *ei_malloc(size_t size) {
+#if !defined(CONFIG_EDGE_IMPULSE_HEAP_TYPE) || (CONFIG_EDGE_IMPULSE_HEAP_TYPE == 0) // malloc
+
+EI_WEAK_FN void *ei_malloc(size_t size) {
     return malloc(size);
 }
 
-__attribute__((weak)) void *ei_calloc(size_t nitems, size_t size) {
+EI_WEAK_FN void *ei_calloc(size_t nitems, size_t size) {
     return calloc(nitems, size);
 }
 
-__attribute__((weak)) void ei_free(void *ptr) {
+EI_WEAK_FN void ei_free(void *ptr) {
     free(ptr);
 }
+
+#elif defined(CONFIG_EDGE_IMPULSE_HEAP_TYPE) && (CONFIG_EDGE_IMPULSE_HEAP_TYPE == 1)    // k_malloc
+
+#if not defined(CONFIG_HEAP_MEM_POOL_SIZE) || (CONFIG_HEAP_MEM_POOL_SIZE == 0)
+#error "CONFIG_HEAP_MEM_POOL_SIZE must be set to a non-zero value when using CONFIG_EDGE_IMPULSE_HEAP_TYPE=1"
+#endif
+
+EI_WEAK_FN void *ei_malloc(size_t size) {
+    return k_malloc(size);
+}
+
+EI_WEAK_FN void *ei_calloc(size_t nitems, size_t size) {
+    return k_calloc(nitems, size);
+}
+
+EI_WEAK_FN void ei_free(void *ptr) {
+    k_free(ptr);
+}
+
+#endif
 
 #if defined(__cplusplus) && EI_C_LINKAGE == 1
 extern "C"
 #endif
-__attribute__((weak)) void DebugLog(const char* s) {
-    printf("%s", s);
+EI_WEAK_FN void DebugLog(const char* s) {
+    printk("%s", s);
 }
 
 #endif // #if EI_PORTING_ZEPHYR == 1
