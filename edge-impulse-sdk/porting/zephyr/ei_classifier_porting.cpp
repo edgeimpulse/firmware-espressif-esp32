@@ -99,12 +99,12 @@ EI_WEAK_FN void ei_printf(const char *format, ...) {
     va_end(args);
 
     if(r > 0) {
-        printk("%s", print_buf);
+        printf("%s", print_buf);
     }
 }
 
 EI_WEAK_FN void ei_printf_float(float f) {
-    printk("%f", f);
+    printf("%f", f);
 }
 
 #if !defined(CONFIG_EDGE_IMPULSE_HEAP_TYPE) || (CONFIG_EDGE_IMPULSE_HEAP_TYPE == 0) // malloc

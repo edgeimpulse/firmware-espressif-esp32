@@ -377,7 +377,7 @@ EI_IMPULSE_ERROR run_vlm_inference(
     if (strcmp(block_config->model, "clip-vit-large-patch14_ggml-model-q8_0") == 0) {
         EI_LOGD("Using CLIP model payload builder\n");
         payload = build_json_payload_clip(impulse, *block_config, buffer_out, size_out);
-    } else if (strcmp(block_config->model, "gemma-3-4b-it-q4_0") == 0) {
+    } else if (strcmp(block_config->model, "Qwen3VL-8B-Instruct-Q8_0") == 0) {
         EI_LOGD("Using VLM model payload builder\n");
         payload = build_json_payload_vlm(*block_config, buffer_out, size_out);
     }
@@ -431,7 +431,7 @@ EI_IMPULSE_ERROR run_vlm_inference(
     if (strcmp(block_config->model, "clip-vit-large-patch14_ggml-model-q8_0") == 0) {
         parse_res = parse_response_to_result_clip(response, result, block_config, impulse, learn_block_index);
     }
-    else if (strcmp(block_config->model, "gemma-3-4b-it-q4_0") == 0) {
+    else if (strcmp(block_config->model, "Qwen3VL-8B-Instruct-Q8_0") == 0) {
         parse_res = parse_json_to_result_vlm(response, result, block_config, impulse, learn_block_index);
     }
 
