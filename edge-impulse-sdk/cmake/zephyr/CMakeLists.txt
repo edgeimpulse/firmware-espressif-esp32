@@ -33,11 +33,14 @@ if(DEFINED CONFIG_EDGE_IMPULSE_SDK) # using the edge-impulse-sdk-zephyr module
 
         list(APPEND EI_SOURCE_FILES "${EI_SDK_FOLDER}/CMSIS/DSP/Source/StatisticsFunctions/arm_rms_f32.c")
         RECURSIVE_FIND_FILE_APPEND(EI_SOURCE_FILES "${EI_SDK_FOLDER}/porting/espressif/ESP-NN" "*.s")
+        RECURSIVE_FIND_FILE_APPEND(EI_SOURCE_FILES "${EI_SDK_FOLDER}/porting/espressif/ESP-NN" "*.S")
         RECURSIVE_FIND_FILE_APPEND(EI_SOURCE_FILES "${EI_SDK_FOLDER}/porting/espressif/esp-dsp/modules/fft" "*.s")
+        RECURSIVE_FIND_FILE_APPEND(EI_SOURCE_FILES "${EI_SDK_FOLDER}/porting/espressif/esp-dsp/modules/fft" "*.S")
 
         list(APPEND EI_SOURCE_FILES ${CPP_EI_SOURCE_FILES})
         list(APPEND EI_SOURCE_FILES ${CC_EI_SOURCE_FILES})
         list(APPEND EI_SOURCE_FILES ${C_EI_SOURCE_FILES})
+        
     elseif("${ARCH}" STREQUAL "arm")
         zephyr_compile_definitions(
                         EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN=1
