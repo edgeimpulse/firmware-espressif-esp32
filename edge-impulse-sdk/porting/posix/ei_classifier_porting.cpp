@@ -64,7 +64,7 @@ uint64_t ei_read_timer_us() {
     return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) / 1e3;
 #else
 
-#if EI_CLASSIFIER_USE_GPU_DELEGATES==1
+#if EI_CLASSIFIER_USE_GPU_DELEGATES==1 || EI_CLASSIFIER_USE_QNN_DELEGATES==1
     clockid_t clock_id = CLOCK_MONOTONIC;
 #else
     clockid_t clock_id = CLOCK_PROCESS_CPUTIME_ID;
