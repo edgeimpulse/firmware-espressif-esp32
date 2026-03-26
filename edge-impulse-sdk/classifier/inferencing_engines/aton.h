@@ -32,7 +32,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
- #ifndef _EI_CLASSIFIER_INFERENCING_ENGINE_ATON_H
+#ifndef _EI_CLASSIFIER_INFERENCING_ENGINE_ATON_H
 
 #if (EI_CLASSIFIER_INFERENCING_ENGINE == EI_CLASSIFIER_ATON)
 
@@ -42,23 +42,59 @@
 #include "edge-impulse-sdk/classifier/ei_run_dsp.h"
 #include "edge-impulse-sdk/porting/ei_logging.h"
 
-#include "ll_aton_runtime.h"
+#include "stai.h"
+#include "stai_network.h"
+#include "stai_ext.h"
 #include "app_config.h"
+
+//LL_ATON_DECLARE_NAMED_NN_INSTANCE_AND_INTERFACE(Default);
+LL_ATON_DECLARE_NAMED_NN_INSTANCE_AND_INTERFACE(network)
+STAI_NETWORK_CONTEXT_DECLARE(network_context, STAI_NETWORK_CONTEXT_SIZE)
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
+#ifndef EI_STAI_MODE
+#warning "EI_STAI_MODE not defined, defaulting to STAI_MODE_ASYNC"
+#define EI_STAI_MODE STAI_MODE_ASYNC
+#endif
+
 /* Private variables ------------------------------------------------------- */
-static uint8_t *nn_in;
-static uint8_t *nn_out;
+static uint32_t nn_in_len = 0;
+static stai_size number_output = 0;
 
-static const LL_Buffer_InfoTypeDef *nn_in_info;
-static const LL_Buffer_InfoTypeDef *nn_out_info;
+static stai_ptr buffer_in_ptr;
+static stai_ptr buffer_out_ptr[STAI_NETWORK_OUT_NUM];
+static int32_t nn_out_len[STAI_NETWORK_OUT_NUM] = {0};
 
-LL_ATON_DECLARE_NAMED_NN_INSTANCE_AND_INTERFACE(Default);
+//static stai_size buffer_in_len;
+//static stai_ptr buffer_in_ptr[STAI_NETWORK_IN_NUM];
 
+//
+static uint32_t x;
+
+static bool aton_run_inference(void);
+static void aton_neural_network_init(void);
+
+static void _rt_callback(
+  void* cb_cookie,
+  stai_event_type event_id,
+  const void* event_payload)
+{
+    // Runtime callback, do something
+    ei_printf("Event %d received\n", event_id);
+}
+
+static void _epoch_callback(
+  void* cb_cookie,
+  stai_event_type event_id,
+  const void* event_payload)
+{
+    //Epoch callback, do something
+    ei_printf("Epoch event %d received\n", event_id);
+}
 
 EI_IMPULSE_ERROR run_nn_inference_image_quantized(
     const ei_impulse_t *impulse,
@@ -76,81 +112,65 @@ EI_IMPULSE_ERROR run_nn_inference_image_quantized(
 
     uint64_t ctx_start_us = ei_read_timer_us();
 
-    #if DATA_OUT_FORMAT_FLOAT32
-    static float32_t *nn_out;
-    #else
-    static uint8_t *nn_out;
-    #endif
-    static uint32_t nn_out_len;
-
     if (first_run == true) {
-
-        nn_in_info = LL_ATON_Input_Buffers_Info_Default();
-        nn_out_info = LL_ATON_Output_Buffers_Info_Default();
-
-        nn_in = (uint8_t *) LL_Buffer_addr_start(&nn_in_info[0]);
-        uint32_t nn_in_len = LL_Buffer_len(&nn_in_info[0]);
-
-        #if DATA_OUT_FORMAT_FLOAT32
-        nn_out = (float32_t *) nn_out_info[0].addr_base.p;
-        #else
-        nn_out = (uint8_t *) LL_Buffer_addr_start(&nn_out_info[0]);
-        #endif
-        nn_out_len = LL_Buffer_len(&nn_out_info[0]);
-
+        aton_neural_network_init();
         first_run = false;
     }
 
-    signal->get_data(0, impulse->nn_input_frame_size, (float*) nn_in);
-    #ifdef USE_DCACHE
-    SCB_CleanInvalidateDCache_by_Addr(nn_in, impulse->nn_input_frame_size);
-    #endif
+    signal->get_data(0, impulse->nn_input_frame_size, (float*) buffer_in_ptr);
+#ifdef USE_DCACHE
+    SCB_CleanInvalidateDCache_by_Addr(buffer_in_ptr, nn_in_len);
+#endif
 
-    LL_ATON_RT_Main(&NN_Instance_Default);
-
-    /* Discard all nn_out regions to avoid Dcache evictions during nn inference */
-    #ifdef USE_DCACHE
-    int i = 0;
-    while (nn_out_info[i].name != NULL) {
-            SCB_InvalidateDCache_by_Addr((float32_t *) LL_Buffer_addr_start(&nn_out_info[i]), LL_Buffer_len(&nn_out_info[i]));
-            i++;
+    /* run ATON inference */
+    if (aton_run_inference() != true) {
+        return EI_IMPULSE_INFERENCE_ERROR;
     }
-    #endif
+
+    /* Discard all buffer_out_ptr regions to avoid Dcache evictions during nn inference */
+#ifdef USE_DCACHE
+    for (int i = 0; i < number_output; i++) {
+        void *tmp = buffer_out_ptr[i];
+        SCB_InvalidateDCache_by_Addr(tmp, nn_out_len[i]);
+    }
+#endif
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
 
-    size_t output_size = nn_out_len;
+    for (int i = 0; i < number_output; i++) {
+        size_t output_size = nn_out_len[i];
 
-    switch (graph_config->quant_type) {
-        case kTfLiteFloat32: {
-            result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
-            memcpy(result->_raw_outputs[learn_block_index].matrix->buffer, (float *)nn_out, output_size * sizeof(float));
-            break;
+        switch (graph_config->quant_type) {
+            case kTfLiteFloat32: {
+                result->_raw_outputs[learn_block_index].matrix = new matrix_t(1, output_size);
+                memcpy(result->_raw_outputs[learn_block_index].matrix->buffer, (float *)buffer_out_ptr[i], output_size * sizeof(float));
+                break;
+            }
+            case kTfLiteInt8: {
+                result->_raw_outputs[learn_block_index].matrix_i8 = new matrix_i8_t(1, output_size);
+                memcpy(result->_raw_outputs[learn_block_index].matrix_i8->buffer, (int8_t *)buffer_out_ptr[i], output_size * sizeof(int8_t));
+                break;
+            }
+            case kTfLiteUInt8: {
+                result->_raw_outputs[learn_block_index].matrix_u8 = new matrix_u8_t(1, output_size);
+                memcpy(result->_raw_outputs[learn_block_index].matrix_u8->buffer, (uint8_t *)buffer_out_ptr[i], output_size * sizeof(uint8_t));
+                break;
+            }
+            default: {
+                ei_printf("ERR: Cannot handle output type (%d)\n", graph_config->quant_type);
+                return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
+            }
         }
-        case kTfLiteInt8: {
-            result->_raw_outputs[learn_block_index].matrix_i8 = new matrix_i8_t(1, output_size);
-            memcpy(result->_raw_outputs[learn_block_index].matrix_i8->buffer, (int8_t *)nn_out, output_size * sizeof(int8_t));
-            break;
-        }
-        case kTfLiteUInt8: {
-            result->_raw_outputs[learn_block_index].matrix_u8 = new matrix_u8_t(1, output_size);
-            memcpy(result->_raw_outputs[learn_block_index].matrix_u8->buffer, (uint8_t *)nn_out, output_size * sizeof(uint8_t));
-            break;
-        }
-        default: {
-            ei_printf("ERR: Cannot handle output type (%d)\n", graph_config->quant_type);
-            return EI_IMPULSE_OUTPUT_TENSOR_WAS_NULL;
-        }
+
+        result->_raw_outputs[learn_block_index].blockId = block_config->block_id;  
     }
-
-    result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
 
     return EI_IMPULSE_OK;
 }
 
 
 /**
- * @brief      Do neural network inferencing over the processed feature matrix
+ * @brief      Do neural network_context inferencing over the processed feature matrix
  *
  * @param      fmatrix  Processed matrix
  * @param      result   Output classifier results
@@ -176,28 +196,8 @@ EI_IMPULSE_ERROR run_nn_inference(
 
     uint64_t ctx_start_us = ei_read_timer_us();
 
-    #if DATA_OUT_FORMAT_FLOAT32
-    static float32_t *nn_out;
-    #else
-    static uint8_t *nn_out;
-    #endif
-    static uint32_t nn_out_len;
-
     if (first_run == true) {
-
-        nn_in_info = LL_ATON_Input_Buffers_Info_Default();
-        nn_out_info = LL_ATON_Output_Buffers_Info_Default();
-
-        nn_in = (uint8_t *) LL_Buffer_addr_start(&nn_in_info[0]);
-        uint32_t nn_in_len = LL_Buffer_len(&nn_in_info[0]);
-
-        #if DATA_OUT_FORMAT_FLOAT32
-        nn_out = (float32_t *) nn_out_info[0].addr_base.p;
-        #else
-        nn_out = (uint8_t *) LL_Buffer_addr_start(&nn_out_info[0]);
-        #endif
-        nn_out_len = LL_Buffer_len(&nn_out_info[0]);
-
+        aton_neural_network_init();
         first_run = false;
     }
 
@@ -222,39 +222,43 @@ EI_IMPULSE_ERROR run_nn_inference(
     size_t matrix_els = matrix->rows * matrix->cols;
     for (size_t ix = 0; ix < matrix_els; ix++) {
         //TODO: get scale and zero point from the model
-        nn_in[ix] = (int8_t)((matrix->buffer[ix] / graph_config->input_scale) + graph_config->input_zeropoint);
+        buffer_in_ptr[ix] = (int8_t)((matrix->buffer[ix] / graph_config->input_scale) + graph_config->input_zeropoint);
     }
 
-    #ifdef USE_DCACHE
-    SCB_CleanInvalidateDCache_by_Addr(nn_in, impulse->nn_input_frame_size);
-    #endif
+#ifdef USE_DCACHE
+    SCB_CleanInvalidateDCache_by_Addr(buffer_in_ptr, nn_in_len);
+#endif
 
-    LL_ATON_RT_Main(&NN_Instance_Default);
-
-    /* Discard all nn_out regions to avoid Dcache evictions during nn inference */
-    #ifdef USE_DCACHE
-    int i = 0;
-    while (nn_out_info[i].name != NULL) {
-            SCB_InvalidateDCache_by_Addr((float32_t *) LL_Buffer_addr_start(&nn_out_info[i]), LL_Buffer_len(&nn_out_info[i]));
-            i++;
+    /* run ATON inference */
+        if (aton_run_inference() != true) {
+        return EI_IMPULSE_INFERENCE_ERROR;
     }
-    #endif
+
+    /* Discard all buffer_out_ptr regions to avoid Dcache evictions during nn inference */
+#ifdef USE_DCACHE
+    for (int i = 0; i < number_output; i++) {
+        void *tmp = buffer_out_ptr[i];
+        SCB_InvalidateDCache_by_Addr(tmp, nn_out_len[i]);
+    }
+    //SCB_InvalidateDCache_by_Addr(tmp, nn_out_len);
+#endif
 
     result->timing.classification_us = ei_read_timer_us() - ctx_start_us;
 
     // fill output
     for (uint32_t output_ix = 0; output_ix < block_config->output_tensors_size; output_ix++) {
 
-        size_t output_size = nn_out_len;
+        size_t output_size = nn_out_len[output_ix];
+        //size_t output_size = nn_out_len;
         switch (graph_config->quant_type) {
             case kTfLiteInt8: {
                     result->_raw_outputs[learn_block_index + output_ix].matrix_i8 = new matrix_i8_t(1, output_size);
-                    memcpy(result->_raw_outputs[learn_block_index + output_ix].matrix_i8->buffer, (int8_t *)nn_out, output_size * sizeof(int8_t));
+                    memcpy(result->_raw_outputs[learn_block_index + output_ix].matrix_i8->buffer, (int8_t *)buffer_out_ptr[output_ix], output_size * sizeof(int8_t));
             }
             break;
             case kTfLiteUInt8: {
                 result->_raw_outputs[learn_block_index + output_ix].matrix_u8 = new matrix_u8_t(1, output_size);
-                memcpy(result->_raw_outputs[learn_block_index + output_ix].matrix_u8->buffer, (uint8_t *)nn_out, output_size * sizeof(uint8_t));
+                memcpy(result->_raw_outputs[learn_block_index + output_ix].matrix_u8->buffer, (uint8_t *)buffer_out_ptr[output_ix], output_size * sizeof(uint8_t));
             }
             break;
             default: {
@@ -267,6 +271,107 @@ EI_IMPULSE_ERROR run_nn_inference(
     }
 
     return EI_IMPULSE_OK;
+}
+
+static bool aton_run_inference(void)
+{
+#if (EI_STAI_MODE == STAI_MODE_SYNC)
+    stai_return_code res = stai_network_run(network_context, STAI_MODE_SYNC);
+
+    return (res == STAI_SUCCESS);
+#elif (EI_STAI_MODE == STAI_MODE_ASYNC)
+    stai_return_code ret;
+
+    ret = stai_ext_network_new_inference(network);
+
+    ret = stai_network_run(network_context, STAI_MODE_ASYNC);
+    if (STAI_SUCCESS != ret) {
+        return false;
+    }
+
+    do {
+        switch(ret)
+        {
+        case STAI_RUNNING_WFE:
+            stai_ext_wfe();       // Status requested WFE before continuing
+            stai_ext_network_run_continue(network_context); // Run epoch block
+            break;
+        case STAI_RUNNING_NO_WFE:  
+            stai_ext_network_run_continue(network_context); // Run epoch block
+            break;
+        case STAI_DONE:
+            break;
+        default:
+            break;
+        }
+        ret = stai_ext_network_get_nn_run_status(network_context);
+    } while (ret == STAI_RUNNING_WFE || ret == STAI_RUNNING_NO_WFE);
+
+    ret = stai_ext_network_new_inference(network_context);
+    assert(ret == STAI_SUCCESS);
+
+    return (ret == STAI_DONE);
+#else
+    stai_return_code rc;
+
+    stai_ext_network_new_inference(network_context);
+    rc = stai_network_run(network_context, EI_STAI_MODE);
+    if (STAI_SUCCESS == rc) {
+    do {
+        switch(rc)
+        {
+        case STAI_RUNNING_WFE:
+            stai_ext_wfe();       // Status requested WFE before continuing
+            stai_ext_network_run_continue(network_context); // Run epoch block
+            break;
+        case STAI_RUNNING_NO_WFE:  
+            stai_ext_network_run_continue(network_context); // Run epoch block
+            break;
+        case STAI_DONE:
+            break;
+        default:
+            break;
+        }
+        rc = stai_ext_network_get_nn_run_status(network_context);
+        } while ((rc != STAI_DONE) && 
+            (((rc &STAI_ERROR_GENERIC) & (rc & STAI_ERROR_NETWORK_INVALID_CONTEXT_HANDLE) & (rc & STAI_ERROR_NETWORK_INVALID_ACTIVATIONS_PTR)) == 0) );
+    }
+
+    return (rc == STAI_DONE);
+#endif
+}
+
+static void aton_neural_network_init(void)
+{
+    stai_return_code rc;
+    stai_network_info info;
+
+    rc = stai_runtime_init();
+    assert(rc == STAI_SUCCESS);
+
+    rc = stai_network_init(network_context);
+    assert(rc == STAI_SUCCESS);
+
+    rc = stai_network_get_info(network_context, &info);
+    assert(rc == STAI_SUCCESS);
+
+    number_output = STAI_NETWORK_OUT_NUM;
+    nn_in_len = info.inputs[0].size_bytes;
+
+    rc = stai_network_get_inputs(network_context, &buffer_in_ptr, (stai_size *)&info.n_inputs);
+    assert(rc == STAI_SUCCESS);
+
+    rc = stai_network_get_outputs(network_context, buffer_out_ptr, &number_output);
+    assert(rc == STAI_SUCCESS);
+    for (int i = 0; i < number_output; i++) {
+        nn_out_len[i] = info.outputs[i].size_bytes;
+    }
+
+#if (EI_STAI_MODE == STAI_MODE_ASYNC)
+    //stai_runtime_set_callback(_rt_callback, NULL);
+    //stai_network_set_callback(network_context, _epoch_callback, &x);
+#endif
+
 }
 
 #ifdef __cplusplus
