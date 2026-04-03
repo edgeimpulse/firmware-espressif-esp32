@@ -94,8 +94,13 @@ static EI_IMPULSE_ERROR get_interpreter(ei_learning_block_config_tflite_graph_t 
         // Create QNN Delegate options structure.
         TfLiteQnnDelegateOptions options = TfLiteQnnDelegateOptionsDefault();
 
-        // Set the mandatory backend_type option. All other options have default values.
+        // Configure QNN Delegate options to match AI Hub profiling configuration
         options.backend_type = kHtpBackend;
+        options.htp_options.performance_mode = kHtpBurst;
+        options.htp_options.precision = kHtpFp16;
+        options.htp_options.optimization_strategy = kHtpOptimizeForInference;
+        options.htp_options.useConvHmx = true;
+        options.log_level = kLogLevelWarn;
 
         // Instantiate delegate. Must not be freed until interpreter is freed.
         TfLiteDelegate* delegate = TfLiteQnnDelegateCreate(&options);
