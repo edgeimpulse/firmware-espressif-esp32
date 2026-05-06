@@ -152,7 +152,7 @@ EI_IMPULSE_ERROR extract_anomaly_input_values(
 #endif
             for (size_t ix = 0; ix < anom_axes_size; ix++) {
                 global_buf_pos = anom_axis[input_pos];
-                if (global_buf_pos <= buf_offset + (matrix->rows * matrix->cols)) {
+                if (global_buf_pos < buf_offset + (matrix->rows * matrix->cols)) {
                     input[input_pos] = matrix->buffer[anom_axis[input_pos] - buf_offset];
                     input_pos++;
                 if (input_pos >= anom_axes_size) { goto end; }
