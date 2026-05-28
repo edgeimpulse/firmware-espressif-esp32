@@ -35,7 +35,7 @@
 #ifndef EI_POSTPROCESSING_AI_HUB_H
 #define EI_POSTPROCESSING_AI_HUB_H
 
-#if EI_HAS_QC_FACE_DET_LITE
+#if EI_HAS_QC_FACE_DET_LITE || EI_HAS_QC_YOLOX
 #include "edge-impulse-sdk/classifier/ei_nms.h"
 #include <numeric>
 #include <array>
@@ -44,7 +44,9 @@
 #include <fstream>
 #include <vector>
 #include <sstream>
+#endif // EI_HAS_QC_FACE_DET_LITE || EI_HAS_QC_YOLOX
 
+#if EI_HAS_QC_FACE_DET_LITE
 struct Shape4 {
     size_t N, C, H, W;
 };
@@ -508,6 +510,97 @@ __attribute__((unused)) static EI_IMPULSE_ERROR process_qc_face_det_lite_f32(ei_
 #else
     return EI_IMPULSE_LAST_LAYER_NOT_AVAILABLE;
 #endif // #ifdef EI_HAS_QC_FACE_DET_LITE
+}
+
+__attribute__((unused)) static EI_IMPULSE_ERROR process_qc_yolox_f32(ei_impulse_handle_t *handle,
+                                                                             uint32_t block_index,
+                                                                             uint32_t input_block_id,
+                                                                             ei_impulse_result_t *result,
+                                                                             void *config_ptr,
+                                                                             void *state) {
+#if EI_HAS_QC_YOLOX
+    const ei_impulse_t *impulse = handle->impulse;
+    const ei_fill_result_object_detection_f32_config_t *config = (ei_fill_result_object_detection_f32_config_t*)config_ptr;
+
+    ei::matrix_t* data_mtx = NULL;
+    ei::matrix_t* scores_mtx = NULL;
+    ei::matrix_u8_t* labels_mtx = NULL;
+
+    bool find_mtx_res = false;
+    find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &data_mtx, input_block_id + 0, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
+    find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &scores_mtx, input_block_id + 1, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
+    find_mtx_res = find_mtx_by_idx(result->_raw_outputs, &labels_mtx, input_block_id + 2, impulse->output_tensors_size);
+    if (!find_mtx_res) {
+        return EI_IMPULSE_OUTPUT_TENSOR_NULL;
+    }
+
+    static std::vector<ei_impulse_result_bounding_box_t> results;
+    results.clear();
+
+    // TODO: assuming output features count is of the boxes tensor with size [1, 8400, 4]
+    for (size_t ix = 0; ix < (config->output_features_count/4); ix++) {
+        float score = scores_mtx->buffer[ix];
+        uint32_t label = (uint32_t) labels_mtx->buffer[ix];
+
+        if (score >= config->threshold) {
+            float xstart = data_mtx->buffer[(ix * 4) + 0];
+            float ystart = data_mtx->buffer[(ix * 4) + 1];
+            float xend = data_mtx->buffer[(ix * 4) + 2];
+            float yend = data_mtx->buffer[(ix * 4) + 3];
+
+            if (xstart < 0) xstart = 0;
+            if (xstart > impulse->input_width) xstart = impulse->input_width;
+            if (xend < 0) xend = 0;
+            if (xend > impulse->input_width) xend = impulse->input_width;
+
+            if (ystart < 0) ystart = 0;
+            if (ystart > impulse->input_height) ystart = impulse->input_height;
+            if (yend < 0) yend = 0;
+            if (yend > impulse->input_height) yend = impulse->input_height;
+
+            if (xend < xstart) xend = xstart;
+            if (yend < ystart) yend = ystart;
+
+
+            ei_impulse_result_bounding_box_t r;
+            r.label = impulse->categories[label];
+            r.x = static_cast<uint32_t>(xstart);
+            r.y = static_cast<uint32_t>(ystart);
+            r.width = static_cast<uint32_t>(xend - xstart);
+            r.height = static_cast<uint32_t>(yend - ystart);
+            r.value = score;
+            results.push_back(r);
+        }
+    }
+
+    EI_IMPULSE_ERROR nms_res = ei_run_nms(impulse, &config->nms_config, &results);
+    if (nms_res != EI_IMPULSE_OK) {
+        return nms_res;
+    }
+
+    // if we didn't detect min required objects, fill the rest with fixed value
+    size_t added_boxes_count = results.size();
+    size_t min_object_detection_count = config->object_detection_count;
+    if (added_boxes_count < min_object_detection_count) {
+        results.resize(min_object_detection_count);
+        for (size_t ix = added_boxes_count; ix < min_object_detection_count; ix++) {
+            results[ix].value = 0.0f;
+        }
+    }
+
+    result->bounding_boxes = results.data();
+    result->bounding_boxes_count = added_boxes_count;
+
+    return EI_IMPULSE_OK;
+#else
+    return EI_IMPULSE_LAST_LAYER_NOT_AVAILABLE;
+#endif // EI_HAS_QC_YOLOX
 }
 
 #endif /* EI_POSTPROCESSING_AI_HUB_H */

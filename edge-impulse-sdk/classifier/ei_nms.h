@@ -40,7 +40,7 @@
 #include "edge-impulse-sdk/classifier/ei_classifier_types.h"
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 
-#if (EI_HAS_YOLOV5 || EI_HAS_YOLOX || EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLOV3 || EI_HAS_TAO_YOLOV4 || EI_HAS_YOLOV2 || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE)
+#if (EI_HAS_YOLOV5 || EI_HAS_YOLOX || EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLOV3 || EI_HAS_TAO_YOLOV4 || EI_HAS_YOLOV2 || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE || EI_HAS_QC_YOLOX)
 
 // The code below comes from tensorflow/lite/kernels/internal/reference/non_max_suppression.h
 // Copyright 2019 The TensorFlow Authors.  All rights reserved.
@@ -379,7 +379,7 @@ EI_IMPULSE_ERROR ei_run_nms(
 
 #endif // (EI_HAS_YOLOV5 || EI_HAS_YOLOX || EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLOV3 || EI_HAS_TAO_YOLOV4 || EI_HAS_YOLOV2 || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE)
 
-#if (EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLO || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE)
+#if (EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLO || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE || EI_HAS_QC_YOLOX)
 
 __attribute__((unused)) static void prepare_nms_results_common(size_t object_detection_count,
                                                                ei_impulse_result_t *result,
@@ -411,5 +411,5 @@ __attribute__((unused)) static void prepare_nms_results_common(size_t object_det
     result->bounding_boxes_count = added_boxes_count;
 }
 
-#endif // (EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLO || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE)
+#endif // (EI_HAS_TAO_DECODE_DETECTIONS || EI_HAS_TAO_YOLO || EI_HAS_YOLO_PRO || EI_HAS_YOLOV11 || EI_HAS_QC_FACE_DET_LITE || EI_HAS_QC_YOLOX)
 #endif // _EDGE_IMPULSE_NMS_H_
