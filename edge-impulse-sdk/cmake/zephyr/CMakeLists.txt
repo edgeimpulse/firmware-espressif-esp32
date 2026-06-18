@@ -40,7 +40,7 @@ if(DEFINED CONFIG_EDGE_IMPULSE_SDK) # using the edge-impulse-sdk-zephyr module
         list(APPEND EI_SOURCE_FILES ${CPP_EI_SOURCE_FILES})
         list(APPEND EI_SOURCE_FILES ${CC_EI_SOURCE_FILES})
         list(APPEND EI_SOURCE_FILES ${C_EI_SOURCE_FILES})
-        
+
     elseif("${ARCH}" STREQUAL "arm")
         zephyr_compile_definitions(
                         EI_CLASSIFIER_TFLITE_ENABLE_CMSIS_NN=1
