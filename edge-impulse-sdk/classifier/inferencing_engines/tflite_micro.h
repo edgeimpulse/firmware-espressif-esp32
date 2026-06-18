@@ -114,7 +114,11 @@ static EI_IMPULSE_ERROR inference_tflite_setup(
 
 #ifdef EI_CLASSIFIER_ALLOCATION_STATIC
     // Assign a no-op lambda to the "free" function in case of static arena
+#if defined (EI_TENSOR_ARENA_LOCATION)
     static uint8_t tensor_arena[EI_CLASSIFIER_TFLITE_LARGEST_ARENA_SIZE] ALIGN(16) DEFINE_SECTION(STRINGIZE_VALUE_OF(EI_TENSOR_ARENA_LOCATION));
+#else
+    static uint8_t tensor_arena[EI_CLASSIFIER_TFLITE_LARGEST_ARENA_SIZE] ALIGN(16);
+#endif
     p_tensor_arena = ei_unique_ptr_t(tensor_arena, [](void*){});
 #else
     // Create an area of memory to use for input, output, and intermediate arrays.
