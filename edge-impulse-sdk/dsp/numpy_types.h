@@ -688,7 +688,7 @@ typedef struct ei_signal_t {
      * `out_ptr`: An out buffer to set the signal data
     */
 #if EIDSP_SIGNAL_C_FN_POINTER == 1
-    int (*get_data)(size_t, size_t, float *);
+    int __attribute__((aligned(32))) (*get_data)(size_t, size_t, float *);
 #else
     std::function<int(size_t offset, size_t length, float *out_ptr)> get_data;
 #endif // EIDSP_SIGNAL_C_FN_POINTER == 1
