@@ -48,6 +48,10 @@
 #include "edge-impulse-sdk/classifier/postprocessing/ei_object_tracking.h"
 #endif // EI_CLASSIFIER_OBJECT_TRACKING_ENABLED == 1
 
+#if EI_CLASSIFIER_CALIBRATION_ENABLED == 1
+#include "edge-impulse-sdk/classifier/postprocessing/ei_performance_calibration.h"
+#endif // EI_CLASSIFIER_CALIBRATION_ENABLED == 1
+
 /**
  * @brief Get all configurable thresholds for a postprocessing block
  * @param pp_block Pointer to a postprocessing block
@@ -174,6 +178,45 @@ EI_IMPULSE_ERROR get_thresholds_postprocessing(const ei_postprocessing_block_t *
         });
     }
 #endif // EI_CLASSIFIER_OBJECT_TRACKING_ENABLED == 1
+
+#if EI_CLASSIFIER_CALIBRATION_ENABLED == 1
+    if (pp_block->init_fn == init_perfcal) {
+        ei_performance_calibration_config_t *config = (ei_performance_calibration_config_t*)pp_block->config;
+
+        out_thresholds.push_back({
+            "performance_calibration", /* type */
+            "average_window_duration_ms", /* name */
+            static_cast<float>(config->average_window_duration_ms), /* value */
+            [config](float v) {
+                config->average_window_duration_ms = static_cast<uint32_t>(v);
+            }
+        });
+        out_thresholds.push_back({
+            "performance_calibration", /* type */
+            "detection_threshold", /* name */
+            config->detection_threshold, /* value */
+            [config](float v) {
+                config->detection_threshold = v;
+            }
+        });
+        out_thresholds.push_back({
+            "performance_calibration", /* type */
+            "suppression_ms", /* name */
+            static_cast<float>(config->suppression_ms), /* value */
+            [config](float v) {
+                config->suppression_ms = static_cast<uint32_t>(v);
+            }
+        });
+        out_thresholds.push_back({
+            "performance_calibration", /* type */
+            "suppression_flags", /* name */
+            static_cast<float>(config->suppression_flags), /* value */
+            [config](float v) {
+                config->suppression_flags = static_cast<uint32_t>(v);
+            }
+        });
+    }
+#endif // EI_CLASSIFIER_CALIBRATION_ENABLED == 1
 
     return EI_IMPULSE_OK;
 }

@@ -268,10 +268,13 @@ EI_IMPULSE_ERROR process_perfcal(ei_impulse_handle_t *handle,
                                  void *state)
 {
     const ei_impulse_t *impulse = handle->impulse;
+    const ei_performance_calibration_config_t *params = (ei_performance_calibration_config_t*)config_ptr;
     PerfCal *perf_cal = (PerfCal*)state;
 
     if (impulse->sensor == EI_CLASSIFIER_SENSOR_MICROPHONE) {
         if((void *)perf_cal != NULL) {
+
+            perf_cal->set_detection_threshold(params->detection_threshold);
 
             // perfcal is configured
             static bool has_printed_msg = false;
@@ -310,45 +313,37 @@ EI_IMPULSE_ERROR display_perfcal(ei_impulse_result_t *result,
     return EI_IMPULSE_OK;
 }
 
+// Removed performance calibration parameter functions (replaced by edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)
+template <typename T = void>
+[[deprecated("set_post_process_params(ei_impulse_handle_t*, ei_perf_cal_params_t*) has been removed in favor of set_threshold_postprocessing(const ei_postprocessing_block_t *, std::string, float) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)")]]
 EI_IMPULSE_ERROR set_post_process_params(ei_impulse_handle_t* handle, ei_perf_cal_params_t* params) {
-    int16_t block_number = get_block_number(handle, (void*)init_perfcal);
-    if (block_number == -1) {
-        return EI_IMPULSE_POSTPROCESSING_ERROR;
-    }
-    PerfCal *perf_cal = (PerfCal*)handle->post_processing_state[block_number];
-
-    perf_cal->set_detection_threshold(params->detection_threshold);
-    return EI_IMPULSE_OK;
+    static_assert(ei_dependent_false_v<T>::value,
+        "set_post_process_params(ei_impulse_handle_t*, ei_perf_cal_params_t*) has been removed in favor of set_threshold_postprocessing(const ei_postprocessing_block_t *, std::string, float) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)");
+    return EI_IMPULSE_CALL_SIGNATURE_REMOVED;
 }
 
+template <typename T = void>
+[[deprecated("get_post_process_params(ei_impulse_handle_t*, ei_perf_cal_params_t*) has been removed in favor of get_thresholds_postprocessing(const ei_postprocessing_block_t *, std::vector<ei_threshold_desc_t>&) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)")]]
 EI_IMPULSE_ERROR get_post_process_params(ei_impulse_handle_t* handle, ei_perf_cal_params_t* params) {
-    int16_t block_number = get_block_number(handle, (void*)init_perfcal);
-    if (block_number == -1) {
-        return EI_IMPULSE_POSTPROCESSING_ERROR;
-    }
-    PerfCal *perf_cal = (PerfCal*)handle->post_processing_state[block_number];
-
-    params->detection_threshold = perf_cal->get_detection_threshold();
-    return EI_IMPULSE_OK;
+    static_assert(ei_dependent_false_v<T>::value,
+        "get_post_process_params(ei_impulse_handle_t*, ei_perf_cal_params_t*) has been removed in favor of get_thresholds_postprocessing(const ei_postprocessing_block_t *, std::vector<ei_threshold_desc_t>&) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)");
+    return EI_IMPULSE_CALL_SIGNATURE_REMOVED;
 }
 
-// versions that operate on the default impulse
+template <typename T = void>
+[[deprecated("set_post_process_params(ei_perf_cal_params_t*) has been removed in favor of set_threshold_postprocessing(const ei_postprocessing_block_t *, std::string, float) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)")]]
 EI_IMPULSE_ERROR set_post_process_params(ei_perf_cal_params_t *params) {
-    ei_impulse_handle_t* handle = &ei_default_impulse;
-
-    if(handle->post_processing_state != NULL) {
-        set_post_process_params(handle, params);
-    }
-    return EI_IMPULSE_OK;
+    static_assert(ei_dependent_false_v<T>::value,
+        "set_post_process_params(ei_perf_cal_params_t*) has been removed in favor of set_threshold_postprocessing(const ei_postprocessing_block_t *, std::string, float) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)");
+    return EI_IMPULSE_CALL_SIGNATURE_REMOVED;
 }
 
+template <typename T = void>
+[[deprecated("get_post_process_params(ei_perf_cal_params_t*) has been removed in favor of get_thresholds_postprocessing(const ei_postprocessing_block_t *, std::vector<ei_threshold_desc_t>&) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)")]]
 EI_IMPULSE_ERROR get_post_process_params(ei_perf_cal_params_t* params) {
-    ei_impulse_handle_t* handle = &ei_default_impulse;
-
-    if(handle->post_processing_state != NULL) {
-        get_post_process_params(handle, params);
-    }
-    return EI_IMPULSE_OK;
+    static_assert(ei_dependent_false_v<T>::value,
+        "get_post_process_params(ei_perf_cal_params_t*) has been removed in favor of get_thresholds_postprocessing(const ei_postprocessing_block_t *, std::vector<ei_threshold_desc_t>&) (edge-impulse-sdk/classifier/postprocessing/ei_postprocessing_thresholds.h)");
+    return EI_IMPULSE_CALL_SIGNATURE_REMOVED;
 }
 
 #endif //EI_CLASSIFIER_CALIBRATION_ENABLED
