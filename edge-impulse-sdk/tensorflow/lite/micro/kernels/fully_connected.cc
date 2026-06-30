@@ -1185,8 +1185,9 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
   if (nullptr != tflite::micro::GetTensorData<int32_t>(bias)) {
     const RuntimeShape output_shape = tflite::micro::GetTensorShape(output);
     TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 2);
-    const int batches = output_shape.Dims(0);
-    const int output_depth = output_shape.Dims(1);
+    const int output_dim_count = output_shape.DimensionsCount();
+    const int batches = FlatSizeSkipDim(output_shape, output_dim_count - 1);
+    const int output_depth = output_shape.Dims(output_dim_count - 1);
     const RuntimeShape filter_shape = tflite::micro::GetTensorShape(filter);
     const int filter_dim_count = filter_shape.DimensionsCount();
     const int accum_depth = filter_shape.Dims(filter_dim_count - 1);
@@ -1527,8 +1528,9 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       const RuntimeShape& filter_shape = tflite::micro::GetTensorShape(filter);
       const RuntimeShape& output_shape = tflite::micro::GetTensorShape(output);
       const int filter_dim_count = filter_shape.DimensionsCount();
-      const int batches = output_shape.Dims(0);
-      const int output_depth = output_shape.Dims(1);
+      const int output_dim_count = output_shape.DimensionsCount();
+      const int batches = FlatSizeSkipDim(output_shape, output_dim_count - 1);
+      const int output_depth = output_shape.Dims(output_dim_count - 1);
       TFLITE_DCHECK_LE(output_depth, filter_shape.Dims(filter_dim_count - 2));
       const int accum_depth = filter_shape.Dims(filter_dim_count - 1);
 
