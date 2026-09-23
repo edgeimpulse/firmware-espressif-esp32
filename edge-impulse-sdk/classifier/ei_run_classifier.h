@@ -199,6 +199,29 @@ extern "C" EI_IMPULSE_ERROR run_inference(
 }
 
 /**
+ * @brief      Print the extracted features, one block per line, prefixed with the block number
+ *
+ * @param      features   Array of feature blocks
+ * @param[in]  block_num  Number of feature blocks
+ */
+static void ei_print_features(ei_feature_t *features, uint32_t block_num) {
+    for (size_t ix = 0; ix < block_num; ix++) {
+        if (features[ix].matrix == nullptr) {
+            continue;
+        }
+        if (block_num > 1) {
+            ei_printf("Block %lu: \n", (unsigned long)ix);
+        }
+        for (size_t jx = 0; jx < features[ix].matrix->cols; jx++) {
+            ei_printf_float(features[ix].matrix->buffer[jx]);
+            ei_printf(" ");
+        }
+        ei_printf("\n\n");
+    }
+    ei_printf("\n");
+}
+
+/**
  * @brief      Process a complete impulse
  *
  * @param      impulse  struct with information about model and DSP
@@ -380,6 +403,13 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     }
 
 #if EI_CLASSIFIER_HAS_DATA_NORMALIZATION
+    if (debug) {
+        uint64_t print_start_us = ei_read_timer_us();
+        ei_printf("Features Before Normalization: \n");
+        ei_print_features(features, block_num);
+        dsp_start_us += ei_read_timer_us() - print_start_us;
+    }
+
     EI_IMPULSE_ERROR dn_error = run_data_normalization(handle, features);
     if (dn_error != EI_IMPULSE_OK) {
         ei_printf("ERR: Failed to run Data Normalization process (%d)\n", dn_error);
@@ -390,17 +420,8 @@ extern "C" EI_IMPULSE_ERROR process_impulse(ei_impulse_handle_t *handle,
     result->timing.dsp_us = ei_read_timer_us() - dsp_start_us;
 
     if (debug) {
-        ei_printf("Features (%d ms.): ", result->timing.dsp);
-        for (size_t ix = 0; ix < block_num; ix++) {
-            if (features[ix].matrix == nullptr) {
-                continue;
-            }
-            for (size_t jx = 0; jx < features[ix].matrix->cols; jx++) {
-                ei_printf_float(features[ix].matrix->buffer[jx]);
-                ei_printf(" ");
-            }
-            ei_printf("\n");
-        }
+        ei_printf("Features (%ld us.): \n", (long int)result->timing.dsp_us);
+        ei_print_features(features, block_num);
     }
 
     if (debug) {
