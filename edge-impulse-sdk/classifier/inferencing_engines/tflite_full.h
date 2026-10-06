@@ -39,8 +39,9 @@
 
 #include "model-parameters/model_metadata.h"
 #include "tflite-model/trained_model_ops_define.h"
-
 #include <thread>
+
+
 #include "tensorflow-lite/tensorflow/lite/c/common.h"
 #include "tensorflow-lite/tensorflow/lite/interpreter.h"
 #include "tensorflow-lite/tensorflow/lite/kernels/register.h"
@@ -61,6 +62,33 @@ typedef struct {
 } ei_tflite_state_t;
 
 std::map<uint32_t, ei_tflite_state_t*> ei_tflite_instances;
+
+static inline unsigned int recommended_threads_count()
+{
+    unsigned int available_threads = 0;
+
+#ifdef __linux__
+    // when running in the kubernetes environment (especially tests), we need to pass
+    // the available CPU count via the AVAILABLE_THREADS environment variable
+    // the hardware_concurrency() might not reflect the actual CPU limit imposed by the container
+    const char* available_threads_env = std::getenv("AVAILABLE_THREADS");
+    if (available_threads_env) {
+        available_threads = std::atoi(available_threads_env);
+    }
+#endif
+    EI_LOGD("Detected available CPUs (from AVAILABLE_THREADS): %d\n", available_threads);
+
+    if (available_threads > 0) {
+        // make sure to leave one core free if more than one is available
+        return available_threads > 1 ? available_threads - 1 : 1;
+    }
+    else {
+        // fallback to hardware concurrency if AVAILABLE_THREADS is not set
+        unsigned int fallback = std::thread::hardware_concurrency();
+        // make sure to leave one core free if more than one is available
+        return fallback > 1 ? fallback - 1 : 1;
+    }
+}
 
 /**
  * Construct a tflite interpreter (creates it if needed)
@@ -83,7 +111,17 @@ static EI_IMPULSE_ERROR get_interpreter(ei_learning_block_config_tflite_graph_t 
         resolver.AddCustom("TreeEnsembleClassifier",
             tflite::ops::custom::Register_TREE_ENSEMBLE_CLASSIFIER());
 #endif
+
+        const static int hw_thread_count = recommended_threads_count();
+
         tflite::InterpreterBuilder builder(*new_state->model, resolver);
+        // Must be set on the builder, before the interpreter is built: the lazy XNNPACK
+        // delegate is applied during AllocateTensors() and takes its threadpool from the
+        // CpuBackendContext at that moment. Calling Interpreter::SetNumThreads() afterwards
+        // is too late -- CpuBackendContext::get_xnnpack_threadpool() has already returned
+        // nullptr (max_num_threads_ was still 1), so XNNPACK stays single-threaded forever.
+        EI_LOGD("Setting number of threads to %d\n", hw_thread_count);
+        builder.SetNumThreads(hw_thread_count);
         builder(&new_state->interpreter);
 
         if (!new_state->interpreter) {
@@ -123,12 +161,6 @@ static EI_IMPULSE_ERROR get_interpreter(ei_learning_block_config_tflite_graph_t 
         if (new_state->interpreter->AllocateTensors() != kTfLiteOk) {
             ei_printf("AllocateTensors failed\n");
             return EI_IMPULSE_TFLITE_ERROR;
-        }
-
-        int hw_thread_count = (int)std::thread::hardware_concurrency();
-        hw_thread_count -= 1; // leave one thread free for the other application
-        if (hw_thread_count < 1) {
-            hw_thread_count = 1;
         }
 
         if (new_state->interpreter->SetNumThreads(hw_thread_count) != kTfLiteOk) {
