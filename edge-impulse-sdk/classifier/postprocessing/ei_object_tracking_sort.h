@@ -707,10 +707,17 @@ struct TrackResult {
 class SORTTracker {
 public:
     // In the paper TLost=1 in experiments; min_hits is the "probationary" period.
-    SORTTracker(int max_age_, int min_hits_, float iou_threshold_)
+    SORTTracker(
+        int max_age_,
+        int min_hits_,
+        float iou_threshold_,
+        const char *const *_classes_to_track,
+        uint32_t _classes_to_track_count)
         : max_age(max_age_)
         , min_hits(min_hits_)
         , iou_threshold(iou_threshold_)
+        , classes_to_track(_classes_to_track)
+        , classes_to_track_count(_classes_to_track_count)
     {
     }
 
@@ -719,7 +726,21 @@ public:
         frame_count_++;
         std::vector<BBox> detections;
         detections.reserve(detections_in.size());
+
         for (const auto &det : detections_in) {
+            bool track_detection =
+                (classes_to_track == nullptr) || (classes_to_track_count == 0);
+
+            for (uint32_t cls = 0; cls < classes_to_track_count; cls++) {
+                if (classes_to_track[cls] != nullptr && strcmp(det.label, classes_to_track[cls]) == 0) {
+                    track_detection = true;
+                    break;
+                }
+            }
+            if (!track_detection) {
+                continue;
+            }
+
             BBox b;
             // input is top-left + width/height; tracker uses centers
             b.x1 = static_cast<float>(det.x);
@@ -810,6 +831,8 @@ public:
     int max_age;
     int min_hits;
     float iou_threshold;
+    const char *const *classes_to_track;
+    uint32_t classes_to_track_count;
     std::vector<ei_object_tracking_trace_t> object_tracking_output;
 };
 
@@ -822,7 +845,9 @@ EI_IMPULSE_ERROR init_object_tracking(ei_impulse_handle_t *handle, void **state,
     SORTTracker *object_tracker = new SORTTracker(
         ei_object_tracking_config->max_age,
         ei_object_tracking_config->min_hits,
-        ei_object_tracking_config->iou_threshold);
+        ei_object_tracking_config->iou_threshold,
+        ei_object_tracking_config->classes_to_track,
+        ei_object_tracking_config->classes_to_track_count);
     if (!object_tracker) {
         return EI_IMPULSE_OUT_OF_MEMORY;
     }

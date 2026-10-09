@@ -143,6 +143,8 @@ typedef struct {
     uint16_t max_observations;
     float threshold;
     bool use_iou;
+    const char **classes_to_track;
+    uint32_t classes_to_track_count;
 } ei_object_tracking_config_t;
 
 typedef struct {
@@ -151,6 +153,8 @@ typedef struct {
     uint16_t min_hits;
     float iou_threshold;
     bool use_iou;
+    const char **classes_to_track;
+    uint32_t classes_to_track_count;
 } ei_object_tracking_sort_config_t;
 
 typedef struct {
