@@ -33,39 +33,121 @@
  */
 
 #define FLATBUFFERS_LOCALE_INDEPENDENT 0
-#include "edge-impulse-sdk/third_party/flatbuffers/include/flatbuffers/flexbuffers.h"
-#include "edge-impulse-sdk/tensorflow/lite/c/common.h"
-#include "edge-impulse-sdk/tensorflow/lite/micro/kernels/kernel_util.h"
-#include "edge-impulse-sdk/tensorflow/lite/kernels/kernel_util.h"
 #include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <cstring>
+#include <new>
+#include <string>
+
+#include <algorithm>
+#include <initializer_list>
+#include <numeric>
+#include <vector>
+
+#include "edge-impulse-sdk/third_party/flatbuffers/include/flatbuffers/flexbuffers.h"  // from @flatbuffers
+#include "edge-impulse-sdk/tensorflow/lite/c/common.h"
+#include "edge-impulse-sdk/tensorflow/lite/micro/micro_context.h"
+#include "edge-impulse-sdk/tensorflow/lite/micro/kernels/kernel_util.h"
+#include "edge-impulse-sdk/tensorflow/lite/kernels/internal/compatibility.h"
+#include "edge-impulse-sdk/tensorflow/lite/kernels/internal/tensor_ctypes.h"
+#include "edge-impulse-sdk/tensorflow/lite/kernels/kernel_util.h"
 
 #define FEATURE_TYPE float
 
 namespace tflite {
-namespace {
+namespace micro {
+namespace tree_ensemble_classifier {
 
-struct OpDataTree {
+struct IndexTypes {
+  bool feature_id_uint32;
+  bool tree_index_uint32;
+  bool tree_index_type_valid;
+};
+
+// FlexBuffers aligns a Blob only to the width of its size prefix (often a
+// single byte), so typed payloads inside custom options may start at any
+// address. Dereferencing a misaligned float* / uint16_t* / uint32_t* is UB and
+// faults on e.g. Cortex-M FPU loads (VLDR) or Cortex-M0. This view keeps the
+// raw byte pointer and reads each element via memcpy, which compiles to a
+// single load on targets that allow unaligned access.
+template <typename T>
+struct UnalignedArray {
+  const uint8_t* data;
+
+  T operator[](uint32_t index) const {
+    T value;
+    std::memcpy(&value, data + static_cast<size_t>(index) * sizeof(T), sizeof(T));
+    return value;
+  }
+};
+
+template <typename T>
+static UnalignedArray<T> GetBlobArray(const flexbuffers::Map& m, const char* key) {
+  return {m[key].AsBlob().data()};
+}
+
+// TfLiteNode::user_data is a void*. We store a pointer to this common base so
+// Prepare/Eval can read the index-width tags before knowing the derived type.
+// These tags select ordinary function calls; no virtual dispatch or RTTI is used.
+struct OpData {
+  IndexTypes index_types;
+};
+
+// The compiler instantiates the types/functions for the four uint16_t/uint32_t
+// combinations referenced below. No C++ types or machine code are generated on
+// the device. At runtime, each operator creates just one state object of the
+// selected type; its array pointers read the model's existing buffers directly.
+template <typename FeatureIdType, typename TreeIndexType>
+struct OpDataTree : OpData {
   uint32_t num_leaf_nodes;
   uint32_t num_internal_nodes;
   uint32_t num_trees;
-  const uint16_t* nodes_modes;
-  const uint16_t* nodes_featureids;
-  const float* nodes_values;
-  const uint16_t* nodes_truenodeids;
-  const uint16_t* nodes_falsenodeids;
-  const float* nodes_weights;
+  UnalignedArray<uint16_t> nodes_modes;
+  UnalignedArray<FeatureIdType> nodes_featureids;
+  UnalignedArray<float> nodes_values;
+  UnalignedArray<TreeIndexType> nodes_truenodeids;
+  UnalignedArray<TreeIndexType> nodes_falsenodeids;
+  UnalignedArray<float> nodes_weights;
   const uint8_t* nodes_classids;
-  const uint16_t* tree_root_ids;
+  UnalignedArray<TreeIndexType> tree_root_ids;
   const uint8_t* buffer_t;
   size_t buffer_length;
 };
 
-void* Init(TfLiteContext* context, const char* buffer, size_t length) {
+static IndexTypes GetIndexTypes(const char* buffer, size_t length) {
+  const uint8_t* buffer_t = reinterpret_cast<const uint8_t*>(buffer);
+  const flexbuffers::Map& m = flexbuffers::GetRoot(buffer_t, length).AsMap();
+  const std::string tree_index_type = m["tree_index_type"].AsString().str();
+  const size_t feature_id_size = m["nodes_featureids"].AsBlob().size();
+  const uint32_t num_internal_nodes = m["num_internal_nodes"].AsUInt32();
+  return {
+      feature_id_size == static_cast<size_t>(num_internal_nodes) * sizeof(uint32_t),
+      tree_index_type == "uint32",
+      tree_index_type == "uint16" || tree_index_type == "uint32"};
+}
+
+template <typename FeatureIdType, typename TreeIndexType>
+static void* InitTyped(TfLiteContext* context, const char* buffer, size_t length,
+                       IndexTypes types) {
+
   const uint8_t* buffer_t = reinterpret_cast<const uint8_t*>(buffer);
   const flexbuffers::Map& m = flexbuffers::GetRoot(buffer_t, length).AsMap();
 
-  TFLITE_DCHECK(context->AllocatePersistentBuffer != nullptr);
-  OpDataTree* data = static_cast<OpDataTree*>(context->AllocatePersistentBuffer(context, sizeof(OpDataTree)));
+  // Allocate one state object in Micro's persistent arena. sizeof is known at
+  // compile time for this specialization; the allocation itself occurs in Init.
+  void* storage = context->AllocatePersistentBuffer(
+      context, sizeof(OpDataTree<FeatureIdType, TreeIndexType>));
+  if (storage == nullptr) {
+    return nullptr;
+  }
+  // Placement new constructs/value-initializes the selected C++ object in the
+  // already allocated storage and starts its lifetime (including its base).
+  // Unlike ordinary new, it makes no heap allocation. This trivially destructible
+  // state needs no delete; its storage remains owned by the arena.
+  auto* data = new (storage) OpDataTree<FeatureIdType, TreeIndexType>();
+  data->index_types = types;
 
   data->buffer_t = buffer_t;
   data->buffer_length = length;
@@ -74,57 +156,103 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
   data->num_internal_nodes = m["num_internal_nodes"].AsUInt32();
   data->num_trees = m["num_trees"].AsUInt32();
 
-  data->nodes_modes = (uint16_t*)(m["nodes_modes"].AsBlob().data());
-  data->nodes_featureids = (uint16_t*)(m["nodes_featureids"].AsBlob().data());
-  data->nodes_values = (float*)(m["nodes_values"].AsBlob().data());
-  data->nodes_truenodeids = (uint16_t*)(m["nodes_truenodeids"].AsBlob().data());
-  data->nodes_falsenodeids = (uint16_t*)(m["nodes_falsenodeids"].AsBlob().data());
-  data->nodes_weights = (float*)(m["nodes_weights"].AsBlob().data());
-  data->nodes_classids = (uint8_t*)(m["nodes_classids"].AsBlob().data());
-  data->tree_root_ids = (uint16_t*)(m["tree_root_ids"].AsBlob().data());
+  data->nodes_modes = GetBlobArray<uint16_t>(m, "nodes_modes");
+  data->nodes_featureids = GetBlobArray<FeatureIdType>(m, "nodes_featureids");
+  data->nodes_values = GetBlobArray<float>(m, "nodes_values");
+  data->nodes_truenodeids = GetBlobArray<TreeIndexType>(m, "nodes_truenodeids");
+  data->nodes_falsenodeids = GetBlobArray<TreeIndexType>(m, "nodes_falsenodeids");
+  data->nodes_weights = GetBlobArray<float>(m, "nodes_weights");
+  data->nodes_classids = m["nodes_classids"].AsBlob().data();
+  data->tree_root_ids = GetBlobArray<TreeIndexType>(m, "tree_root_ids");
 
-  return data;
+  // Convert to the common base before returning it as void*. MicroGraph stores
+  // this return value in node->user_data. This changes the pointer's type, not
+  // the object: the complete OpDataTree still occupies the same arena storage.
+  return static_cast<OpData*>(data);
 }
 
-TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
+void* Init(TfLiteContext* context, const char* buffer, size_t length) {
+  const IndexTypes types = GetIndexTypes(buffer, length);
+  if (!types.tree_index_type_valid) {
+    return nullptr;
+  }
+  // Runtime model metadata selects one of four already-compiled InitTyped
+  // functions. The template arguments at each call site are compile-time types.
+  if (types.tree_index_uint32) {
+    if (types.feature_id_uint32) {
+      return InitTyped<uint32_t, uint32_t>(context, buffer, length, types);
+    }
+    return InitTyped<uint16_t, uint32_t>(context, buffer, length, types);
+  }
+  if (types.feature_id_uint32) {
+    return InitTyped<uint32_t, uint16_t>(context, buffer, length, types);
+  }
+  return InitTyped<uint16_t, uint16_t>(context, buffer, length, types);
+}
+
+template <typename IndexType>
+static uint32_t ReadIndex(const UnalignedArray<IndexType>& indices, uint32_t index) {
+  return static_cast<uint32_t>(indices[index]);
+}
+
+static bool HasExpectedByteSize(const flexbuffers::Blob& blob, uint32_t element_count,
+                                size_t element_size) {
+  const uint64_t blob_size = static_cast<uint64_t>(blob.size());
+  const uint64_t count = static_cast<uint64_t>(element_count);
+  // FlexBuffers versions used by EON may report a typed blob's element count,
+  // while other versions report its byte count.
+  return blob_size == count || blob_size == count * element_size;
+}
+
+template <typename FeatureIdType, typename TreeIndexType>
+static TfLiteStatus PrepareTyped(TfLiteContext* context, TfLiteNode* node) {
 
   MicroContext* micro_context = GetMicroContext(context);
-  const OpDataTree* data = static_cast<const OpDataTree*>(node->user_data);
+  // Reverse InitTyped's conversion: void* -> OpData* -> the original derived
+  // type. Prepare selected this specialization using the stored tags, so it
+  // matches the type constructed in Init. static_cast does not check those tags
+  // itself, allocate memory, or copy the object.
+  const auto* data = static_cast<const OpDataTree<FeatureIdType, TreeIndexType>*>(
+      static_cast<const OpData*>(node->user_data));
   const flexbuffers::Map& m = flexbuffers::GetRoot(data->buffer_t, data->buffer_length).AsMap();
 
   // The OOB checks below are very important to prevent vulnerabilities where an adversary sends
   // us a malicious TFLite model, similar to: https://nvd.nist.gov/vuln/detail/CVE-2022-23560
 
-  int num_nodes = data->num_leaf_nodes + data->num_internal_nodes;
+  // Keep this calculation unsigned: a forest can contain more nodes than
+  // fit in a signed 16-bit (or signed int) value.
+  const uint32_t num_nodes = data->num_leaf_nodes + data->num_internal_nodes;
 
-  // Check that the tree root ids are valid.
-  for (uint32_t i = 0; i < data->num_trees; i++) {
-    TF_LITE_ENSURE_EQ(context, data->tree_root_ids[i] < num_nodes, true);
-    TF_LITE_ENSURE_EQ(context, data->tree_root_ids[i] >= 0, true);
-  }
-
-  // Check that all node indices are valid
-  for (uint32_t i = 0; i < data->num_internal_nodes; i++) {
-    TF_LITE_ENSURE_EQ(context, data->nodes_truenodeids[i] < num_nodes, true);
-    TF_LITE_ENSURE_EQ(context, data->nodes_truenodeids[i] >= 0, true);
-    TF_LITE_ENSURE_EQ(context, data->nodes_falsenodeids[i] < num_nodes, true);
-    TF_LITE_ENSURE_EQ(context, data->nodes_falsenodeids[i] >= 0, true);
-  }
-
-  // Check all node arrays have the same length
-  TF_LITE_ENSURE_EQ(context, data->num_internal_nodes, m["nodes_featureids"].AsBlob().size());
-  TF_LITE_ENSURE_EQ(context, data->num_internal_nodes, m["nodes_values"].AsBlob().size());
-  TF_LITE_ENSURE_EQ(context, data->num_internal_nodes, m["nodes_truenodeids"].AsBlob().size());
-  TF_LITE_ENSURE_EQ(context, data->num_internal_nodes, m["nodes_falsenodeids"].AsBlob().size());
-  TF_LITE_ENSURE_EQ(context, data->num_leaf_nodes, m["nodes_weights"].AsBlob().size());
-  TF_LITE_ENSURE_EQ(context, data->num_leaf_nodes, m["nodes_classids"].AsBlob().size());
-
-  // Check data types are supported. Currently we only support one combination.
-  TF_LITE_ENSURE_EQ(context, strncmp(m["tree_index_type"].AsString().c_str(), "uint16", 6), 0);
   TF_LITE_ENSURE_EQ(context, strncmp(m["node_value_type"].AsString().c_str(), "float32", 7), 0);
   TF_LITE_ENSURE_EQ(context, strncmp(m["class_index_type"].AsString().c_str(), "uint8", 5), 0);
   TF_LITE_ENSURE_EQ(context, strncmp(m["class_weight_type"].AsString().c_str(), "float32", 7), 0);
   TF_LITE_ENSURE_EQ(context, strncmp(m["equality_operator"].AsString().c_str(), "leq", 3), 0);
+
+  TF_LITE_ENSURE(context, HasExpectedByteSize(m["nodes_featureids"].AsBlob(),
+                                                data->num_internal_nodes, sizeof(FeatureIdType)));
+  TF_LITE_ENSURE(context, HasExpectedByteSize(m["nodes_values"].AsBlob(),
+                                                data->num_internal_nodes, sizeof(float)));
+  TF_LITE_ENSURE(context, HasExpectedByteSize(m["nodes_truenodeids"].AsBlob(),
+                                                data->num_internal_nodes, sizeof(TreeIndexType)));
+  TF_LITE_ENSURE(context, HasExpectedByteSize(m["nodes_falsenodeids"].AsBlob(),
+                                                data->num_internal_nodes, sizeof(TreeIndexType)));
+  TF_LITE_ENSURE(context, HasExpectedByteSize(m["nodes_weights"].AsBlob(),
+                                                data->num_leaf_nodes, sizeof(float)));
+  TF_LITE_ENSURE(context, HasExpectedByteSize(m["nodes_classids"].AsBlob(),
+                                                data->num_leaf_nodes, sizeof(uint8_t)));
+  TF_LITE_ENSURE(context, HasExpectedByteSize(m["tree_root_ids"].AsBlob(),
+                                                data->num_trees, sizeof(TreeIndexType)));
+
+  for (uint32_t i = 0; i < data->num_trees; i++) {
+    TF_LITE_ENSURE(context,
+                   ReadIndex(data->tree_root_ids, i) < num_nodes);
+  }
+  for (uint32_t i = 0; i < data->num_internal_nodes; i++) {
+    TF_LITE_ENSURE(context,
+                   ReadIndex(data->nodes_truenodeids, i) < num_nodes);
+    TF_LITE_ENSURE(context,
+                   ReadIndex(data->nodes_falsenodeids, i) < num_nodes);
+  }
 
   TF_LITE_ENSURE_EQ(context, NumInputs(node), 1);
   TF_LITE_ENSURE_EQ(context, NumOutputs(node), 1);
@@ -133,20 +261,18 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   TF_LITE_ENSURE(context, NumDimensions(input) == 2);
   TfLiteTensor* output = micro_context->AllocateTempOutputTensor(node, 0);
   TF_LITE_ENSURE(context, output != nullptr);
+  TF_LITE_ENSURE(context, NumDimensions(output) == 2);
 
   int input_width = SizeOfDimension(input, 1);
   int output_width = SizeOfDimension(output, 1);
 
-  // Check that all indices into the input/output tensor are valid
+  // Check that all indices into the input tensor are valid.
   for (uint32_t i = 0; i < data->num_internal_nodes; i++) {
-    TF_LITE_ENSURE(context, data->nodes_featureids[i] < input_width);
-    TF_LITE_ENSURE(context, data->nodes_featureids[i] >= 0);
-    if (!m["nodes_modes"].AsBlob().IsTheEmptyBlob()) {
-        if (data->nodes_modes[i] == 0) {
-            TF_LITE_ENSURE(context, data->nodes_classids[i] < output_width);
-            TF_LITE_ENSURE(context, data->nodes_classids[i] >= 0);
-        }
-    }
+    TF_LITE_ENSURE(context, ReadIndex(data->nodes_featureids, i) < input_width);
+  }
+
+  for (uint32_t i = 0; i < data->num_leaf_nodes; i++) {
+    TF_LITE_ENSURE(context, data->nodes_classids[i] < output_width);
   }
 
   micro_context->DeallocateTempTfLiteTensor(input);
@@ -155,52 +281,81 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   return kTfLiteOk;
 }
 
-TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
+TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
+  // Recover only the common base first; its tags tell us which typed callback
+  // can safely access the rest of this object.
+  const OpData* data = static_cast<const OpData*>(node->user_data);
+  TF_LITE_ENSURE(context, data != nullptr);
+  const IndexTypes types = data->index_types;
+  if (types.tree_index_uint32) {
+    if (types.feature_id_uint32) {
+      return PrepareTyped<uint32_t, uint32_t>(context, node);
+    }
+    return PrepareTyped<uint16_t, uint32_t>(context, node);
+  }
+  if (types.feature_id_uint32) {
+    return PrepareTyped<uint32_t, uint16_t>(context, node);
+  }
+  return PrepareTyped<uint16_t, uint16_t>(context, node);
+}
 
-  const OpDataTree* data = static_cast<const OpDataTree*>(node->user_data);
+template <typename FeatureIdType, typename TreeIndexType>
+static TfLiteStatus EvalTyped(TfLiteContext* context, TfLiteNode* node) {
 
-  const TfLiteEvalTensor* input =
-      tflite::micro::GetEvalInput(context, node, 0);
-  const float *in_data = tflite::micro::GetTensorData<float>(input);
-
-  TfLiteEvalTensor* output =
-      tflite::micro::GetEvalOutput(context, node, 0);
-  float *out_data = tflite::micro::GetTensorData<float>(output);
-
-  const tflite::RuntimeShape output_shape = tflite::micro::GetTensorShape(output);
-  memset(out_data, 0, output_shape.FlatSize() * sizeof(float));
+  // Eval has selected the same specialization as Init, so this base-to-derived
+  // cast recovers the existing state. The compiler already knows the array
+  // element widths here; traversal needs no per-index uint16/uint32 dispatch.
+  const auto* data = static_cast<const OpDataTree<FeatureIdType, TreeIndexType>*>(
+      static_cast<const OpData*>(node->user_data));
+  const TfLiteEvalTensor* input = tflite::micro::GetEvalInput(context, node, 0);
+  TfLiteEvalTensor* output = tflite::micro::GetEvalOutput(context, node, 0);
+  const float* input_data = tflite::micro::GetTensorData<float>(input);
+  float* output_data = tflite::micro::GetTensorData<float>(output);
+  memset(output_data, 0,
+         tflite::micro::GetTensorShape(output).FlatSize() * sizeof(float));
 
   for (uint32_t i = 0; i < data->num_trees; i++) {
-    uint16_t ix = data->tree_root_ids[i];
-
+    uint32_t ix = ReadIndex(data->tree_root_ids, i);
     while (ix < data->num_internal_nodes) {
-      float node_val = 0;
-      memcpy(&node_val, (data->nodes_values + ix), sizeof(float));
-
-      if (in_data[data->nodes_featureids[ix]] <= node_val) {
-        ix = data->nodes_truenodeids[ix];
+      if (input_data[ReadIndex(data->nodes_featureids, ix)] <= data->nodes_values[ix]) {
+        ix = ReadIndex(data->nodes_truenodeids, ix);
       } else {
-        ix = data->nodes_falsenodeids[ix];
+        ix = ReadIndex(data->nodes_falsenodeids, ix);
       }
     }
     ix -= data->num_internal_nodes;
-
-    float weight = 0;
-    memcpy(&weight, (data->nodes_weights + ix), sizeof(float));
-    out_data[data->nodes_classids[ix]] += weight;
+    output_data[data->nodes_classids[ix]] += data->nodes_weights[ix];
   }
 
   return kTfLiteOk;
 }
 
+TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
+  // Read the cached tags through the base, then call the matching precompiled
+  // EvalTyped. No state is reconstructed or model options reparsed per inference.
+  const OpData* data = static_cast<const OpData*>(node->user_data);
+  TF_LITE_ENSURE(context, data != nullptr);
+  const IndexTypes types = data->index_types;
+  if (types.tree_index_uint32) {
+    if (types.feature_id_uint32) {
+      return EvalTyped<uint32_t, uint32_t>(context, node);
+    }
+    return EvalTyped<uint16_t, uint32_t>(context, node);
+  }
+  if (types.feature_id_uint32) {
+    return EvalTyped<uint32_t, uint16_t>(context, node);
+  }
+  return EvalTyped<uint16_t, uint16_t>(context, node);
+}
 
-}  // namespace
+}  // namespace tree_ensemble_classifier
 
-TfLiteRegistration* Register_TreeEnsembleClassifier() {
-  static TfLiteRegistration r = {Init,
+TfLiteRegistration* Register_TREE_ENSEMBLE_CLASSIFIER() {
+  static TfLiteRegistration r = {
+          tree_ensemble_classifier::Init,
           nullptr,
-          Prepare,
-          Eval,
+          tree_ensemble_classifier::Prepare,
+          tree_ensemble_classifier::Eval,
           /*profiling_string=*/nullptr,
           /*builtin_code=*/0,
           /*custom_name=*/nullptr,
@@ -208,6 +363,19 @@ TfLiteRegistration* Register_TreeEnsembleClassifier() {
   return &r;
 }
 
-const char* GetString_TreeEnsembleClassifier() { return "TreeEnsembleClassifier"; }
+TfLiteRegistration* Register_TFLITE_TREE_ENSEMBLE_CLASSIFIER() {
+  return Register_TREE_ENSEMBLE_CLASSIFIER();
+}
+
+}  // namespace micro
+
+// Keep the MicroMutableOpResolver API in the tflite namespace.
+TfLiteRegistration* Register_TreeEnsembleClassifier() {
+  return micro::Register_TREE_ENSEMBLE_CLASSIFIER();
+}
+
+const char* GetString_TreeEnsembleClassifier() {
+  return "TreeEnsembleClassifier";
+}
 
 }  // namespace tflite
