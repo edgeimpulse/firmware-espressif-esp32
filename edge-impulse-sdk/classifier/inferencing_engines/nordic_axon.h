@@ -107,7 +107,7 @@ int one_time_cleanup()
 
 /**
  * @brief Performs session initialization
- * 
+ *
  * A "session" is when inference is occuring regularlly on continuously streaming input.
  * This function is needed for streaming style models that have internal state variables that need
  * to be initialized at the start of a session.
@@ -147,7 +147,8 @@ EI_IMPULSE_ERROR run_nn_inference(
         ei_printf("INFO: Prepare and run Axon!\n");
     }
 
-    uint32_t vector_size = nrf_axon_compiled_model->inputs[nrf_axon_compiled_model->external_input_ndx].dimensions.height * nrf_axon_compiled_model->inputs[nrf_axon_compiled_model->external_input_ndx].dimensions.width;
+    const nrf_axon_nn_compiled_model_input_s *input_desc = &nrf_axon_compiled_model->inputs[0];
+    uint32_t vector_size = input_desc->dimensions.height * input_desc->dimensions.width * input_desc->dimensions.channel_cnt;
     int8_t input_vector[vector_size];
 
     // copy rescale the input features to int8 and copy to input buffer
@@ -177,7 +178,7 @@ EI_IMPULSE_ERROR run_nn_inference(
 
 #if 0
    /**
-    * get_classification isn't necessary to validate the result. It only applies to single 
+    * get_classification isn't necessary to validate the result. It only applies to single
     * channel classification networks
     */
     const char *label;
@@ -207,12 +208,13 @@ EI_IMPULSE_ERROR run_nn_inference(
      * Also, is new matrix_i8_t(1, output_size) a memory leak? Or does it get freed elsewhere?
      * If the matrix_i8 was pre-allocated, it could be passed to the infer function directly, saving an extra memcpy.
      */
-    uint32_t output_size = nrf_axon_compiled_model->output_dimensions.height * nrf_axon_compiled_model->output_dimensions.width * nrf_axon_compiled_model->output_dimensions.channel_cnt;
+    const nrf_axon_compiled_model_output_s *output_desc = &nrf_axon_compiled_model->outputs[0];
+    uint32_t output_size = output_desc->dimensions.height * output_desc->dimensions.width * output_desc->dimensions.channel_cnt;
     result->_raw_outputs[learn_block_index + 0].matrix_i8 = new matrix_i8_t(1, output_size);
     memcpy(result->_raw_outputs[learn_block_index + 0].matrix_i8->buffer, (int8_t *)nrf_axon_compiled_model->packed_output_buf, output_size * sizeof(int8_t));
     result->_raw_outputs[learn_block_index].blockId = block_config->block_id;
 #endif
-    
+
     return EI_IMPULSE_OK;
 }
 
