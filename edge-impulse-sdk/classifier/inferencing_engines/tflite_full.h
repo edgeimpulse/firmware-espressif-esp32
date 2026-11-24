@@ -62,6 +62,7 @@ typedef struct {
 } ei_tflite_state_t;
 
 std::map<uint32_t, ei_tflite_state_t*> ei_tflite_instances;
+extern std::stringstream engine_info;
 
 static inline unsigned int recommended_threads_count()
 {
@@ -146,6 +147,12 @@ static EI_IMPULSE_ERROR get_interpreter(ei_learning_block_config_tflite_graph_t 
         if (new_state->interpreter->ModifyGraphWithDelegate(delegate) != kTfLiteOk) {
             ei_printf("ERROR: ModifyGraphWithDelegate failed\n");
             return EI_IMPULSE_TFLITE_ERROR;
+        }
+
+        if (EI_CLASSIFIER_TFLITE_INPUT_DATATYPE == EI_CLASSIFIER_DATATYPE_FLOAT32 &&
+            TfLiteQnnDelegateHasCapability(kCapHtpRuntimeFp16) !=
+            TfLiteQnnDelegateCapabilitySupported) {
+                engine_info << "The QNN SocModel doesn't support FP16, running inference on CPU";
         }
 #elif EI_CLASSIFIER_USE_GPU_DELEGATES==1
         TfLiteGpuDelegateOptionsV2 options = TfLiteGpuDelegateOptionsV2Default();
